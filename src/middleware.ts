@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import * as jose from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'upkem-super-secret-key-change-me-in-prod');
+// Edge middleware cannot import the Node-only auth lib (better-sqlite3), so the
+// secret is read here directly. The dev fallback MUST stay identical to the one
+// in src/lib/auth.ts or admin_session cookies won't verify when JWT_SECRET is unset.
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'upkem-dev-only-secret-change-me');
 
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get('admin_session')?.value;

@@ -1,12 +1,20 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { getSessionUser } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { code, user_phone, order_subtotal } = body;
+    const { code, order_subtotal } = body;
 
-    if (!code || !user_phone || order_subtotal === undefined) {
+    // Validate against the authenticated user, not a client-supplied phone.
+    const sessionUser = getSessionUser(request);
+    if (!sessionUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const user_phone = sessionUser.phone;
+
+    if (!code || order_subtotal === undefined) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 

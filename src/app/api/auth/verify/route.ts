@@ -41,11 +41,14 @@ export async function POST(request: Request) {
     const sessionId = randomUUID();
     db.prepare('INSERT INTO sessions (id, user_phone, device_info) VALUES (?, ?, ?)').run(sessionId, phone, device_info);
 
-    return NextResponse.json({ 
-      success: true, 
-      user, 
+    // Strip sensitive fields before sending to mobile client.
+    const { password_hash: _ph, ...safeUser } = user as any;
+
+    return NextResponse.json({
+      success: true,
+      user: safeUser,
       session_id: sessionId,
-      message: 'Login successful' 
+      message: 'Login successful'
     });
   } catch (err) {
     console.error('OTP Verification Error:', err);

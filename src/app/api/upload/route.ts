@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import * as XLSX from 'xlsx';
 import bcrypt from 'bcrypt';
+import { getAdmin } from '@/lib/auth';
 
 // Helper for fuzzy column matching
 function normalizeKey(key: string): string {
@@ -82,6 +83,9 @@ function getDefaultDescription(category: string): string {
 
 export async function POST(request: Request) {
   try {
+    if (!(await getAdmin())) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const type = formData.get('type') as string; // 'products' or 'users'

@@ -34,6 +34,12 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const DEFAULT_IP = '192.168.1.100';
+// HTTPS API base injected at build time via app.config.js (extra.apiBaseUrl).
+// When present (production/preview builds) it overrides the dev IP entirely.
+// Guard for string only — the public manifest may serialize an unset value as {}.
+const _rawApiBase = Constants.expoConfig?.extra?.apiBaseUrl;
+const API_BASE_URL: string | null =
+  typeof _rawApiBase === 'string' && _rawApiBase.length > 0 ? _rawApiBase : null;
 const MIN_ORDER_VALUE = 2500;
 
 // UPKEM / UPKAR PHARMA company details for invoice
@@ -353,6 +359,16 @@ const useStore = create((set, get) => ({
   setServerIp: (ip) => set({ serverIp: ip }),
   user: null,
   setUser: (user) => set({ user }),
+  sessionId: null,
+  setSessionId: (sessionId) => set({ sessionId }),
+  // Auth headers for every protected API call. The session_id (issued by
+  // /api/auth/verify) is sent as a Bearer token the backend validates.
+  authHeaders: () => {
+    const sid = get().sessionId;
+    return sid
+      ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sid}` }
+      : { 'Content-Type': 'application/json' };
+  },
   cart: {},
   products: [],
   setProducts: (products) => set({ products }),
@@ -390,13 +406,17 @@ const useStore = create((set, get) => ({
   orders: [],
   setOrders: (orders) => set({ orders }),
   
-  getApiUrl: () => `http://${get().serverIp}:3000/api/data`,
-  getTokenUrl: () => `http://${get().serverIp}:3000/api/user/token`,
-  getOtpUrl: () => `http://${get().serverIp}:3000/api/auth/otp`,
-  getVerifyUrl: () => `http://${get().serverIp}:3000/api/auth/verify`,
-  getSignupUrl: () => `http://${get().serverIp}:3000/api/auth/signup`,
-  getSchemesUrl: () => `http://${get().serverIp}:3000/api/schemes`,
-  getSchemesValidateUrl: () => `http://${get().serverIp}:3000/api/schemes/validate`,
+  // Production builds use the HTTPS base URL baked in via app.config.js
+  // (extra.apiBaseUrl). The plain-IP override is a LOCAL DEV fallback only.
+  getBaseUrl: () => API_BASE_URL || `http://${get().serverIp}:3000`,
+  getApiUrl: () => `${get().getBaseUrl()}/api/data`,
+  getTokenUrl: () => `${get().getBaseUrl()}/api/user/token`,
+  getDeleteAccountUrl: () => `${get().getBaseUrl()}/api/user/delete`,
+  getOtpUrl: () => `${get().getBaseUrl()}/api/auth/otp`,
+  getVerifyUrl: () => `${get().getBaseUrl()}/api/auth/verify`,
+  getSignupUrl: () => `${get().getBaseUrl()}/api/auth/signup`,
+  getSchemesUrl: () => `${get().getBaseUrl()}/api/schemes`,
+  getSchemesValidateUrl: () => `${get().getBaseUrl()}/api/schemes/validate`,
 
   // Schemes / Coupons
   schemes: [],
@@ -408,7 +428,7 @@ const useStore = create((set, get) => ({
     try {
       const res = await fetch(get().getApiUrl(), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: get().authHeaders(),
         body: JSON.stringify({ collection: 'orders', item: order, action: 'create' })
       });
       if (!res.ok) {
@@ -819,8 +839,18 @@ function LoginScreen({ setCurrentScreen }) {
       const data = await res.json();
       if(data.success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        useStore.getState().setSessionId(data.session_id);
         setUser(data.user);
         setCurrentScreen('Home');
+        // Register push token in the background after login — non-blocking.
+        registerForPushNotificationsAsync().then((pushToken) => {
+          if (!pushToken) return;
+          fetch(useStore.getState().getTokenUrl(), {
+            method: 'POST',
+            headers: useStore.getState().authHeaders(),
+            body: JSON.stringify({ token: pushToken }),
+          }).catch(() => {/* non-critical */});
+        });
       } else if (data.pending) {
         setUser(data.user);
         setCurrentScreen('PendingApproval');
@@ -1905,11 +1935,10 @@ function ReviewConfirmScreen({ setCurrentScreen }) {
                     try {
                       const res = await fetch(getSchemesValidateUrl(), {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                          code: code, 
-                          user_phone: user.phone, 
-                          order_subtotal: subtotal 
+                        headers: useStore.getState().authHeaders(),
+                        body: JSON.stringify({
+                          code: code,
+                          order_subtotal: subtotal
                         })
                       });
                       
@@ -2233,9 +2262,50 @@ function ProfileScreen({ setCurrentScreen }) {
         setUser(null);
         clearCart();
         useStore.getState().clearCoupon();
+        useStore.getState().setSessionId(null);
         setCurrentScreen('Login');
       }}
     ]);
+  };
+
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const handleDeleteAccount = () => {
+    Haptics.selectionAsync();
+    Alert.alert(
+      "Delete Account",
+      "This will permanently delete your account, all orders, and personal data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete permanently",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingAccount(true);
+            try {
+              const res = await fetch(useStore.getState().getDeleteAccountUrl(), {
+                method: 'DELETE',
+                headers: useStore.getState().authHeaders(),
+              });
+              if (res.ok) {
+                setUser(null);
+                clearCart();
+                useStore.getState().clearCoupon();
+                useStore.getState().setSessionId(null);
+                setCurrentScreen('Login');
+                Alert.alert('Account deleted', 'Your data has been permanently removed.');
+              } else {
+                const d = await res.json();
+                Alert.alert('Error', d.error || 'Failed to delete account. Please try again.');
+              }
+            } catch {
+              Alert.alert('Error', 'Network error. Please try again.');
+            }
+            setDeletingAccount(false);
+          },
+        },
+      ]
+    );
   };
 
   const creditUtilization = ((user.credit_balance || 0) / (user.credit_limit || 1)) * 100;
@@ -2252,8 +2322,8 @@ function ProfileScreen({ setCurrentScreen }) {
       const url = useStore.getState().getApiUrl();
       await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_address', phone: user.phone, address: addressInput }),
+        headers: useStore.getState().authHeaders(),
+        body: JSON.stringify({ action: 'update_address', address: addressInput }),
       });
       setUser({ ...user, address: addressInput });
       setShowAddressModal(false);
@@ -2433,6 +2503,17 @@ function ProfileScreen({ setCurrentScreen }) {
           <Text style={{ color: '#dc2626', fontWeight: '800', fontSize: 15 }}>Sign out</Text>
         </TouchableOpacity>
 
+        {/* Delete Account */}
+        <TouchableOpacity
+          onPress={handleDeleteAccount}
+          disabled={deletingAccount}
+          style={{ paddingVertical: 12, alignItems: 'center', marginBottom: 8 }}
+        >
+          <Text style={{ color: '#94a3b8', fontWeight: '600', fontSize: 13 }}>
+            {deletingAccount ? 'Deleting…' : 'Delete account'}
+          </Text>
+        </TouchableOpacity>
+
         {/* App Info */}
         <View style={{ alignItems: 'center', marginTop: 20, marginBottom: 20 }}>
           <Text style={{ fontSize: 10, color: '#cbd5e1', fontWeight: '600' }}>v{APP_VERSION} · {COMPANY.brand}</Text>
@@ -2477,9 +2558,11 @@ export default function App() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   
   const fetchAPI = async () => {
+    // The data feed is private; skip polling until the user has a session.
+    if (!useStore.getState().sessionId) return;
     try {
       const url = useStore.getState().getApiUrl();
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: useStore.getState().authHeaders() });
       if (!res.ok) throw new Error('API Not OK');
       const db = await res.json();
       

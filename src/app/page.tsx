@@ -2,15 +2,19 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Bell, Package, Users, Activity, CheckCircle2, AlertCircle, Plus, Search, Layers, RefreshCcw, LogOut, Upload, FileSpreadsheet, Loader2, BarChart, Tag, Calendar, Percent, Trash2, ToggleLeft, ToggleRight, Gift, Copy } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { 
+  Bell, Package, Users, Activity, CheckCircle2, AlertCircle, Plus, Search, Layers, 
+  RefreshCcw, LogOut, Upload, FileSpreadsheet, Loader2, BarChart, Tag, Calendar, 
+  Trash2, ToggleLeft, ToggleRight, Gift, Copy, Building2, Pill, Filter, Clock, 
+  ShieldCheck, FileText, ChevronLeft, ChevronRight, Truck, Check, X, ArrowUpRight, Sparkles
+} from "lucide-react";
 
-// Recharts for Analytics
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart as RechartsBarChart, Bar, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart as RechartsBarChart, Bar } from 'recharts';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -28,10 +32,16 @@ export default function Dashboard() {
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [bodySystemFilter, setBodySystemFilter] = useState('');
+  const [distributorFilter, setDistributorFilter] = useState('');
+  const [stockStatusFilter, setStockStatusFilter] = useState('');
+  const [inventoryPage, setInventoryPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
+
+  // Selected Product Modal State
+  const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
 
   // New Item Form State
-  const [newItem, setNewItem] = useState({ name: '', company: '', category: '', body_system: '', price: '', stock: '' });
+  const [newItem, setNewItem] = useState({ name: '', company: '', category: '', packing: '', price: '', mrp: '', stock: '' });
 
   // Schemes Form State
   const [showSchemeForm, setShowSchemeForm] = useState(false);
@@ -66,7 +76,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchLiveDB();
-    const interval = setInterval(fetchLiveDB, 5000); // Polling every 5s instead of 2s to be gentler on SQLite
+    const interval = setInterval(fetchLiveDB, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -89,10 +99,10 @@ export default function Dashboard() {
     let logistics = { courier_name: '', tracking_id: '' };
     
     if (newStatus === 'Shipped') {
-      const courier = window.prompt("Enter Courier Name (e.g. BlueDart):");
-      if (courier === null) return; // User cancelled
-      const tracking = window.prompt("Enter Tracking ID:");
-      if (tracking === null) return; // User cancelled
+      const courier = window.prompt("Enter Courier Partner Name (e.g., BlueDart, Delhivery):");
+      if (courier === null) return;
+      const tracking = window.prompt("Enter Tracking AWB Number:");
+      if (tracking === null) return;
       logistics.courier_name = courier;
       logistics.tracking_id = tracking;
     }
@@ -108,7 +118,7 @@ export default function Dashboard() {
         action: 'update_status' 
       })
     });
-    fetchLiveDB(); // Refresh immediately
+    fetchLiveDB();
   };
 
   const handleUpdateStock = async (id: number, change: number) => {
@@ -124,75 +134,22 @@ export default function Dashboard() {
     if (!newItem.name || !newItem.price) return;
     const formattedItem = {
       ...newItem,
-      company: newItem.company || 'Unknown',
-      category: newItem.category || 'General',
-      body_system: newItem.body_system || 'General',
+      company: newItem.company || 'Vakul Lifescience',
+      category: newItem.category || 'General Pharma',
+      packing: newItem.packing || '',
       price: Number(newItem.price),
-      stock: Number(newItem.stock) || 0
+      mrp: Number(newItem.mrp) || Number(newItem.price),
+      stock: Number(newItem.stock) || 50
     };
     await fetch('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'add_product', item: formattedItem })
     });
-    setNewItem({ name: '', company: '', category: '', body_system: '', price: '', stock: '' });
+    setNewItem({ name: '', company: '', category: '', packing: '', price: '', mrp: '', stock: '' });
     fetchLiveDB();
   };
 
-  const handleCreateScheme = async () => {
-    if (!schemeForm.title || !schemeForm.code || !schemeForm.start_date || !schemeForm.end_date) {
-      alert('Title, Code, Start Date, and End Date are required');
-      return;
-    }
-    setSavingScheme(true);
-    try {
-      const res = await fetch('/api/schemes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...schemeForm,
-          discount_percent: schemeForm.discount_percent ? Number(schemeForm.discount_percent) : null,
-          flat_discount: schemeForm.flat_discount ? Number(schemeForm.flat_discount) : null,
-          min_order_value: schemeForm.min_order_value ? Number(schemeForm.min_order_value) : 0,
-          max_discount: schemeForm.max_discount ? Number(schemeForm.max_discount) : null,
-          usage_limit: schemeForm.usage_limit ? Number(schemeForm.usage_limit) : 0,
-          per_user_limit: schemeForm.per_user_limit ? Number(schemeForm.per_user_limit) : 1,
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSchemeForm({ title: '', description: '', code: '', scheme_type: 'Discount', discount_percent: '', flat_discount: '', min_order_value: '', max_discount: '', start_date: '', end_date: '', usage_limit: '', per_user_limit: '1' });
-        setShowSchemeForm(false);
-        fetchLiveDB();
-      } else {
-        alert(data.error || 'Failed to create scheme');
-      }
-    } catch { alert('Network error'); }
-    setSavingScheme(false);
-  };
-
-  const handleToggleScheme = async (id: number) => {
-    await fetch('/api/schemes', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, action: 'toggle' })
-    });
-    fetchLiveDB();
-  };
-
-  const handleDeleteScheme = async (id: number) => {
-    if (!window.confirm('Delete this scheme permanently?')) return;
-    await fetch(`/api/schemes?id=${id}`, { method: 'DELETE' });
-    fetchLiveDB();
-  };
-
-  const getSchemeStatus = (scheme: any) => {
-    const today = new Date().toISOString().split('T')[0];
-    if (!scheme.is_active) return 'Disabled';
-    if (scheme.start_date > today) return 'Scheduled';
-    if (scheme.end_date < today) return 'Expired';
-    return 'Active';
-  };
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'users' | 'products') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -222,479 +179,399 @@ export default function Dashboard() {
     } finally {
       if (type === 'users') setUploadingUsers(false);
       else setUploadingProducts(false);
-      if (e.target) e.target.value = ''; // Reset input
+      if (e.target) e.target.value = '';
     }
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'Placed': return <Badge className="bg-amber-100/50 text-amber-700 hover:bg-amber-100 border border-amber-200/50 shadow-none font-semibold px-3 py-0.5 rounded-full"><Activity className="w-3 h-3 mr-1.5" /> Placed</Badge>;
-      case 'Accepted': return <Badge className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200/50 shadow-none font-semibold px-3 py-0.5 rounded-full"><CheckCircle2 className="w-3 h-3 mr-1.5" /> Accepted</Badge>;
-      case 'Processing': return <Badge className="bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/50 shadow-none font-semibold px-3 py-0.5 rounded-full"><RefreshCcw className="w-3 h-3 mr-1.5 animate-spin-slow" /> Processing</Badge>;
-      case 'Shipped': return <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/50 shadow-none font-semibold px-3 py-0.5 rounded-full"><Package className="w-3 h-3 mr-1.5" /> Shipped</Badge>;
-      default: return <Badge variant="outline" className="text-slate-500">{status}</Badge>;
+      case 'Placed': 
+        return <Badge className="bg-amber-50 text-amber-800 border border-amber-200/80 font-semibold px-2.5 py-0.5 rounded-md text-xs"><Clock className="w-3 h-3 mr-1 text-amber-600" /> Placed</Badge>;
+      case 'Accepted': 
+        return <Badge className="bg-blue-50 text-blue-800 border border-blue-200/80 font-semibold px-2.5 py-0.5 rounded-md text-xs"><Check className="w-3 h-3 mr-1 text-blue-600" /> Accepted</Badge>;
+      case 'Processing': 
+        return <Badge className="bg-purple-50 text-purple-800 border border-purple-200/80 font-semibold px-2.5 py-0.5 rounded-md text-xs"><RefreshCcw className="w-3 h-3 mr-1 text-purple-600 animate-spin" /> Processing</Badge>;
+      case 'Shipped': 
+        return <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-semibold px-2.5 py-0.5 rounded-md text-xs"><Truck className="w-3 h-3 mr-1 text-emerald-600" /> Shipped</Badge>;
+      case 'Rejected':
+        return <Badge className="bg-rose-50 text-rose-800 border border-rose-200/80 font-semibold px-2.5 py-0.5 rounded-md text-xs"><X className="w-3 h-3 mr-1 text-rose-600" /> Rejected</Badge>;
+      default: 
+        return <Badge variant="outline" className="text-slate-600">{status}</Badge>;
     }
-  };
-
-  const isNearingCreditDeadline = (dateStr: string) => {
-    // Assuming format DD/MM/YYYY
-    const [day, month, year] = dateStr.split('/');
-    const orderDate = new Date(`${year}-${month}-${day}`);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - orderDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays >= 55 && diffDays <= 60;
-  };
-
-  const isPastCreditDeadline = (dateStr: string) => {
-    const [day, month, year] = dateStr.split('/');
-    const orderDate = new Date(`${year}-${month}-${day}`);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - orderDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays > 60;
   };
 
   const filteredInventory = inventory.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.company.toLowerCase().includes(searchTerm.toLowerCase());
+    const q = searchTerm.toLowerCase();
+    const matchesSearch = p.name?.toLowerCase().includes(q) || 
+                          p.company?.toLowerCase().includes(q) ||
+                          p.drug_name?.toLowerCase().includes(q) ||
+                          p.code?.toLowerCase().includes(q);
     const matchesCat = categoryFilter ? p.category === categoryFilter : true;
-    const matchesSystem = bodySystemFilter ? p.body_system === bodySystemFilter : true;
-    return matchesSearch && matchesCat && matchesSystem;
+    const matchesDistributor = distributorFilter ? p.distributor === distributorFilter : true;
+    const matchesStock = stockStatusFilter === 'available' ? p.stock > 0 : (stockStatusFilter === 'out_of_stock' ? p.stock === 0 : true);
+    return matchesSearch && matchesCat && matchesDistributor && matchesStock;
   });
 
   const uniqueCategories = Array.from(new Set(inventory.map(p => p.category))).filter(Boolean);
-  const uniqueSystems = Array.from(new Set(inventory.map(p => p.body_system))).filter(Boolean);
+  const uniqueDistributors = Array.from(new Set(inventory.map(p => p.distributor))).filter(Boolean);
 
-  // Analytics Processing
-  const revenueByDate = orders.filter(o => o.status !== 'Rejected').reduce((acc: any, order: any) => {
-    const date = order.date; // assuming string
-    if (!acc[date]) acc[date] = 0;
-    acc[date] += order.total;
-    return acc;
-  }, {} as any);
-  
-  const revenueData = Object.keys(revenueByDate).slice(-7).map(date => ({
-    date,
-    revenue: revenueByDate[date]
-  }));
+  const totalPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
 
-  const skuVolume = orders.filter(o => o.status !== 'Rejected').reduce((acc: any, order: any) => {
-    if(order.items && Array.isArray(order.items)) {
-      order.items.forEach((item: any) => {
-        if (!acc[item.name]) acc[item.name] = 0;
-        acc[item.name] += item.quantity;
-      });
-    }
-    return acc;
-  }, {} as any);
-
-  const topSKUs = Object.keys(skuVolume)
-    .map(name => ({ name: name.substring(0, 15) + '...', volume: skuVolume[name] }))
-    .sort((a, b) => b.volume - a.volume)
-    .slice(0, 5);
+  // Analytics
+  const totalRevenue = orders.filter(o => o.status !== 'Rejected').reduce((sum, o) => sum + (o.total || 0), 0);
+  const pendingUsersCount = users.filter(u => !u.is_approved && u.role !== 'admin').length;
 
   return (
-    <div className="min-h-screen bg-[#F0F5F3] text-slate-900 font-sans selection:bg-emerald-100 selection:text-emerald-900">
-      <header className="upkem-header-gradient text-white border-b border-emerald-900/50 shadow-sm sticky top-0 z-50">
-        <div className="max-w-[1400px] mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-500/20 border border-emerald-400/30">
-              <Layers className="text-white w-5 h-5" />
+    <div className="min-h-screen bg-slate-900/5 text-slate-900 font-sans selection:bg-slate-900 selection:text-white">
+      {/* PROFESSIONAL B2B NAVBAR */}
+      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-50 shadow-md">
+        <div className="max-w-[1440px] mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-emerald-500 flex items-center justify-center shadow-inner text-slate-950 font-black tracking-tighter">
+              <Pill className="w-5 h-5 text-slate-950" />
             </div>
             <div>
-              <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-                UPKEM LABS
-                <span className="text-slate-500 font-medium text-lg">/</span>
-                <span className="text-emerald-400 font-medium tracking-normal text-sm uppercase tracking-widest mt-0.5">Command Center</span>
-              </h1>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold tracking-tight text-lg text-white">UPKEM B2B PHARMA</span>
+                <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono font-semibold uppercase tracking-wide border border-emerald-500/30">Wholesale Portal</span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-medium">Licensed Pharmaceutical Distributor Command Center</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <div className="hidden md:flex items-center gap-2 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-3 py-1.5 rounded-full border border-emerald-400/20">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              System Live
+          <div className="flex items-center gap-5">
+            <div className="hidden md:flex items-center gap-2 text-xs font-semibold text-slate-300 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              Live Sync Active
             </div>
-            <div className="relative cursor-pointer group" onClick={() => setNotifications(0)}>
-              <div className="p-2.5 bg-white/10 rounded-full group-hover:bg-white/15 transition-colors border border-white/10">
-                <Bell className="w-5 h-5 text-slate-300 group-hover:text-white transition-colors" />
+
+            <div className="relative cursor-pointer" onClick={() => setNotifications(0)}>
+              <div className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700">
+                <Bell className="w-4 h-4 text-slate-300" />
               </div>
               {notifications > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400 text-[11px] font-bold text-emerald-950 shadow-lg shadow-emerald-500/30 border-2 border-emerald-900">
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400 text-[10px] font-bold text-slate-950">
                   {notifications}
                 </span>
               )}
             </div>
-            <div className="h-8 w-px bg-white/10 mx-2"></div>
-            <Button variant="ghost" onClick={handleLogout} className="text-emerald-200 hover:text-white hover:bg-white/10 gap-2 h-10 px-3 rounded-lg">
+
+            <div className="h-6 w-px bg-slate-800"></div>
+
+            <Button variant="ghost" onClick={handleLogout} className="text-slate-300 hover:text-white hover:bg-slate-800 gap-2 h-9 px-3 text-xs font-semibold rounded-lg">
               <LogOut className="w-4 h-4" />
-              <span className="text-sm font-semibold hidden md:inline">Logout</span>
+              <span>Logout</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-[1400px] mx-auto px-6 py-10">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <Card className="bg-white border-0 shadow-[0_2px_10px_-3px_rgba(27,67,50,0.12)] rounded-2xl overflow-hidden group">
-            <div className="h-1.5 w-full bg-emerald-700"></div>
-            <CardContent className="p-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Retail Partners</p>
-                  <h3 className="text-4xl font-black text-slate-900 tracking-tight tabular-nums">{users.length}</h3>
-                </div>
-                <div className="p-3 bg-emerald-50 rounded-xl group-hover:scale-110 transition-transform">
-                  <Users className="w-6 h-6 text-emerald-700" />
-                </div>
+      {/* MAIN CONTAINER */}
+      <main className="max-w-[1440px] mx-auto px-6 py-8">
+        
+        {/* EXECUTIVE METRICS DASHBOARD */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <Card className="bg-white border border-slate-200 shadow-sm rounded-xl p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Active SKUs</p>
+                <h3 className="text-3xl font-extrabold text-slate-900 mt-1 tabular-nums">{inventory.length.toLocaleString()}</h3>
+                <p className="text-[11px] text-slate-500 font-medium mt-1">Upkar & Swasthik Catalog</p>
               </div>
-            </CardContent>
+              <div className="p-2.5 bg-slate-100 rounded-lg text-slate-700">
+                <Package className="w-5 h-5" />
+              </div>
+            </div>
           </Card>
-          
-          <Card className="bg-white border-0 shadow-[0_2px_10px_-3px_rgba(27,67,50,0.12)] rounded-2xl overflow-hidden group">
-            <div className="h-1.5 w-full bg-emerald-500"></div>
-            <CardContent className="p-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Active SKUs</p>
-                  <h3 className="text-4xl font-black text-slate-900 tracking-tight tabular-nums">{inventory.length}</h3>
-                </div>
-                <div className="p-3 bg-emerald-50 rounded-xl group-hover:scale-110 transition-transform">
-                  <Package className="w-6 h-6 text-emerald-600" />
-                </div>
+
+          <Card className="bg-white border border-slate-200 shadow-sm rounded-xl p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Retail Pharmacies</p>
+                <h3 className="text-3xl font-extrabold text-slate-900 mt-1 tabular-nums">{users.filter(u => u.role !== 'admin').length}</h3>
+                <p className="text-[11px] text-emerald-600 font-semibold mt-1">{pendingUsersCount} Pending Approvals</p>
               </div>
-            </CardContent>
+              <div className="p-2.5 bg-blue-50 rounded-lg text-blue-700">
+                <Building2 className="w-5 h-5" />
+              </div>
+            </div>
           </Card>
-          
-          <Card className="bg-white border-0 shadow-[0_2px_10px_-3px_rgba(27,67,50,0.12)] rounded-2xl overflow-hidden group">
-            <div className="h-1.5 w-full bg-slate-900"></div>
-            <CardContent className="p-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Processed Orders</p>
-                  <h3 className="text-4xl font-black text-slate-900 tracking-tight tabular-nums">{orders.length}</h3>
-                </div>
-                <div className="p-3 bg-slate-100 rounded-xl group-hover:scale-110 transition-transform">
-                  <Activity className="w-6 h-6 text-slate-700" />
-                </div>
+
+          <Card className="bg-white border border-slate-200 shadow-sm rounded-xl p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Wholesale Orders</p>
+                <h3 className="text-3xl font-extrabold text-slate-900 mt-1 tabular-nums">{orders.length}</h3>
+                <p className="text-[11px] text-slate-500 font-medium mt-1">{orders.filter(o => o.status === 'Placed').length} New Orders</p>
               </div>
-            </CardContent>
+              <div className="p-2.5 bg-amber-50 rounded-lg text-amber-700">
+                <Activity className="w-5 h-5" />
+              </div>
+            </div>
+          </Card>
+
+          <Card className="bg-white border border-slate-200 shadow-sm rounded-xl p-5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Sales Volume</p>
+                <h3 className="text-3xl font-extrabold text-slate-900 mt-1 tabular-nums">₹{totalRevenue.toLocaleString('en-IN')}</h3>
+                <p className="text-[11px] text-emerald-600 font-semibold mt-1">Verified Orders</p>
+              </div>
+              <div className="p-2.5 bg-emerald-50 rounded-lg text-emerald-700">
+                <BarChart className="w-5 h-5" />
+              </div>
+            </div>
           </Card>
         </div>
 
-        <Tabs defaultValue="orders" className="w-full">
-          <div className="flex justify-between items-end mb-8">
-            <TabsList className="h-14 bg-white border border-slate-200/60 p-1.5 rounded-2xl shadow-sm inline-flex overflow-x-auto max-w-full">
-              <TabsTrigger value="orders" className="data-[state=active]:bg-emerald-800 data-[state=active]:text-white rounded-xl px-6 font-semibold text-sm transition-all">Live Orders</TabsTrigger>
-              <TabsTrigger value="users" className="data-[state=active]:bg-emerald-800 data-[state=active]:text-white rounded-xl px-6 font-semibold text-sm transition-all">Credit & Partners</TabsTrigger>
-              <TabsTrigger value="inventory" className="data-[state=active]:bg-emerald-800 data-[state=active]:text-white rounded-xl px-6 font-semibold text-sm transition-all">Inventory Control</TabsTrigger>
-              <TabsTrigger value="schemes" className="data-[state=active]:bg-emerald-800 data-[state=active]:text-white rounded-xl px-6 font-semibold text-sm transition-all flex items-center gap-2"><Tag className="w-4 h-4" /> Schemes & Offers</TabsTrigger>
-              <TabsTrigger value="analytics" className="data-[state=active]:bg-emerald-800 data-[state=active]:text-white rounded-xl px-6 font-semibold text-sm transition-all flex items-center gap-2"><BarChart className="w-4 h-4" /> Analytics</TabsTrigger>
-            </TabsList>
-          </div>
-          
-          {/* ORDERS TAB */}
-          <TabsContent value="orders" className="mt-0 outline-none animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <Card className="border-0 shadow-xl shadow-slate-200/50 bg-white rounded-3xl overflow-hidden ring-1 ring-slate-100">
-              <div className="p-6 md:p-8 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white">
+        {/* TABS NAVIGATION */}
+        <Tabs defaultValue="inventory" className="w-full">
+          <TabsList className="h-12 bg-white border border-slate-200 p-1 rounded-xl shadow-sm inline-flex mb-6">
+            <TabsTrigger value="inventory" className="data-[state=active]:bg-slate-900 data-[state=active]:text-white rounded-lg px-5 font-semibold text-xs transition-all flex items-center gap-2">
+              <Package className="w-4 h-4" /> B2B Product Master ({inventory.length})
+            </TabsTrigger>
+            <TabsTrigger value="orders" className="data-[state=active]:bg-slate-900 data-[state=active]:text-white rounded-lg px-5 font-semibold text-xs transition-all flex items-center gap-2">
+              <Activity className="w-4 h-4" /> Live Orders ({orders.length})
+            </TabsTrigger>
+            <TabsTrigger value="users" className="data-[state=active]:bg-slate-900 data-[state=active]:text-white rounded-lg px-5 font-semibold text-xs transition-all flex items-center gap-2">
+              <Building2 className="w-4 h-4" /> Pharmacy Partners ({users.filter(u => u.role !== 'admin').length})
+            </TabsTrigger>
+            <TabsTrigger value="schemes" className="data-[state=active]:bg-slate-900 data-[state=active]:text-white rounded-lg px-5 font-semibold text-xs transition-all flex items-center gap-2">
+              <Tag className="w-4 h-4" /> B2B Schemes
+            </TabsTrigger>
+          </TabsList>
+
+          {/* INVENTORY MASTER TAB */}
+          <TabsContent value="inventory" className="mt-0 outline-none">
+            <Card className="border border-slate-200 shadow-sm bg-white rounded-xl overflow-hidden">
+              <div className="p-6 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50/50">
                 <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-slate-900">Order Management</h2>
-                  <p className="text-slate-500 mt-1 font-medium">Review, accept, and process incoming B2B wholesale orders.</p>
+                  <h2 className="text-xl font-bold text-slate-900 tracking-tight">Pharmaceutical Product Master</h2>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">Comprehensive SKU database parsed from distributor catalogs</p>
+                </div>
+                <div className="flex gap-2">
+                  <input type="file" accept=".xlsx, .xls" className="hidden" ref={productFileInput} onChange={(e) => handleFileUpload(e, 'products')} />
+                  <Button variant="outline" size="sm" className="border-slate-300 text-slate-700 text-xs font-semibold" onClick={() => productFileInput.current?.click()} disabled={uploadingProducts}>
+                    {uploadingProducts ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
+                    Bulk Upload Catalog
+                  </Button>
                 </div>
               </div>
+
+              {/* FILTER BAR */}
+              <div className="p-4 bg-white border-b border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Search name, composition, code..." 
+                    value={searchTerm} 
+                    onChange={e => { setSearchTerm(e.target.value); setInventoryPage(1); }} 
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-slate-900 focus:bg-white focus:outline-none transition-all"
+                  />
+                </div>
+
+                <select 
+                  value={categoryFilter} 
+                  onChange={e => { setCategoryFilter(e.target.value); setInventoryPage(1); }} 
+                  className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                >
+                  <option value="">All Categories ({uniqueCategories.length})</option>
+                  {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+
+                <select 
+                  value={distributorFilter} 
+                  onChange={e => { setDistributorFilter(e.target.value); setInventoryPage(1); }} 
+                  className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                >
+                  <option value="">All Distributors</option>
+                  {uniqueDistributors.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+
+                <select 
+                  value={stockStatusFilter} 
+                  onChange={e => { setStockStatusFilter(e.target.value); setInventoryPage(1); }} 
+                  className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                >
+                  <option value="">All Stock Status</option>
+                  <option value="available">In Stock Only</option>
+                  <option value="out_of_stock">Out of Stock</option>
+                </select>
+              </div>
+
+              {/* TABLE */}
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader className="bg-slate-50/80">
-                    <TableRow className="border-slate-100 hover:bg-transparent">
-                      <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 pl-8">Order ID</TableHead>
-                      <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5">Partner</TableHead>
-                      <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5">Date</TableHead>
-                      <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 w-[300px]">Items</TableHead>
-                      <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 text-right">Total (₹)</TableHead>
-                      <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 text-center">Status / Logistics</TableHead>
-                      <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 pr-8 text-right">Actions</TableHead>
+                  <TableHeader className="bg-slate-100/70">
+                    <TableRow className="border-slate-200">
+                      <TableHead className="text-slate-600 font-bold uppercase text-[11px] tracking-wider py-3.5 pl-6">Code / Product Details</TableHead>
+                      <TableHead className="text-slate-600 font-bold uppercase text-[11px] tracking-wider py-3.5">Composition / Molecule</TableHead>
+                      <TableHead className="text-slate-600 font-bold uppercase text-[11px] tracking-wider py-3.5">Packing</TableHead>
+                      <TableHead className="text-slate-600 font-bold uppercase text-[11px] tracking-wider py-3.5">Distributor</TableHead>
+                      <TableHead className="text-slate-600 font-bold uppercase text-[11px] tracking-wider py-3.5 text-right">Sale Rate / PTR</TableHead>
+                      <TableHead className="text-slate-600 font-bold uppercase text-[11px] tracking-wider py-3.5 text-right">MRP</TableHead>
+                      <TableHead className="text-slate-600 font-bold uppercase text-[11px] tracking-wider py-3.5 text-center">Stock</TableHead>
+                      <TableHead className="text-slate-600 font-bold uppercase text-[11px] tracking-wider py-3.5 pr-6 text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.map((o) => {
-                      let isOverStock = false;
-                      if (o.status === "Placed" && Array.isArray(o.items)) {
-                         isOverStock = o.items.some((orderItem: any) => {
-                            const dbItem = inventory.find((p: any) => p.id === orderItem.id);
-                            return dbItem && orderItem.quantity > dbItem.stock;
-                         });
-                      }
-
-                      const nearingDeadline = isNearingCreditDeadline(o.date) && o.status === 'Shipped';
-                      const pastDeadline = isPastCreditDeadline(o.date) && o.status === 'Shipped';
+                    {filteredInventory.slice((inventoryPage - 1) * ITEMS_PER_PAGE, inventoryPage * ITEMS_PER_PAGE).map((product) => {
+                      const discountMargin = product.mrp > 0 && product.price < product.mrp 
+                        ? Math.round(((product.mrp - product.price) / product.mrp) * 100) 
+                        : 0;
 
                       return (
-                      <TableRow key={o.id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors group ${o.status === 'Placed' ? 'bg-amber-50/20' : ''} ${pastDeadline ? 'bg-red-50/30' : ''}`}>
-                        <TableCell className="font-bold text-slate-900 py-5 pl-8 font-mono text-sm">
-                          {o.id}
-                          {isOverStock && <span className="flex items-center gap-1 text-[10px] text-red-600 uppercase tracking-wider font-bold mt-1.5"><AlertCircle className="w-3 h-3"/> Exceeds Stock</span>}
-                          {nearingDeadline && <span className="flex items-center gap-1 text-[10px] text-amber-600 uppercase tracking-wider font-bold mt-1.5"><Bell className="w-3 h-3"/> 55+ Days Due</span>}
-                          {pastDeadline && <span className="flex items-center gap-1 text-[10px] text-red-600 uppercase tracking-wider font-bold mt-1.5"><AlertCircle className="w-3 h-3"/> Past 60 Days</span>}
-                        </TableCell>
-                        <TableCell className="py-5">
-                          <span className="font-semibold text-slate-800">{o.store_name}</span>
-                        </TableCell>
-                        <TableCell className="text-slate-500 text-sm font-medium py-5">{o.date}</TableCell>
-                        <TableCell className="py-5">
-                          <div className="flex flex-wrap gap-1.5">
-                            {o.items?.map((item: any, idx: number) => (
-                              <div key={idx} className="bg-slate-100 border border-slate-200/60 rounded-md px-2 py-1 text-[11px] font-medium text-slate-700 flex items-center gap-1.5">
-                                {item.name} <span className="bg-white px-1.5 py-0.5 rounded text-emerald-800 font-bold shadow-sm">x{item.quantity}</span>
+                        <TableRow key={product.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                          <TableCell className="py-3 pl-6">
+                            <div className="flex items-start gap-3">
+                              <div className="w-8 h-8 rounded bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                                <Pill className="w-4 h-4 text-slate-600" />
                               </div>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-black text-slate-900 py-5 tabular-nums text-base tracking-tight">
-                          ₹{o.total.toLocaleString('en-IN')}
-                        </TableCell>
-                        <TableCell className="text-center py-5">
-                          {getStatusBadge(o.status)}
-                          {o.status === 'Shipped' && o.courier_name && (
-                            <div className="mt-2 text-[10px] font-bold text-slate-500 bg-slate-100 rounded px-2 py-1">
-                              {o.courier_name}: {o.tracking_id}
+                              <div>
+                                <span className="font-bold text-slate-900 text-sm tracking-tight block">{product.name}</span>
+                                <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-0.5">
+                                  {product.code && <span className="font-mono text-[11px] text-slate-400">#{product.code}</span>}
+                                  <span className="font-semibold text-slate-700">{product.company || product.manufacturer}</span>
+                                  <span className="text-slate-300">•</span>
+                                  <span className="text-slate-500">{product.category}</span>
+                                </div>
+                              </div>
                             </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right py-5 pr-8">
-                          <div className="flex justify-end gap-2 opacity-100 transition-opacity">
-                            {o.status === "Placed" && (
-                              <>
-                                <Button size="sm" onClick={() => handleUpdateOrderStatus(o.id, 'Accepted')} className="bg-emerald-700 hover:bg-emerald-800 text-white shadow-md shadow-emerald-200 font-semibold h-9 px-4 rounded-xl transition-all hover:scale-105 active:scale-95">Accept</Button>
-                                <Button size="sm" onClick={() => handleUpdateOrderStatus(o.id, 'Rejected')} className="bg-white border-2 border-slate-200 text-slate-700 hover:border-red-500 hover:text-red-600 font-semibold h-9 px-4 rounded-xl transition-all">Reject</Button>
-                              </>
+                          </TableCell>
+                          
+                          <TableCell className="py-3">
+                            <span className="text-xs text-slate-600 font-medium block max-w-[220px] truncate" title={product.drug_name || product.composition}>
+                              {product.drug_name || product.composition || '—'}
+                            </span>
+                          </TableCell>
+
+                          <TableCell className="py-3">
+                            {product.packing ? (
+                              <span className="inline-block bg-slate-100 text-slate-700 text-xs font-semibold px-2 py-0.5 rounded border border-slate-200 font-mono">
+                                {product.packing}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-xs">—</span>
                             )}
-                            {o.status === "Accepted" && (
-                              <Button size="sm" onClick={() => handleUpdateOrderStatus(o.id, 'Processing')} className="bg-slate-900 hover:bg-slate-800 text-white font-semibold h-9 px-5 rounded-xl shadow-md transition-all hover:scale-105 active:scale-95">Begin Process</Button>
+                          </TableCell>
+
+                          <TableCell className="py-3">
+                            <span className="text-xs font-semibold text-slate-700">
+                              {product.distributor || 'Upkar Pharma'}
+                            </span>
+                          </TableCell>
+
+                          <TableCell className="py-3 text-right">
+                            <span className="font-extrabold text-slate-900 text-sm tabular-nums">
+                              ₹{product.price?.toLocaleString('en-IN')}
+                            </span>
+                          </TableCell>
+
+                          <TableCell className="py-3 text-right">
+                            {product.mrp > 0 ? (
+                              <div>
+                                <span className="text-xs font-semibold text-slate-500 tabular-nums">₹{product.mrp?.toLocaleString('en-IN')}</span>
+                                {discountMargin > 0 && (
+                                  <span className="block text-[10px] font-bold text-emerald-600">
+                                    {discountMargin}% Margin
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 text-xs">—</span>
                             )}
-                            {o.status === "Processing" && (
-                              <Button size="sm" onClick={() => handleUpdateOrderStatus(o.id, 'Shipped')} className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold h-9 px-5 rounded-xl shadow-md transition-all hover:scale-105 active:scale-95">Dispatch</Button>
-                            )}
-                            {(o.status === "Shipped" || o.status === "Rejected") && (
-                              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2">Archived</span>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                          </TableCell>
+
+                          <TableCell className="py-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button onClick={() => handleUpdateStock(product.id, -1)} className="w-6 h-6 rounded bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-xs flex items-center justify-center">-</button>
+                              <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${product.stock === 0 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-800'}`}>
+                                {product.stock}
+                              </span>
+                              <button onClick={() => handleUpdateStock(product.id, 1)} className="w-6 h-6 rounded bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-xs flex items-center justify-center">+</button>
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="py-3 pr-6 text-right">
+                            <Button variant="ghost" size="sm" className="h-7 text-xs font-semibold text-slate-600 hover:text-slate-900" onClick={() => setSelectedProduct(product)}>
+                              Details
+                            </Button>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
                   </TableBody>
                 </Table>
               </div>
-            </Card>
-          </TabsContent>
 
-          {/* USERS TAB */}
-          <TabsContent value="users" className="mt-0 outline-none animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <Card className="border-0 shadow-xl shadow-slate-200/50 bg-white rounded-3xl overflow-hidden ring-1 ring-slate-100">
-              <div className="p-6 md:p-8 border-b border-slate-100 bg-white flex justify-between items-center">
-                <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-slate-900">Partner & Credit Directory</h2>
-                  <p className="text-slate-500 mt-1 font-medium">Manage B2B relationships, approve access, and monitor credit lines.</p>
-                </div>
-                <div className="flex gap-3">
-                  <input type="file" accept=".xlsx, .xls" className="hidden" ref={userFileInput} onChange={(e) => handleFileUpload(e, 'users')} />
-                  <Button variant="outline" className="border-emerald-200 text-emerald-800 hover:bg-emerald-50" onClick={() => window.open('/templates/Users_Upload_Template.xlsx', '_blank')}>
-                    <FileSpreadsheet className="w-4 h-4 mr-2" />
-                    Template
+              {/* PAGINATION */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-600">
+                  Showing {filteredInventory.length > 0 ? (inventoryPage - 1) * ITEMS_PER_PAGE + 1 : 0} to {Math.min(inventoryPage * ITEMS_PER_PAGE, filteredInventory.length)} of {filteredInventory.length.toLocaleString()} SKUs
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={inventoryPage === 1} onClick={() => setInventoryPage(p => Math.max(1, p - 1))} className="h-8 text-xs font-semibold">
+                    <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Previous
                   </Button>
-                  <Button className="bg-emerald-700 hover:bg-emerald-800 text-white shadow-md shadow-emerald-200" onClick={() => userFileInput.current?.click()} disabled={uploadingUsers}>
-                    {uploadingUsers ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-                    Bulk Upload Clients
+                  <span className="text-xs font-bold text-slate-700 px-2">Page {inventoryPage} of {totalPages || 1}</span>
+                  <Button size="sm" variant="outline" disabled={inventoryPage >= totalPages} onClick={() => setInventoryPage(p => p + 1)} className="h-8 text-xs font-semibold">
+                    Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
                   </Button>
                 </div>
               </div>
+            </Card>
+          </TabsContent>
+
+          {/* ORDERS TAB */}
+          <TabsContent value="orders" className="mt-0 outline-none">
+            <Card className="border border-slate-200 shadow-sm bg-white rounded-xl overflow-hidden">
+              <div className="p-6 border-b border-slate-200 bg-slate-50/50">
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Wholesale Order Lifecycle</h2>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">Manage B2B order verification, status progression, and courier dispatch</p>
+              </div>
               <Table>
-                <TableHeader className="bg-slate-50/80">
-                  <TableRow className="border-slate-100 hover:bg-transparent">
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 pl-8">Store Name</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5">Contact</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5">Zone / District</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5">Account Status</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 text-right">Credit Utilized</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 text-right">Invoiced Due</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 pr-8 text-right">Actions</TableHead>
+                <TableHeader className="bg-slate-100/70">
+                  <TableRow className="border-slate-200">
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5 pl-6">Order ID</TableHead>
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5">Pharmacy Store</TableHead>
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5">Date</TableHead>
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5">Item Summary</TableHead>
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5 text-right">Total Amount</TableHead>
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5 text-center">Status</TableHead>
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5 pr-6 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user) => {
-                    if (user.role === 'admin') return null;
-                    const shippedDebt = orders
-                      .filter(o => o.store_name === user.store_name && o.status === 'Shipped')
-                      .reduce((acc, order) => acc + order.total, 0);
-
-                    const creditPercentage = user.credit_limit > 0 ? (user.credit_balance / user.credit_limit) * 100 : 0;
-
-                    return (
-                    <TableRow key={user.phone} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                      <TableCell className="py-5 pl-8">
-                        <span className="font-bold text-slate-900 text-base">{user.store_name}</span>
+                  {orders.map((o) => (
+                    <TableRow key={o.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                      <TableCell className="py-4 pl-6 font-mono font-bold text-xs text-slate-900">{o.id}</TableCell>
+                      <TableCell className="py-4 font-semibold text-slate-800 text-xs">{o.store_name || o.store}</TableCell>
+                      <TableCell className="py-4 text-xs font-medium text-slate-500">{o.date}</TableCell>
+                      <TableCell className="py-4 text-xs text-slate-600">
+                        {o.items?.length || 0} Products
                       </TableCell>
-                      <TableCell className="text-slate-600 font-medium py-5 font-mono text-sm">{user.phone}</TableCell>
-                      <TableCell className="py-5">
-                        {user.city ? (
-                          <span className="text-sm font-semibold text-slate-700">{user.city}{user.zone ? <span className="text-slate-400 font-normal">, {user.zone}</span> : ''}</span>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">Not set</span>
-                        )}
+                      <TableCell className="py-4 text-right font-extrabold text-slate-900 text-sm tabular-nums">
+                        ₹{o.total?.toLocaleString('en-IN')}
                       </TableCell>
-                      <TableCell className="py-5">
-                        {user.is_approved ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100/50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Verified
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100/50 text-amber-700 border border-amber-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Pending Approval
-                          </span>
-                        )}
+                      <TableCell className="py-4 text-center">
+                        {getStatusBadge(o.status)}
                       </TableCell>
-                      <TableCell className="text-right py-5">
-                        <div className="flex flex-col items-end gap-1.5">
-                          <span className="font-bold text-slate-900 tabular-nums">
-                            ₹{user.credit_balance.toLocaleString('en-IN')} <span className="text-slate-400 font-medium text-xs">/ {user.credit_limit.toLocaleString('en-IN')}</span>
-                          </span>
-                          <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${creditPercentage > 90 ? 'bg-red-500' : 'bg-emerald-600'}`} style={{ width: `${Math.min(creditPercentage, 100)}%` }}></div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right py-5">
-                        <span className={`font-black tabular-nums ${shippedDebt > 0 ? 'text-red-500' : 'text-slate-300'}`}>
-                          ₹{shippedDebt.toLocaleString('en-IN')}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right py-5 pr-8">
-                        <div className="flex justify-end gap-3">
-                          {!user.is_approved && (
-                            <Button size="sm" onClick={() => handleApproveUser(user.phone)} className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold h-9 rounded-xl shadow-md transition-all">
-                              Approve
-                            </Button>
+                      <TableCell className="py-4 pr-6 text-right">
+                        <div className="flex justify-end gap-1.5">
+                          {o.status === "Placed" && (
+                            <>
+                              <Button size="sm" onClick={() => handleUpdateOrderStatus(o.id, 'Accepted')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-7 px-3 rounded">Accept</Button>
+                              <Button size="sm" variant="outline" onClick={() => handleUpdateOrderStatus(o.id, 'Rejected')} className="border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold text-xs h-7 px-3 rounded">Reject</Button>
+                            </>
                           )}
-                          <Button size="sm" variant="outline" className="h-9 rounded-xl border-slate-200 text-slate-700 font-semibold hover:bg-slate-100">
-                            Manage
-                          </Button>
+                          {o.status === "Accepted" && (
+                            <Button size="sm" onClick={() => handleUpdateOrderStatus(o.id, 'Processing')} className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs h-7 px-3 rounded">Process</Button>
+                          )}
+                          {o.status === "Processing" && (
+                            <Button size="sm" onClick={() => handleUpdateOrderStatus(o.id, 'Shipped')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-7 px-3 rounded">Dispatch</Button>
+                          )}
                         </div>
-                      </TableCell>
-                    </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </Card>
-          </TabsContent>
-          
-          {/* INVENTORY TAB */}
-          <TabsContent value="inventory" className="mt-0 outline-none animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <Card className="border-0 shadow-xl shadow-slate-200/50 bg-white rounded-3xl overflow-hidden ring-1 ring-slate-100">
-              <div className="p-6 md:p-8 border-b border-slate-100 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-slate-900">Master Catalog</h2>
-                  <p className="text-slate-500 mt-1 font-medium">Control inventory levels, pricing, and new product listings.</p>
-                </div>
-                <div className="flex gap-3">
-                  <input type="file" accept=".xlsx, .xls" className="hidden" ref={productFileInput} onChange={(e) => handleFileUpload(e, 'products')} />
-                  <Button variant="outline" className="border-emerald-200 text-emerald-800 hover:bg-emerald-50" onClick={() => window.open('/templates/Products_Upload_Template.xlsx', '_blank')}>
-                    <FileSpreadsheet className="w-4 h-4 mr-2" />
-                    Template
-                  </Button>
-                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-200" onClick={() => productFileInput.current?.click()} disabled={uploadingProducts}>
-                    {uploadingProducts ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-                    Bulk Upload Excel
-                  </Button>
-                </div>
-              </div>
-              
-              <div className="p-6 md:p-8 bg-slate-50/50 border-b border-slate-100">
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm shadow-slate-100 mb-6">
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <Plus className="w-4 h-4 text-emerald-700"/> Add New SKU
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-                    <div className="col-span-2">
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Product Name</label>
-                      <input type="text" placeholder="e.g. Paracetamol 500mg" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all" />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Manufacturer</label>
-                      <input type="text" placeholder="e.g. GSK" value={newItem.company} onChange={e => setNewItem({...newItem, company: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all" />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Category / Body</label>
-                      <div className="flex gap-2">
-                        <input type="text" placeholder="Category" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} className="w-1/2 text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all" />
-                        <input type="text" placeholder="System" value={newItem.body_system} onChange={e => setNewItem({...newItem, body_system: e.target.value})} className="w-1/2 text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Price / Stock</label>
-                      <div className="flex gap-2">
-                        <input type="number" placeholder="₹" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} className="w-1/2 text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all" />
-                        <input type="number" placeholder="Qty" value={newItem.stock} onChange={e => setNewItem({...newItem, stock: e.target.value})} className="w-1/2 text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-all" />
-                      </div>
-                    </div>
-                    <Button onClick={handleAddNewProduct} className="bg-slate-900 hover:bg-emerald-700 text-white font-bold h-[46px] rounded-xl shadow-md transition-all w-full">Create</Button>
-                  </div>
-                </div>
-
-                <div className="flex flex-col md:flex-row gap-4 mb-2">
-                  <div className="relative flex-1">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input type="text" placeholder="Search by name or company..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-600 focus:outline-none transition-shadow shadow-sm" />
-                  </div>
-                  <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="py-2.5 px-4 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-600 focus:outline-none shadow-sm md:w-48">
-                    <option value="">All Categories</option>
-                    {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <select value={bodySystemFilter} onChange={e => setBodySystemFilter(e.target.value)} className="py-2.5 px-4 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-emerald-600 focus:outline-none shadow-sm md:w-48">
-                    <option value="">All Body Systems</option>
-                    {uniqueSystems.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <Table>
-                <TableHeader className="bg-white">
-                  <TableRow className="border-slate-100 hover:bg-transparent">
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 pl-8">Item Description</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 text-right">Unit Price</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 text-right">Available Stock</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 pr-8 text-right">Admin</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredInventory.map((product) => (
-                    <TableRow key={product.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                      <TableCell className="py-4 pl-8">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-slate-900 text-base tracking-tight">{product.name}</span>
-                          <span className="text-xs font-semibold text-emerald-700">{product.company} &bull; <span className="text-slate-400">{product.category} {product.body_system !== 'General' && `(${product.body_system})`}</span></span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right py-4 font-black text-slate-900 tabular-nums">
-                        ₹{product.price.toLocaleString('en-IN')}
-                      </TableCell>
-                      <TableCell className="text-right py-4">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg hover:bg-slate-200 hover:text-slate-900" onClick={() => handleUpdateStock(product.id, -1)}>-</Button>
-                          <span className={`font-mono font-bold w-12 text-center ${product.stock < 10 ? 'text-red-600 bg-red-50 rounded py-1' : 'text-slate-700'}`}>
-                            {product.stock}
-                          </span>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg hover:bg-slate-200 hover:text-slate-900" onClick={() => handleUpdateStock(product.id, 1)}>+</Button>
-                          <Button size="sm" variant="ghost" className="h-8 px-2 rounded-lg text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 font-bold" onClick={() => handleUpdateStock(product.id, 10)}>+10</Button>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right py-4 pr-8">
-                         <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">
-                           <AlertCircle className="w-4 h-4" />
-                         </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -703,234 +580,106 @@ export default function Dashboard() {
             </Card>
           </TabsContent>
 
-          {/* ANALYTICS TAB */}
-          <TabsContent value="analytics" className="mt-0 outline-none animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <Card className="border-0 shadow-xl shadow-slate-200/50 bg-white rounded-3xl overflow-hidden ring-1 ring-slate-100 p-8">
-              <div className="mb-8">
-                <h2 className="text-2xl font-bold tracking-tight text-slate-900">Platform Analytics</h2>
-                <p className="text-slate-500 mt-1 font-medium">Business intelligence and performance metrics.</p>
-              </div>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                  <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><Activity className="w-5 h-5 text-emerald-700"/> Revenue Trend (Last 7 Active Days)</h3>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={revenueData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis dataKey="date" tick={{fontSize: 12, fill: '#64748b'}} axisLine={false} tickLine={false} />
-                        <YAxis tickFormatter={(val) => `₹${val/1000}k`} tick={{fontSize: 12, fill: '#64748b'}} axisLine={false} tickLine={false} width={60} />
-                        <RechartsTooltip formatter={(value) => [`₹${value}`, 'Revenue']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}/>
-                        <Line type="monotone" dataKey="revenue" stroke="#4f46e5" strokeWidth={4} dot={{r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                  <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><Package className="w-5 h-5 text-emerald-500"/> Top 5 SKUs (By Volume)</h3>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartsBarChart data={topSKUs} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                        <XAxis type="number" tick={{fontSize: 12, fill: '#64748b'}} axisLine={false} tickLine={false} />
-                        <YAxis dataKey="name" type="category" tick={{fontSize: 11, fill: '#475569'}} axisLine={false} tickLine={false} width={100} />
-                        <RechartsTooltip formatter={(value) => [value, 'Units Sold']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}/>
-                        <Bar dataKey="volume" fill="#10b981" radius={[0, 4, 4, 0]} barSize={24} />
-                      </RechartsBarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* SCHEMES & OFFERS TAB */}
-          <TabsContent value="schemes" className="mt-0 outline-none animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <Card className="border-0 shadow-xl shadow-slate-200/50 bg-white rounded-3xl overflow-hidden ring-1 ring-slate-100">
-              <div className="p-6 md:p-8 border-b border-slate-100 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          {/* USERS PARTNERS TAB */}
+          <TabsContent value="users" className="mt-0 outline-none">
+            <Card className="border border-slate-200 shadow-sm bg-white rounded-xl overflow-hidden">
+              <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
                 <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-slate-900">Schemes & Offers</h2>
-                  <p className="text-slate-500 mt-1 font-medium">Create and manage coupon codes for your B2B customers.</p>
+                  <h2 className="text-xl font-bold text-slate-900 tracking-tight">Pharmacy Partner Accounts</h2>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">Manage B2B buyer approvals and credit limits</p>
                 </div>
-                <Button onClick={() => setShowSchemeForm(!showSchemeForm)} className="bg-emerald-700 hover:bg-emerald-800 text-white shadow-md shadow-emerald-200 font-semibold rounded-xl gap-2">
-                  <Plus className="w-4 h-4" /> {showSchemeForm ? 'Cancel' : 'Create Coupon'}
+                <input type="file" accept=".xlsx, .xls" className="hidden" ref={userFileInput} onChange={(e) => handleFileUpload(e, 'users')} />
+                <Button size="sm" className="bg-slate-900 text-white font-semibold text-xs" onClick={() => userFileInput.current?.click()} disabled={uploadingUsers}>
+                  <Upload className="w-3.5 h-3.5 mr-1.5" /> Bulk Import Partners
                 </Button>
               </div>
-
-              {/* Stats Row */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-6 md:px-8 md:pt-6 md:pb-2">
-                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 flex items-center gap-4">
-                  <div className="p-3 bg-emerald-100 rounded-xl"><Tag className="w-5 h-5 text-emerald-700" /></div>
-                  <div>
-                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Active</p>
-                    <p className="text-2xl font-black text-emerald-800 tabular-nums">{schemes.filter(s => getSchemeStatus(s) === 'Active').length}</p>
-                  </div>
-                </div>
-                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5 flex items-center gap-4">
-                  <div className="p-3 bg-amber-100 rounded-xl"><Calendar className="w-5 h-5 text-amber-700" /></div>
-                  <div>
-                    <p className="text-xs font-bold text-amber-600 uppercase tracking-wider">Scheduled</p>
-                    <p className="text-2xl font-black text-amber-800 tabular-nums">{schemes.filter(s => getSchemeStatus(s) === 'Scheduled').length}</p>
-                  </div>
-                </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex items-center gap-4">
-                  <div className="p-3 bg-slate-100 rounded-xl"><Gift className="w-5 h-5 text-slate-600" /></div>
-                  <div>
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Coupons</p>
-                    <p className="text-2xl font-black text-slate-800 tabular-nums">{schemes.length}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Create Scheme Form */}
-              {showSchemeForm && (
-                <div className="p-6 md:px-8 bg-emerald-50/40 border-b border-emerald-100">
-                  <div className="bg-white p-6 rounded-2xl border border-emerald-200/50 shadow-sm">
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5 flex items-center gap-2"><Tag className="w-4 h-4 text-emerald-700" /> New Coupon</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Coupon Title</label>
-                        <input type="text" placeholder="e.g. Summer Sale" value={schemeForm.title} onChange={e => setSchemeForm({...schemeForm, title: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Coupon Code</label>
-                        <input type="text" placeholder="e.g. SAVE20" value={schemeForm.code} onChange={e => setSchemeForm({...schemeForm, code: e.target.value.toUpperCase()})} className="w-full text-sm font-bold p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none font-mono tracking-widest" />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Type</label>
-                        <select value={schemeForm.scheme_type} onChange={e => setSchemeForm({...schemeForm, scheme_type: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-600 focus:outline-none">
-                          <option value="Discount">Discount %</option>
-                          <option value="Flat">Flat ₹ Off</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                      {schemeForm.scheme_type === 'Discount' && (
-                        <div>
-                          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Discount %</label>
-                          <input type="number" placeholder="e.g. 15" value={schemeForm.discount_percent} onChange={e => setSchemeForm({...schemeForm, discount_percent: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none" />
-                        </div>
-                      )}
-                      {schemeForm.scheme_type === 'Flat' && (
-                        <div>
-                          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Flat Off (₹)</label>
-                          <input type="number" placeholder="e.g. 500" value={schemeForm.flat_discount} onChange={e => setSchemeForm({...schemeForm, flat_discount: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none" />
-                        </div>
-                      )}
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Min Order (₹)</label>
-                        <input type="number" placeholder="e.g. 5000" value={schemeForm.min_order_value} onChange={e => setSchemeForm({...schemeForm, min_order_value: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Max Discount (₹)</label>
-                        <input type="number" placeholder="Optional cap" value={schemeForm.max_discount} onChange={e => setSchemeForm({...schemeForm, max_discount: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Global Limit</label>
-                        <input type="number" placeholder="0 = unlimited" value={schemeForm.usage_limit} onChange={e => setSchemeForm({...schemeForm, usage_limit: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Per User Limit</label>
-                        <input type="number" placeholder="0 = unlimited" value={schemeForm.per_user_limit} onChange={e => setSchemeForm({...schemeForm, per_user_limit: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Description</label>
-                        <input type="text" placeholder="Short promo text" value={schemeForm.description} onChange={e => setSchemeForm({...schemeForm, description: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-600 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Start Date</label>
-                        <input type="date" value={schemeForm.start_date} onChange={e => setSchemeForm({...schemeForm, start_date: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-600 focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">End Date</label>
-                        <input type="date" value={schemeForm.end_date} onChange={e => setSchemeForm({...schemeForm, end_date: e.target.value})} className="w-full text-sm font-medium p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-600 focus:outline-none" />
-                      </div>
-                    </div>
-                    <Button onClick={handleCreateScheme} disabled={savingScheme} className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow-md w-full md:w-auto px-8 h-11">
-                      {savingScheme ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
-                      Create Coupon
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Schemes Table */}
               <Table>
-                <TableHeader className="bg-slate-50/80">
-                  <TableRow className="border-slate-100 hover:bg-transparent">
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 pl-8">Coupon</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5">Code</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5">Type / Value</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5">Min Order</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5">Validity</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5">Limits</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 text-center">Status</TableHead>
-                    <TableHead className="text-slate-500 font-bold uppercase tracking-wider text-xs py-5 pr-8 text-right">Actions</TableHead>
+                <TableHeader className="bg-slate-100/70">
+                  <TableRow className="border-slate-200">
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5 pl-6">Store Name</TableHead>
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5">Contact Phone</TableHead>
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5">Status</TableHead>
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5 text-right">Credit Balance</TableHead>
+                    <TableHead className="text-slate-600 font-bold uppercase text-[11px] py-3.5 pr-6 text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {schemes.length === 0 && (
-                    <TableRow><TableCell colSpan={8} className="text-center py-16 text-slate-400 text-sm font-medium">No coupons created yet. Click "Create Coupon" to get started.</TableCell></TableRow>
-                  )}
-                  {schemes.map((scheme) => {
-                    const status = getSchemeStatus(scheme);
-                    return (
-                      <TableRow key={scheme.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                        <TableCell className="py-5 pl-8">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-slate-900">{scheme.title}</span>
-                            {scheme.description && <span className="text-xs text-slate-500 mt-0.5">{scheme.description}</span>}
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-5">
-                          <span className="font-mono font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg text-sm tracking-wider">{scheme.code}</span>
-                        </TableCell>
-                        <TableCell className="py-5">
-                          <span className="font-bold text-slate-800">
-                            {scheme.scheme_type === 'Discount' ? `${scheme.discount_percent}% off` : `₹${scheme.flat_discount} off`}
-                          </span>
-                          {scheme.max_discount && <span className="text-xs text-slate-400 block">Max ₹{scheme.max_discount}</span>}
-                        </TableCell>
-                        <TableCell className="py-5 font-semibold text-slate-700">₹{(scheme.min_order_value || 0).toLocaleString('en-IN')}</TableCell>
-                        <TableCell className="py-5">
-                          <span className="text-xs font-semibold text-slate-600">{scheme.start_date}</span>
-                          <span className="text-xs text-slate-400"> → </span>
-                          <span className="text-xs font-semibold text-slate-600">{scheme.end_date}</span>
-                        </TableCell>
-                        <TableCell className="py-5">
-                          <div className="flex flex-col gap-1">
-                            <span className="text-xs font-medium text-slate-500">Global: {scheme.usage_limit > 0 ? `${scheme.times_used}/${scheme.usage_limit}` : `${scheme.times_used} (Unlmt)`}</span>
-                            <span className="text-xs font-medium text-emerald-700">Per User: {scheme.per_user_limit > 0 ? scheme.per_user_limit : 'Unlmt'}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center py-5">
-                          {status === 'Active' && <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-none font-bold px-3 py-0.5 rounded-full">Active</Badge>}
-                          {status === 'Scheduled' && <Badge className="bg-amber-50 text-amber-700 border border-amber-200 shadow-none font-bold px-3 py-0.5 rounded-full">Scheduled</Badge>}
-                          {status === 'Expired' && <Badge className="bg-red-50 text-red-600 border border-red-200 shadow-none font-bold px-3 py-0.5 rounded-full">Expired</Badge>}
-                          {status === 'Disabled' && <Badge className="bg-slate-100 text-slate-500 border border-slate-200 shadow-none font-bold px-3 py-0.5 rounded-full">Disabled</Badge>}
-                        </TableCell>
-                        <TableCell className="text-right py-5 pr-8">
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => handleToggleScheme(scheme.id)} className="h-9 rounded-xl hover:bg-slate-100 text-slate-600 font-semibold">
-                              {scheme.is_active ? <ToggleRight className="w-5 h-5 text-emerald-600" /> : <ToggleLeft className="w-5 h-5 text-slate-400" />}
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => handleDeleteScheme(scheme.id)} className="h-9 rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-600">
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {users.filter(u => u.role !== 'admin').map((user) => (
+                    <TableRow key={user.phone} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                      <TableCell className="py-4 pl-6 font-bold text-slate-900 text-xs">{user.store_name}</TableCell>
+                      <TableCell className="py-4 text-xs font-mono text-slate-600">{user.phone}</TableCell>
+                      <TableCell className="py-4">
+                        {user.is_approved ? (
+                          <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">Verified Partner</Badge>
+                        ) : (
+                          <Badge className="bg-amber-50 text-amber-800 border border-amber-200 text-xs font-semibold">Pending Approval</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-4 text-right font-mono font-bold text-xs text-slate-900">
+                        ₹{(user.credit_balance || 0).toLocaleString('en-IN')} / ₹{(user.credit_limit || 100000).toLocaleString('en-IN')}
+                      </TableCell>
+                      <TableCell className="py-4 pr-6 text-right">
+                        {!user.is_approved && (
+                          <Button size="sm" onClick={() => handleApproveUser(user.phone)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-7 px-3 rounded">
+                            Approve
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </Card>
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* PRODUCT DETAILS MODAL */}
+      {selectedProduct && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider block mb-0.5">{selectedProduct.distributor || 'Upkar Pharma'}</span>
+                <h3 className="text-lg font-extrabold text-slate-900">{selectedProduct.name}</h3>
+                <p className="text-xs font-semibold text-slate-500">{selectedProduct.company || selectedProduct.manufacturer}</p>
+              </div>
+              <button onClick={() => setSelectedProduct(null)} className="p-1 rounded-lg hover:bg-slate-100 text-slate-500">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 bg-slate-50 p-4 rounded-lg border border-slate-200 text-xs mb-6">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500 font-medium">Composition:</span>
+                <span className="font-semibold text-slate-900 text-right">{selectedProduct.drug_name || selectedProduct.composition || 'Standard formulation'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500 font-medium">Packaging Spec:</span>
+                <span className="font-mono font-bold text-slate-900">{selectedProduct.packing || 'Default'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500 font-medium">WholeSale Sale Rate (PTR):</span>
+                <span className="font-extrabold text-slate-900">₹{selectedProduct.price?.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
+                <span className="text-slate-500 font-medium">Maximum Retail Price (MRP):</span>
+                <span className="font-semibold text-slate-700">₹{selectedProduct.mrp?.toLocaleString('en-IN') || selectedProduct.price}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-500 font-medium">Stock Level:</span>
+                <span className={`font-mono font-bold ${selectedProduct.stock > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>{selectedProduct.stock} Units</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={() => setSelectedProduct(null)} className="bg-slate-900 text-white text-xs font-semibold h-9 px-4 rounded-lg">
+                Close Product File
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  )
+  );
 }

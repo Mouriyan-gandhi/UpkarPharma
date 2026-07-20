@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import bcrypt from 'bcrypt';
 import * as jose from 'jose';
-
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'upkem-super-secret-key-change-me-in-prod');
+import { JWT_SECRET } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {

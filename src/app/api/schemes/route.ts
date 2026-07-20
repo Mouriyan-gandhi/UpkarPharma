@@ -1,11 +1,23 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { getAdmin, getSessionUser } from '@/lib/auth';
 
 // GET — fetch all schemes (admin), or active-only via ?active=true (mobile)
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get('active') === 'true';
+
+    // Active-only is the mobile catalog feed (any logged-in user); the full
+    // list is admin-only.
+    const admin = await getAdmin();
+    if (activeOnly) {
+      if (!admin && !getSessionUser(request)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    } else if (!admin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     let schemes;
     if (activeOnly) {
@@ -29,6 +41,7 @@ export async function GET(request: Request) {
 // POST — create a new scheme
 export async function POST(request: Request) {
   try {
+    if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     const body = await request.json();
     const {
       title, description, code, scheme_type,
@@ -79,6 +92,7 @@ export async function POST(request: Request) {
 // PUT — update a scheme (edit or toggle active)
 export async function PUT(request: Request) {
   try {
+    if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     const body = await request.json();
     const { id, action } = body;
 
@@ -122,6 +136,7 @@ export async function PUT(request: Request) {
 // DELETE — delete a scheme
 export async function DELETE(request: Request) {
   try {
+    if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 

@@ -4,8 +4,13 @@ import path from 'path';
 // Path to the SQLite database file
 const dbPath = path.resolve(process.cwd(), 'database.sqlite');
 
-// Initialize the database connection
-const db = new Database(dbPath, { verbose: console.log });
+// Initialize the database connection.
+// Verbose query logging in development only — keeps production logs clean and
+// avoids leaking query/data details.
+const db = new Database(
+  dbPath,
+  process.env.NODE_ENV === 'production' ? {} : { verbose: console.log }
+);
 
 // Enable foreign keys
 db.pragma('journal_mode = WAL');

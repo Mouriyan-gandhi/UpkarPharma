@@ -1,5 +1,37 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { getAdmin, getSessionUser } from '@/lib/auth';
+
+const MIN_ORDER_VALUE = 2500;
+
+// Strip sensitive fields before returning a user record to a mobile client.
+function sanitizeUser(u: any) {
+  if (!u) return u;
+  const { password_hash, ...safe } = u;
+  return safe;
+}
+
+function populateOrders(orders: any[]) {
+  return orders.map((order: any) => {
+    const items = db.prepare(`
+      SELECT oi.*, p.name, p.company, p.category
+      FROM order_items oi
+      JOIN products p ON oi.product_id = p.id
+      WHERE oi.order_id = ?
+    `).all(order.id);
+
+    const formattedItems = items.map((item: any) => ({
+      id: item.product_id,
+      name: item.name,
+      company: item.company,
+      category: item.category,
+      quantity: item.quantity,
+      price: item.price_at_time
+    }));
+
+    return { ...order, items: formattedItems };
+  });
+}
 
 async function sendPushNotification(expoPushToken: string, title: string, body: string) {
   if (!expoPushToken) return;
@@ -26,42 +58,37 @@ async function sendPushNotification(expoPushToken: string, title: string, body: 
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const users = db.prepare('SELECT id, phone, store_name, is_approved, role, credit_balance, credit_limit, address, zone, city, created_at FROM users').all() as any[];
     const products = db.prepare('SELECT * FROM products').all() as any[];
-    const orders = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all() as any[];
-    const schemes = db.prepare('SELECT * FROM schemes ORDER BY created_at DESC').all() as any[];
-    
-    // Join order items
-    const populatedOrders = orders.map((order: any) => {
-      const items = db.prepare(`
-        SELECT oi.*, p.name, p.company, p.category 
-        FROM order_items oi 
-        JOIN products p ON oi.product_id = p.id 
-        WHERE oi.order_id = ?
-      `).all(order.id);
-      
-      // format items to match frontend expectations
-      const formattedItems = items.map((item: any) => ({
-        id: item.product_id,
-        name: item.name,
-        company: item.company,
-        category: item.category,
-        quantity: item.quantity,
-        price: item.price_at_time
-      }));
 
-      return {
-        ...order,
-        items: formattedItems
-      };
-    });
+    // Admin (same-origin dashboard cookie) gets the full dataset.
+    const admin = await getAdmin();
+    if (admin) {
+      const users = db.prepare('SELECT id, phone, store_name, is_approved, role, credit_balance, credit_limit, address, zone, city, created_at FROM users').all() as any[];
+      const orders = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all() as any[];
+      const schemes = db.prepare('SELECT * FROM schemes ORDER BY created_at DESC').all() as any[];
+      return NextResponse.json({ users, products, orders: populateOrders(orders), schemes });
+    }
+
+    // Mobile client (session bearer token) gets ONLY its own user record and orders.
+    const user = getSessionUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const orders = db.prepare('SELECT * FROM orders WHERE user_phone = ? ORDER BY created_at DESC').all(user.phone) as any[];
+    const today = new Date().toISOString().split('T')[0];
+    const schemes = db.prepare(`
+      SELECT * FROM schemes
+      WHERE is_active = 1 AND start_date <= ? AND end_date >= ?
+      ORDER BY created_at DESC
+    `).all(today, today) as any[];
 
     return NextResponse.json({
-      users,
+      users: [sanitizeUser(user)],
       products,
-      orders: populatedOrders,
+      orders: populateOrders(orders),
       schemes
     });
   } catch (err) {
@@ -75,7 +102,35 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { collection, item, action } = body;
 
+    // Resolve the caller once. Admin = dashboard cookie; user = mobile bearer token.
+    const admin = await getAdmin();
+    const sessionUser = admin ? null : getSessionUser(request);
+
+    // Actions only the admin dashboard may perform.
+    const adminOnlyActions = ['update_status', 'raw_override', 'add_product', 'update_stock'];
+    if (adminOnlyActions.includes(action) && !admin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     if (collection === 'orders' && action === 'create') {
+      // A logged-in mobile client must own the order; never trust client-supplied identity.
+      if (!sessionUser) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      item.phone = sessionUser.phone;
+      item.store = sessionUser.store_name;
+
+      // Server-side minimum order enforcement (mirrors the mobile guard).
+      const subtotal = (item.items || []).reduce(
+        (sum: number, i: any) => sum + (i.price || 0) * (i.quantity || 0), 0
+      );
+      if (subtotal > 0 && subtotal < MIN_ORDER_VALUE) {
+        return NextResponse.json(
+          { error: `Minimum order value is ₹${MIN_ORDER_VALUE}.` },
+          { status: 400 }
+        );
+      }
+
       const insertOrder = db.prepare(`
         INSERT INTO orders (id, user_phone, store_name, status, total, date, scheme_code)
         VALUES (@id, @phone, @store, @status, @total, @date, @scheme_code)
@@ -175,13 +230,13 @@ export async function POST(request: Request) {
         let body = `Your order ${item.id} status is now: ${item.status}`;
         
         if (item.status === 'Shipped') {
-          title = 'Order Dispatched 🚚';
+          title = 'Order Dispatched';
           body = `Your order ${item.id} has been shipped via ${item.courier_name || 'Courier'}.`;
         } else if (item.status === 'Accepted') {
-          title = 'Order Accepted ✅';
+          title = 'Order Accepted';
           body = `Your order ${item.id} has been accepted and is being processed.`;
         } else if (item.status === 'Rejected') {
-          title = 'Order Rejected ❌';
+          title = 'Order Rejected';
           body = `Unfortunately, your order ${item.id} was rejected. Your credit has been refunded.`;
         }
 
@@ -227,8 +282,12 @@ export async function POST(request: Request) {
     }
 
     else if (action === 'update_address') {
-      const { phone, address } = body;
-      db.prepare('UPDATE users SET address = ? WHERE phone = ?').run(address, phone);
+      // A user may only update their own address; admin may update any.
+      const targetPhone = admin ? body.phone : sessionUser?.phone;
+      if (!targetPhone) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      db.prepare('UPDATE users SET address = ? WHERE phone = ?').run(body.address, targetPhone);
       return NextResponse.json({ success: true });
     }
 

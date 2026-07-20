@@ -16,7 +16,6 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.upkemlabs.b2b",
       "infoPlist": {
-        "NSCameraUsageDescription": "UPKEM LABS needs camera access for document scanning.",
         "UIBackgroundModes": ["remote-notification"]
       }
     },
@@ -34,16 +33,6 @@
       "eas": {
         "projectId": "7d5de68f-77b5-46b1-af48-127447bcb46c"
       }
-    },
-    "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "usesCleartextTraffic": true
-          }
-        }
-      ]
-    ]
+    }
   }
 }
