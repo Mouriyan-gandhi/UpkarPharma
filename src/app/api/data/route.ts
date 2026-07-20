@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getAdmin, getSessionUser } from '@/lib/auth';
+import { sendWhatsAppB2BNotification } from '@/lib/whatsapp';
 
 const MIN_ORDER_VALUE = 2500;
 
@@ -188,6 +189,16 @@ export async function POST(request: Request) {
 
       try {
         createOrderTransaction(item);
+        
+        // Trigger WhatsApp Notification for Order Placed
+        sendWhatsAppB2BNotification({
+          toPhone: item.phone,
+          type: 'ORDER_PLACED',
+          orderId: item.id,
+          storeName: item.store,
+          amount: item.total
+        }).catch(err => console.error('WhatsApp Notification error:', err));
+
         return NextResponse.json({ success: true });
       } catch (e: any) {
         return NextResponse.json({ error: e.message || 'Failed to create order.' }, { status: 400 });
@@ -223,6 +234,19 @@ export async function POST(request: Request) {
       });
 
       updateStatusTransaction();
+
+      // Trigger WhatsApp Notification for Shipped status
+      if (item.status === 'Shipped') {
+        sendWhatsAppB2BNotification({
+          toPhone: getOrder.user_phone,
+          type: 'ORDER_SHIPPED',
+          orderId: item.id,
+          storeName: getOrder.store_name,
+          amount: getOrder.total,
+          courierName: item.courier_name,
+          trackingId: item.tracking_id
+        }).catch(err => console.error('WhatsApp Notification error:', err));
+      }
 
       // Send Push Notification
       if (user && user.expo_push_token) {
