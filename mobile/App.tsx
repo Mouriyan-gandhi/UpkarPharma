@@ -39,7 +39,11 @@ const DEFAULT_IP = '192.168.1.100';
 // Guard for string only — the public manifest may serialize an unset value as {}.
 const _rawApiBase = Constants.expoConfig?.extra?.apiBaseUrl;
 const API_BASE_URL: string | null =
-  typeof _rawApiBase === 'string' && _rawApiBase.length > 0 ? _rawApiBase : null;
+  typeof _rawApiBase === 'string' && _rawApiBase.length > 0
+    ? _rawApiBase
+    : Platform.OS === 'web'
+    ? 'http://localhost:3000'
+    : null;
 const MIN_ORDER_VALUE = 2500;
 
 // UPKEM / UPKAR PHARMA company details for invoice
@@ -2192,7 +2196,7 @@ function OrderHistoryScreen({ setCurrentScreen, onSelectOrder }) {
       </View>
 
       {/* Filter pills */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12, gap: 8, alignItems: 'flex-start' }}>
         {filters.map(f => (
           <TouchableOpacity
             key={f}
@@ -2201,6 +2205,7 @@ function OrderHistoryScreen({ setCurrentScreen, onSelectOrder }) {
               paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
               backgroundColor: activeFilter === f ? BRAND[800] : '#fff',
               borderWidth: 1, borderColor: activeFilter === f ? BRAND[800] : '#e2e8f0',
+              alignSelf: 'flex-start',
             }}
           >
             <Text style={{ fontSize: 13, fontWeight: '700', color: activeFilter === f ? '#fff' : '#475569' }}>{f}</Text>

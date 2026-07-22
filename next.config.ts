@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
         headers: [
           { key: "Access-Control-Allow-Origin", value: "*" },
           { key: "Access-Control-Allow-Methods", value: "GET,DELETE,PATCH,POST,PUT,OPTIONS" },
-          { key: "Access-Control-Allow-Headers", value: "Accept, Content-Type" },
+          { key: "Access-Control-Allow-Headers", value: "Accept, Content-Type, Authorization, x-session-id" },
         ]
       }
     ]
