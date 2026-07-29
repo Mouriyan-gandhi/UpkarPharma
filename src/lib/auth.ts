@@ -1,13 +1,15 @@
 import { cookies } from 'next/headers';
 import * as jose from 'jose';
+import { randomUUID } from 'crypto';
 import db from './db';
 
-// Centralized JWT secret. In production this MUST come from the environment.
 const rawSecret = process.env.JWT_SECRET;
-if (!rawSecret && process.env.NODE_ENV === 'production') {
-  throw new Error('JWT_SECRET environment variable is required in production.');
+if (!rawSecret) {
+  if (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE !== 'phase-production-build') {
+    throw new Error('JWT_SECRET environment variable is required.');
+  }
+  console.warn('[auth] JWT_SECRET not set — using insecure dev fallback. Set it before deploying.');
 }
-// Dev-only fallback. Keep this string identical to the one in middleware.ts.
 export const JWT_SECRET = new TextEncoder().encode(
   rawSecret || 'upkem-dev-only-secret-change-me'
 );
@@ -16,12 +18,13 @@ export interface AdminPayload {
   phone: string;
   role: string;
   store_name?: string;
+  session_id?: string;
 }
 
 /**
- * Verify the admin dashboard session (httpOnly `admin_session` JWT cookie).
- * Returns the payload only for users with the `admin` role, else null.
- * Used by same-origin requests from the Next.js admin dashboard.
+ * Verify the admin dashboard session cookie.
+ * Validates the JWT AND confirms the session still exists in admin_sessions
+ * (allows per-session revocation across concurrent admin logins).
  */
 export async function getAdmin(): Promise<AdminPayload | null> {
   try {
@@ -30,16 +33,47 @@ export async function getAdmin(): Promise<AdminPayload | null> {
     if (!token) return null;
     const { payload } = await jose.jwtVerify(token, JWT_SECRET);
     if (payload.role !== 'admin') return null;
+
+    const sessionId = payload.session_id as string | undefined;
+    if (!sessionId) return null;
+
+    const session = db
+      .prepare('SELECT id FROM admin_sessions WHERE id = ?')
+      .get(sessionId) as { id: string } | undefined;
+    if (!session) return null;
+
+    db.prepare('UPDATE admin_sessions SET last_active = CURRENT_TIMESTAMP WHERE id = ?').run(sessionId);
+
     return payload as unknown as AdminPayload;
   } catch {
     return null;
   }
 }
 
+/** Create a new admin session row. Returns the new session ID. */
+export function createAdminSession(phone: string, userAgent: string, ip: string): string {
+  const sessionId = randomUUID();
+  db.prepare(
+    'INSERT INTO admin_sessions (id, phone, user_agent, ip) VALUES (?, ?, ?, ?)'
+  ).run(sessionId, phone, userAgent, ip);
+  return sessionId;
+}
+
+/** Delete a specific admin session (logout or revoke). */
+export function deleteAdminSession(sessionId: string): void {
+  db.prepare('DELETE FROM admin_sessions WHERE id = ?').run(sessionId);
+}
+
+/** List all active admin sessions. */
+export function listAdminSessions(): any[] {
+  return db
+    .prepare('SELECT id, phone, user_agent, ip, created_at, last_active FROM admin_sessions ORDER BY last_active DESC')
+    .all() as any[];
+}
+
 /**
- * Verify a mobile client session. The mobile app sends the `session_id`
- * (issued by /api/auth/verify and stored in the `sessions` table) as a
- * Bearer token. Returns the approved user row, or null.
+ * Verify a mobile client session bearer token.
+ * Returns the approved user row, or null.
  */
 export function getSessionUser(request: Request): any | null {
   const authHeader = request.headers.get('authorization') || '';
@@ -60,7 +94,6 @@ export function getSessionUser(request: Request): any | null {
     .get(session.user_phone) as any;
   if (!user || !user.is_approved) return null;
 
-  // Touch the session so the oldest-session eviction logic stays meaningful.
   db.prepare('UPDATE sessions SET last_active = CURRENT_TIMESTAMP WHERE id = ?').run(sessionId);
 
   return user;

@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { enableScreens } from 'react-native-screens';
 enableScreens(false);
-import { 
-  StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, 
+import {
+  StyleSheet, Text, View, TextInput, TouchableOpacity, Alert,
   FlatList, Image, Modal, KeyboardAvoidingView, Platform, ScrollView,
   LayoutAnimation, UIManager, Animated, Easing, Keyboard, StatusBar,
   Dimensions, RefreshControl, ActivityIndicator
@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import auth from '@react-native-firebase/auth';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -113,6 +114,68 @@ const AnimatedPressable = ({ onPress, style, children, disabled }) => {
   );
 };
 
+// ── Toast System ──────────────────────────────────────────────────────────────
+let _showToast: ((msg: string, type?: 'success' | 'error' | 'info') => void) | null = null;
+
+function ToastProvider({ children }) {
+  const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const timerRef = useRef<any>(null);
+
+  const show = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setToast({ msg, type });
+    Animated.sequence([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.delay(2200),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setToast(null));
+    timerRef.current = setTimeout(() => setToast(null), 2800);
+  };
+
+  _showToast = show;
+
+  const bg = toast?.type === 'error' ? '#dc2626' : toast?.type === 'info' ? '#2563eb' : '#059669';
+
+  return (
+    <View style={{ flex: 1 }}>
+      {children}
+      {toast && (
+        <Animated.View style={{ position: 'absolute', top: 56, left: 16, right: 16, zIndex: 999, opacity: fadeAnim }}>
+          <View style={{ backgroundColor: bg, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', ...SHADOWS.lg }}>
+            <Ionicons name={toast.type === 'error' ? 'alert-circle' : toast.type === 'info' ? 'information-circle' : 'checkmark-circle'} size={20} color="#fff" style={{ marginRight: 10 }} />
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14, flex: 1 }}>{toast.msg}</Text>
+          </View>
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
+export const showToast = (msg: string, type?: 'success' | 'error' | 'info') => _showToast?.(msg, type);
+
+// ── Skeleton Loader ────────────────────────────────────────────────────────────
+function SkeletonCard({ height = 80, style = {} }) {
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  const opacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0.8] });
+
+  return (
+    <Animated.View style={[{ height, borderRadius: 16, backgroundColor: '#e2e8f0', marginBottom: 12, opacity }, style]} />
+  );
+}
+
 // Product image mapping by category
 const CATEGORY_IMAGES: Record<string, string> = {
   'Analgesics':       'https://images.unsplash.com/photo-1550572017-edd951b55104?w=300&h=300&fit=crop',
@@ -181,7 +244,7 @@ const generateInvoiceHTML = (order: any, user: any) => {
       <td style="text-align:right;">₹${(item.mrp || Math.round((item.price_ptr || item.price) * 1.2)).toFixed(2)}</td>
       <td style="text-align:right;">₹${(item.price_ptr || item.price).toFixed(2)}</td>
       <td style="text-align:center;">${item.discount || 0}%</td>
-      <td style="text-align:center;">5%</td>
+      <td style="text-align:center;">12%</td>
       <td style="text-align:right;">₹${((item.price || 0) * (item.quantity || 0)).toFixed(2)}</td>
     </tr>
   `).join('');
@@ -304,10 +367,10 @@ const generateInvoiceHTML = (order: any, user: any) => {
         <div class="gst-table">
           <table>
             <tr><th>Sales</th><th>GST-0%</th><th>GST-5%</th><th>GST-12%</th><th>GST-18%</th><th>GST-28%</th></tr>
-            <tr><td><strong>GST/IGST</strong></td><td></td><td>₹${taxableValue.toFixed(2)}</td><td></td><td></td><td></td></tr>
-            <tr><td><strong>GST TAX</strong></td><td></td><td>₹${gstAmount.toFixed(2)}</td><td></td><td></td><td></td></tr>
-            <tr><td><strong>CGST</strong></td><td></td><td>2.5% ₹${cgst.toFixed(2)}</td><td>6%</td><td>9%</td><td>14% 0.00</td></tr>
-            <tr><td><strong>SGST</strong></td><td></td><td>2.5% ₹${sgst.toFixed(2)}</td><td>6%</td><td>9%</td><td>14% 0.00</td></tr>
+            <tr><td><strong>GST/IGST</strong></td><td></td><td></td><td>₹${taxableValue.toFixed(2)}</td><td></td><td></td></tr>
+            <tr><td><strong>GST TAX</strong></td><td></td><td></td><td>₹${gstAmount.toFixed(2)}</td><td></td><td></td></tr>
+            <tr><td><strong>CGST</strong></td><td></td><td></td><td>6% ₹${cgst.toFixed(2)}</td><td>9%</td><td>14% 0.00</td></tr>
+            <tr><td><strong>SGST</strong></td><td></td><td></td><td>6% ₹${sgst.toFixed(2)}</td><td>9%</td><td>14% 0.00</td></tr>
           </table>
         </div>
         <div class="amount-summary">
@@ -380,7 +443,11 @@ const useStore = create((set, get) => ({
   setUsersList: (usersList) => set({ usersList }),
   addToCart: (productId) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    set((state) => ({ cart: { ...state.cart, [productId]: (state.cart[productId] || 0) + 1 } }));
+    set((state) => {
+      const prev = state.cart[productId] || 0;
+      if (prev === 0) showToast('Added to cart');
+      return { cart: { ...state.cart, [productId]: prev + 1 } };
+    });
   },
   removeFromCart: (productId) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -725,11 +792,12 @@ function SignupScreen({ setCurrentScreen }) {
 // --- Login Screen (Premium Animated) ---
 function LoginScreen({ setCurrentScreen }) {
   const [phone, setPhone] = useState('');
-  const [otpDigits, setOtpDigits] = useState(['', '', '', '']);
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [otpSent, setOtpSent] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [tempIp, setTempIp] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [confirmation, setConfirmation] = useState(null);
 
   // Animation values
   const logoScale = useRef(new Animated.Value(0)).current;
@@ -740,7 +808,7 @@ function LoginScreen({ setCurrentScreen }) {
   const cardTranslateY = useRef(new Animated.Value(100)).current;
   const cardOpacity = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const otpBoxAnims = useRef([0,1,2,3].map(() => new Animated.Value(0))).current;
+  const otpBoxAnims = useRef([0,1,2,3,4,5].map(() => new Animated.Value(0))).current;
   const otpInputRefs = useRef([]);
 
   const setUser = useStore((state) => state.setUser);
@@ -784,7 +852,7 @@ function LoginScreen({ setCurrentScreen }) {
   useEffect(() => {
     if (otpSent) {
       otpBoxAnims.forEach((anim, idx) => {
-        Animated.spring(anim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 8, delay: idx * 100 }).start();
+        Animated.spring(anim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 8, delay: idx * 60 }).start();
       });
     }
   }, [otpSent]);
@@ -793,12 +861,10 @@ function LoginScreen({ setCurrentScreen }) {
     const newDigits = [...otpDigits];
     newDigits[index] = text;
     setOtpDigits(newDigits);
-    // Auto-focus next
-    if (text && index < 3) {
+    if (text && index < 5) {
       otpInputRefs.current[index + 1]?.focus();
     }
-    // Auto-submit on last digit
-    if (text && index === 3) {
+    if (text && index === 5) {
       Keyboard.dismiss();
     }
   };
@@ -811,58 +877,63 @@ function LoginScreen({ setCurrentScreen }) {
 
   const requestOtp = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    if(phone.length < 10) return Alert.alert('Invalid', 'Enter valid 10-digit phone');
+    if (phone.length < 10) return Alert.alert('Invalid', 'Enter a valid 10-digit phone number');
     setIsLoading(true);
     try {
-      const res = await fetch(getOtpUrl(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
-      });
-      const data = await res.json();
-      if(data.success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setOtpSent(true);
-      }
-      else Alert.alert('Error', data.error || 'Failed to send OTP');
-    } catch(e) { Alert.alert('Error', 'Network connection failed.'); }
+      const result = await auth().signInWithPhoneNumber('+91' + phone);
+      setConfirmation(result);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setOtpSent(true);
+    } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', e?.message || 'Failed to send OTP. Check your number and try again.');
+    }
     setIsLoading(false);
   };
 
   const verifyOtp = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     const otp = otpDigits.join('');
-    if (otp.length < 4) return Alert.alert('Error', 'Enter all 4 digits');
+    if (otp.length < 6) return Alert.alert('Error', 'Enter all 6 digits');
+    if (!confirmation) return Alert.alert('Error', 'Please request OTP first');
     setIsLoading(true);
     try {
+      const credential = await confirmation.confirm(otp);
+      const idToken = await credential.user.getIdToken();
+
       const res = await fetch(getVerifyUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp, device_info: Platform.OS })
+        body: JSON.stringify({ idToken, device_info: Platform.OS }),
       });
       const data = await res.json();
-      if(data.success) {
+
+      if (data.success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         useStore.getState().setSessionId(data.session_id);
         setUser(data.user);
+        await AsyncStorage.setItem('@upkem_session_id', data.session_id);
+        await AsyncStorage.setItem('@upkem_user', JSON.stringify(data.user));
         setCurrentScreen('Home');
-        // Register push token in the background after login — non-blocking.
         registerForPushNotificationsAsync().then((pushToken) => {
           if (!pushToken) return;
           fetch(useStore.getState().getTokenUrl(), {
             method: 'POST',
             headers: useStore.getState().authHeaders(),
             body: JSON.stringify({ token: pushToken }),
-          }).catch(() => {/* non-critical */});
+          }).catch(() => {});
         });
       } else if (data.pending) {
         setUser(data.user);
         setCurrentScreen('PendingApproval');
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        Alert.alert('Access Denied', data.error || 'Invalid OTP');
+        Alert.alert('Access Denied', data.error || 'Verification failed');
       }
-    } catch(e) { Alert.alert('Error', 'Network connection failed.'); }
+    } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Invalid Code', 'The OTP you entered is incorrect or has expired.');
+    }
     setIsLoading(false);
   };
 
@@ -883,7 +954,7 @@ function LoginScreen({ setCurrentScreen }) {
         <Animated.View style={[styles.loginCard, { transform: [{ translateY: cardTranslateY }], opacity: cardOpacity }]}>
           <View style={styles.dragHandle} />
           <Text style={styles.loginTitle}>{otpSent ? 'Verify your\nidentity.' : 'Sign in to your\ndistributor account.'}</Text>
-          <Text style={styles.loginSubtitle}>{otpSent ? `4-digit code sent to +91 ${phone}` : 'Enter the phone number registered with Upkem.\nWe\'ll send a secure OTP.'}</Text>
+          <Text style={styles.loginSubtitle}>{otpSent ? `6-digit code sent to +91 ${phone}` : 'Enter the phone number registered with Upkem.\nWe\'ll send a secure OTP via SMS.'}</Text>
           
           {otpSent && (
             <TouchableOpacity onPress={() => { setOtpSent(false); setOtpDigits(['','','','']); }} style={{ marginTop: -16, marginBottom: 20 }}>
@@ -908,8 +979,8 @@ function LoginScreen({ setCurrentScreen }) {
           ) : (
             <>
               {/* Individual OTP Boxes */}
-              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 14, marginBottom: 32 }}>
-                {[0,1,2,3].map((idx) => (
+              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 32 }}>
+                {[0,1,2,3,4,5].map((idx) => (
                   <Animated.View key={idx} style={{ 
                     transform: [{ scale: otpBoxAnims[idx].interpolate({ inputRange: [0,1], outputRange: [0.5, 1] }) }],
                     opacity: otpBoxAnims[idx],
@@ -917,8 +988,8 @@ function LoginScreen({ setCurrentScreen }) {
                     <TextInput
                       ref={ref => otpInputRefs.current[idx] = ref}
                       style={{
-                        width: 60, height: 68, borderRadius: 20, textAlign: 'center',
-                        fontSize: 28, fontWeight: '900', color: '#1A1A1A',
+                        width: 48, height: 58, borderRadius: 16, textAlign: 'center',
+                        fontSize: 24, fontWeight: '900', color: '#1A1A1A',
                         backgroundColor: otpDigits[idx] ? BRAND[50] : '#f8fafc',
                         borderWidth: 2.5,
                         borderColor: otpDigits[idx] ? BRAND[800] : '#e2e8f0',
@@ -1038,9 +1109,17 @@ function HomeScreen({ setCurrentScreen, onCategorySelect, onRefresh }) {
   const schemes = useStore((s) => s.schemes)?.filter(s => s.is_active);
   const featured = products.slice(0, 8);
   const lastOrder = orders.length > 0 ? orders[0] : null;
-  const availableCredit = user ? (user.credit_limit - user.credit_balance) : 0;
+  const availableCredit = user ? Math.max(0, (user.credit_limit || 0) - (user.credit_balance || 0)) : 0;
   const [refreshing, setRefreshing] = useState(false);
-  const creditUtilization = user ? ((user.credit_balance || 0) / (user.credit_limit || 1)) * 100 : 0;
+  const creditUtilization = user ? ((user.credit_balance || 0) / Math.max(user.credit_limit || 1, 1)) * 100 : 0;
+
+  // This Month: only count orders whose date matches current month/year
+  const currentMonth = new Date().toISOString().slice(0, 7); // "2024-01"
+  const thisMonthOrders = orders.filter(o => {
+    const d = o.created_at || o.date || '';
+    return d.startsWith(currentMonth) || d.slice(3, 10) === currentMonth.slice(5) + '/' + currentMonth.slice(0, 4);
+  });
+  const thisMonthTotal = thisMonthOrders.reduce((a, o) => a + (o.total || 0), 0);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -1098,13 +1177,13 @@ function HomeScreen({ setCurrentScreen, onCategorySelect, onRefresh }) {
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>THIS MONTH</Text>
-            <Text style={styles.statValue}>₹{orders.reduce((a, o) => a + (o.total || 0), 0).toLocaleString('en-IN', {notation: 'compact', compactDisplay: 'short'})}</Text>
-            <Text style={styles.statSub}>{orders.length} orders</Text>
+            <Text style={styles.statValue}>₹{thisMonthTotal.toLocaleString('en-IN', {notation: 'compact', compactDisplay: 'short'})}</Text>
+            <Text style={styles.statSub}>{thisMonthOrders.length} orders</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statLabel}>CREDIT</Text>
+            <Text style={styles.statLabel}>CREDIT LEFT</Text>
             <Text style={styles.statValue}>₹{availableCredit.toLocaleString('en-IN', {notation: 'compact', compactDisplay: 'short'})}</Text>
-            <Text style={styles.statSub}>Available</Text>
+            <Text style={styles.statSub}>of ₹{(user?.credit_limit || 0).toLocaleString('en-IN', {notation: 'compact', compactDisplay: 'short'})}</Text>
           </View>
         </View>
 
@@ -1385,11 +1464,25 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={{ fontSize: 32, marginBottom: 8 }}></Text>
-            <Ionicons name="cube-outline" size={40} color="#94a3b8" style={{marginBottom: 8}} />
-            <Text style={styles.emptyText}>No products found.</Text>
-          </View>
+          productsList.length === 0 ? (
+            <View style={{ paddingTop: 8 }}>
+              {[1,2,3,4,5].map(i => (
+                <View key={i} style={{ flexDirection: 'row', backgroundColor: '#fff', borderRadius: 24, marginBottom: 16, padding: 20, borderWidth: 1, borderColor: '#f1f5f9' }}>
+                  <SkeletonCard height={72} style={{ width: 72, borderRadius: 16, marginRight: 14, marginBottom: 0 }} />
+                  <View style={{ flex: 1 }}>
+                    <SkeletonCard height={18} style={{ width: '70%', marginBottom: 8 }} />
+                    <SkeletonCard height={12} style={{ width: '50%', marginBottom: 8 }} />
+                    <SkeletonCard height={20} style={{ width: '40%', marginBottom: 0 }} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="cube-outline" size={40} color="#94a3b8" style={{marginBottom: 8}} />
+              <Text style={styles.emptyText}>No products found.</Text>
+            </View>
+          )
         }
       />
 
@@ -2176,7 +2269,7 @@ function OrderHistoryScreen({ setCurrentScreen, onSelectOrder }) {
 
   const filteredOrders = orders.filter(o => {
     if (activeFilter === 'All') return true;
-    if (activeFilter === 'Active') return ['Placed', 'Processing', 'Shipped'].includes(o.status);
+    if (activeFilter === 'Active') return ['Placed', 'Accepted', 'Processing', 'Shipped'].includes(o.status);
     if (activeFilter === 'Completed') return ['Completed', 'Delivered'].includes(o.status);
     if (activeFilter === 'Cancelled') return ['Rejected', 'Cancelled'].includes(o.status);
     return true;
@@ -2263,7 +2356,8 @@ function ProfileScreen({ setCurrentScreen }) {
     Haptics.selectionAsync();
     Alert.alert("Confirm Logout", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Logout", style: "destructive", onPress: () => {
+      { text: "Logout", style: "destructive", onPress: async () => {
+        await AsyncStorage.multiRemove(['@upkem_session_id', '@upkem_user', '@upkem_cached_db']);
         setUser(null);
         clearCart();
         useStore.getState().clearCoupon();
@@ -2293,6 +2387,7 @@ function ProfileScreen({ setCurrentScreen }) {
                 headers: useStore.getState().authHeaders(),
               });
               if (res.ok) {
+                await AsyncStorage.multiRemove(['@upkem_session_id', '@upkem_user', '@upkem_cached_db']);
                 setUser(null);
                 clearCart();
                 useStore.getState().clearCoupon();
@@ -2557,11 +2652,30 @@ function ProfileScreen({ setCurrentScreen }) {
 
 // --- App Root ---
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('Login');
+  const [currentScreen, setCurrentScreen] = useState('Loading');
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [catalogInitialCategory, setCatalogInitialCategory] = useState('All');
   const [selectedOrder, setSelectedOrder] = useState(null);
-  
+
+  // Restore session from AsyncStorage on cold start
+  useEffect(() => {
+    (async () => {
+      try {
+        const sessionId = await AsyncStorage.getItem('@upkem_session_id');
+        const userStr = await AsyncStorage.getItem('@upkem_user');
+        if (sessionId && userStr) {
+          useStore.getState().setSessionId(sessionId);
+          useStore.getState().setUser(JSON.parse(userStr));
+          setCurrentScreen('Home');
+        } else {
+          setCurrentScreen('Login');
+        }
+      } catch {
+        setCurrentScreen('Login');
+      }
+    })();
+  }, []);
+
   const fetchAPI = async () => {
     // The data feed is private; skip polling until the user has a session.
     if (!useStore.getState().sessionId) return;
@@ -2586,6 +2700,7 @@ export default function App() {
         const liveUser = db.users.find(u => u.phone === currUser.phone);
         if (liveUser && JSON.stringify(liveUser) !== JSON.stringify(currUser)) {
           useStore.getState().setUser(liveUser);
+          AsyncStorage.setItem('@upkem_user', JSON.stringify(liveUser)).catch(() => {});
         }
         // Also update selectedOrder with live data if tracking
         if (selectedOrder) {
@@ -2616,6 +2731,13 @@ export default function App() {
   }, []);
 
   const renderScreen = () => {
+    if (currentScreen === 'Loading') return (
+      <View style={{ flex: 1, backgroundColor: '#0B2618', justifyContent: 'center', alignItems: 'center' }}>
+        <StatusBar barStyle="light-content" />
+        <Image source={require('./assets/pharma_logo.jpeg')} style={{ width: 80, height: 80, borderRadius: 20, marginBottom: 24 }} resizeMode="contain" />
+        <ActivityIndicator color="#52B788" size="large" />
+      </View>
+    );
     if (currentScreen === 'Login') return <LoginScreen setCurrentScreen={setCurrentScreen} />;
     if (currentScreen === 'Signup') return <SignupScreen setCurrentScreen={setCurrentScreen} />;
     if (currentScreen === 'PendingApproval') return <PendingApprovalScreen setCurrentScreen={setCurrentScreen} />;
@@ -2672,7 +2794,7 @@ export default function App() {
     );
   };
 
-  return <View style={{ flex: 1 }}>{renderScreen()}</View>;
+  return <ToastProvider><View style={{ flex: 1 }}>{renderScreen()}</View></ToastProvider>;
 }
 
 // --- High-End Styles ---

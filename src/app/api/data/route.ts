@@ -121,16 +121,63 @@ export async function POST(request: Request) {
       item.phone = sessionUser.phone;
       item.store = sessionUser.store_name;
 
-      // Server-side minimum order enforcement (mirrors the mobile guard).
-      const subtotal = (item.items || []).reduce(
-        (sum: number, i: any) => sum + (i.price || 0) * (i.quantity || 0), 0
-      );
+      // Server-side total recomputation — never trust client-supplied total/prices.
+      const orderItems: any[] = item.items || [];
+      if (orderItems.length === 0) {
+        return NextResponse.json({ error: 'Order must contain at least one item.' }, { status: 400 });
+      }
+
+      let subtotal = 0;
+      const pricedItems: any[] = [];
+      for (const i of orderItems) {
+        const product = db.prepare('SELECT id, price, price_ptr FROM products WHERE id = ?').get(i.id) as any;
+        if (!product) continue;
+        const unitPrice = product.price_ptr || product.price || 0;
+        const lineTotal = unitPrice * (i.quantity || 0);
+        subtotal += lineTotal;
+        pricedItems.push({ ...i, price: unitPrice });
+      }
+      item.items = pricedItems;
+
       if (subtotal > 0 && subtotal < MIN_ORDER_VALUE) {
         return NextResponse.json(
           { error: `Minimum order value is ₹${MIN_ORDER_VALUE}.` },
           { status: 400 }
         );
       }
+
+      // Server-side scheme discount calculation
+      let discountAmount = 0;
+      if (item.scheme_code) {
+        const today = new Date().toISOString().split('T')[0];
+        const scheme = db.prepare(
+          'SELECT * FROM schemes WHERE code = ? AND is_active = 1 AND start_date <= ? AND end_date >= ?'
+        ).get(item.scheme_code, today, today) as any;
+        if (scheme) {
+          if (scheme.min_order_value > 0 && subtotal < scheme.min_order_value) {
+            item.scheme_code = null; // silently drop invalid scheme
+          } else {
+            if (scheme.scheme_type === 'Discount' && scheme.discount_percent) {
+              discountAmount = (subtotal * scheme.discount_percent) / 100;
+              if (scheme.max_discount) discountAmount = Math.min(discountAmount, scheme.max_discount);
+            } else if (scheme.scheme_type === 'Flat' && scheme.flat_discount) {
+              discountAmount = Math.min(scheme.flat_discount, subtotal);
+            }
+          }
+        } else {
+          item.scheme_code = null;
+        }
+      }
+
+      const taxable = subtotal - discountAmount;
+      const gst = Math.round(taxable * 0.12 * 100) / 100;
+      const computedTotal = Math.round((taxable + gst) * 100) / 100;
+
+      // Overwrite client-supplied financials with server-computed values
+      item.total = computedTotal;
+      item.subtotal = subtotal;
+      item.discount_value = discountAmount;
+      item.gst = gst;
 
       const insertOrder = db.prepare(`
         INSERT INTO orders (id, user_phone, store_name, status, total, date, scheme_code)
@@ -217,16 +264,27 @@ export async function POST(request: Request) {
       
       const getItems = db.prepare('SELECT product_id, quantity FROM order_items WHERE order_id = ?').all(item.id) as any[];
 
+      const restoreStock = db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?');
+      const ACCEPTED_STATUSES = ['Accepted', 'Processing', 'Shipped'];
+
       const updateStatusTransaction = db.transaction(() => {
-        // Stock reduction when accepted
+        // Deduct stock when order moves from Placed → Accepted
         if (item.status === 'Accepted' && getOrder.status === 'Placed') {
           for (const i of getItems) {
             deductStock.run(i.quantity, i.product_id);
           }
         }
-        
-        // Credit refund when rejected
+
+        // Rejecting a Placed order: refund credit only (stock was never deducted)
         if (item.status === 'Rejected' && getOrder.status === 'Placed') {
+          refundCredit.run(getOrder.total, getOrder.user_phone, getOrder.store_name);
+        }
+
+        // Rejecting an already-accepted/processing/shipped order: restore stock + refund credit
+        if (item.status === 'Rejected' && ACCEPTED_STATUSES.includes(getOrder.status)) {
+          for (const i of getItems) {
+            restoreStock.run(i.quantity, i.product_id);
+          }
           refundCredit.run(getOrder.total, getOrder.user_phone, getOrder.store_name);
         }
 
@@ -306,12 +364,44 @@ export async function POST(request: Request) {
     }
 
     else if (action === 'update_address') {
-      // A user may only update their own address; admin may update any.
       const targetPhone = admin ? body.phone : sessionUser?.phone;
-      if (!targetPhone) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
+      if (!targetPhone) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       db.prepare('UPDATE users SET address = ? WHERE phone = ?').run(body.address, targetPhone);
+      return NextResponse.json({ success: true });
+    }
+
+    else if (action === 'update_credit' && admin) {
+      const { phone, credit_limit, credit_balance } = body;
+      if (!phone) return NextResponse.json({ error: 'Phone required' }, { status: 400 });
+      db.prepare('UPDATE users SET credit_limit = COALESCE(?, credit_limit), credit_balance = COALESCE(?, credit_balance) WHERE phone = ?')
+        .run(credit_limit ?? null, credit_balance ?? null, phone);
+      return NextResponse.json({ success: true });
+    }
+
+    else if (action === 'update_product' && admin) {
+      const { id, name, company, category, packing, price, price_ptr, mrp, stock, description, composition } = item;
+      if (!id) return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
+      db.prepare(`
+        UPDATE products SET
+          name = COALESCE(?, name),
+          company = COALESCE(?, company),
+          category = COALESCE(?, category),
+          packing = COALESCE(?, packing),
+          price = COALESCE(?, price),
+          price_ptr = COALESCE(?, price_ptr),
+          mrp = COALESCE(?, mrp),
+          stock = COALESCE(?, stock),
+          description = COALESCE(?, description),
+          composition = COALESCE(?, composition)
+        WHERE id = ?
+      `).run(name, company, category, packing, price, price_ptr, mrp, stock, description, composition, id);
+      return NextResponse.json({ success: true });
+    }
+
+    else if (action === 'delete_product' && admin) {
+      const { id } = body;
+      if (!id) return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
+      db.prepare('DELETE FROM products WHERE id = ?').run(id);
       return NextResponse.json({ success: true });
     }
 

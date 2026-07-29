@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 
-// Path to the SQLite database file
-const dbPath = path.resolve(process.cwd(), 'database.sqlite');
+// DATABASE_PATH lets Railway/Render mount the DB on a persistent volume.
+// Falls back to project root for local dev.
+const dbPath = process.env.DATABASE_PATH || path.resolve(process.cwd(), 'database.sqlite');
 
 // Initialize the database connection.
 // Verbose query logging in development only — keeps production logs clean and
@@ -116,6 +117,24 @@ export function initDB() {
       per_user_limit INTEGER DEFAULT 1,
       times_used INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS otp_store (
+      phone TEXT PRIMARY KEY,
+      otp TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      attempts INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL,
+      user_agent TEXT,
+      ip TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(phone) REFERENCES users(phone)
     );
   `);
 

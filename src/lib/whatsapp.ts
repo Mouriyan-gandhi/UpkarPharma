@@ -31,11 +31,11 @@ export async function sendWhatsAppB2BNotification(payload: WhatsAppNotification)
       break;
 
     case 'ORDER_ACCEPTED':
-      messageText = `*ORDER ACCEPTED & PROCESSING*\n\nOrder *#${orderId}* for ${storeName} has been accepted and is being packed.\nView live status: http://localhost:3000`;
+      messageText = `*ORDER ACCEPTED & PROCESSING*\n\nOrder *#${orderId}* for ${storeName} has been accepted and is being packed.\nTrack your order in the UPKEM app.`;
       break;
 
     case 'ORDER_SHIPPED':
-      messageText = `*ORDER DISPATCHED*\n\nOrder *#${orderId}* is on its way!\nCourier: *${courierName || 'Upkar Express'}*\nTracking AWB: *${trackingId || 'N/A'}*\n\n📄 Download Official GST Invoice:\nhttp://localhost:3000/api/invoice?id=${orderId}`;
+      messageText = `*ORDER DISPATCHED*\n\nOrder *#${orderId}* is on its way!\nCourier: *${courierName || 'Upkar Express'}*\nTracking AWB: *${trackingId || 'N/A'}*\n\nOpen the UPKEM app to download your GST invoice.`;
       break;
 
     case 'CREDIT_REMINDER_55':

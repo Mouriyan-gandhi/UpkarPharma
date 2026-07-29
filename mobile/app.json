@@ -4,27 +4,44 @@
     "slug": "upkem-labs-b2b",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/pharma_logo.jpeg",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/pharma_logo.jpeg",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#0B2618"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.upkemlabs.b2b",
+      "buildNumber": "1",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
-      }
+        "UIBackgroundModes": ["remote-notification", "fetch"],
+        "NSCameraUsageDescription": "Used to scan barcodes for quick product search.",
+        "NSPhotoLibraryUsageDescription": "Used to upload store documents during registration.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "aps-environment": "production"
+      },
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "package": "com.upkemlabs.b2b",
+      "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/pharma_logo.jpeg",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B2618"
-      }
+      },
+      "permissions": [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.INTERNET",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "runtimeVersion": {
       "policy": "appVersion"

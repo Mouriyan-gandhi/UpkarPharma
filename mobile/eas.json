@@ -15,10 +15,23 @@
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "APP_ENV": "production"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal"
+      },
+      "ios": {
+        "appleTeamId": "YOUR_APPLE_TEAM_ID",
+        "ascAppId": "YOUR_APP_STORE_CONNECT_APP_ID",
+        "appleId": "caanushgandhi777@gmail.com"
+      }
+    }
   }
 }

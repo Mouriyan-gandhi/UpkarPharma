@@ -2,44 +2,46 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import * as jose from 'jose';
 
-// Edge middleware cannot import the Node-only auth lib (better-sqlite3), so the
-// secret is read here directly. The dev fallback MUST stay identical to the one
-// in src/lib/auth.ts or admin_session cookies won't verify when JWT_SECRET is unset.
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'upkem-dev-only-secret-change-me');
+// Edge middleware cannot import Node-only modules (better-sqlite3). JWT verification
+// is sufficient here for redirect-protection; the per-request DB session validation
+// happens inside getAdmin() on each API/page server call.
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'upkem-dev-only-secret-change-me'
+);
+
+async function isValidAdminToken(token: string): Promise<boolean> {
+  try {
+    await jose.jwtVerify(token, JWT_SECRET);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
   const token = request.cookies.get('admin_session')?.value;
 
-  if (request.nextUrl.pathname === '/') {
-    if (!token) {
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
+  // Protect both root and /admin (and all sub-paths under /admin)
+  const isProtected = pathname === '/' || pathname.startsWith('/admin');
+  const isLoginPage = pathname === '/login';
 
-    try {
-      await jose.jwtVerify(token, JWT_SECRET);
-      return NextResponse.next();
-    } catch (err) {
-      // Invalid token
+  if (isProtected) {
+    if (!token || !(await isValidAdminToken(token))) {
       const response = NextResponse.redirect(new URL('/login', request.url));
       response.cookies.delete('admin_session');
       return response;
     }
+    return NextResponse.next();
   }
 
-  if (request.nextUrl.pathname === '/login') {
-    if (token) {
-      try {
-        await jose.jwtVerify(token, JWT_SECRET);
-        return NextResponse.redirect(new URL('/', request.url));
-      } catch (err) {
-        // Just let them log in again
-      }
-    }
+  if (isLoginPage && token && (await isValidAdminToken(token))) {
+    return NextResponse.redirect(new URL('/admin', request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/', '/login'],
+  matcher: ['/', '/admin', '/admin/:path*', '/login'],
 };

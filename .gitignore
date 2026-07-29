@@ -9,8 +9,18 @@ yarn-error.log
 .env.local
 .DS_Store
 
-# Ignore SQLite temporary WAL files
+# SQLite database and WAL files
+database.sqlite
 database.sqlite-shm
 database.sqlite-wal
 tsconfig.tsbuildinfo
 scratch/
+
+# Firebase / Google credentials (never commit these)
+mobile/google-services.json
+mobile/GoogleService-Info.plist
+mobile/google-play-service-account.json
+
+# Android signing keystore
+*.jks
+*.keystore
