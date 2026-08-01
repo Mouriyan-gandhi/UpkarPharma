@@ -3,8 +3,10 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcrypt');
 
-const dbPath = path.resolve(process.cwd(), 'database.sqlite');
+const dbPath = process.env.DATABASE_PATH || path.resolve(process.cwd(), 'database.sqlite');
 const jsonPath = path.resolve(process.cwd(), 'data.json');
+
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 // Connect to SQLite
 const db = new Database(dbPath, { verbose: console.log });
