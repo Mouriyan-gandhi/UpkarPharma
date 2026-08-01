@@ -1,17 +1,28 @@
 import Database from 'better-sqlite3';
+import fs from 'fs';
 import path from 'path';
 
 // DATABASE_PATH lets Railway/Render mount the DB on a persistent volume.
 // Falls back to project root for local dev.
 const dbPath = process.env.DATABASE_PATH || path.resolve(process.cwd(), 'database.sqlite');
 
-// Initialize the database connection.
-// Verbose query logging in development only — keeps production logs clean and
-// avoids leaking query/data details.
-const db = new Database(
-  dbPath,
-  process.env.NODE_ENV === 'production' ? {} : { verbose: console.log }
-);
+// During `next build` (page-data collection) the volume isn't mounted yet, so
+// opening the real file would fail. Use an ephemeral in-memory DB for build
+// only — schema is recreated at runtime against the real path.
+const isBuild = process.env.NEXT_PHASE === 'phase-production-build';
+
+function openDb(): Database.Database {
+  if (isBuild) {
+    return new Database(':memory:');
+  }
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  return new Database(
+    dbPath,
+    process.env.NODE_ENV === 'production' ? {} : { verbose: console.log }
+  );
+}
+
+const db = openDb();
 
 // Enable foreign keys
 db.pragma('journal_mode = WAL');
