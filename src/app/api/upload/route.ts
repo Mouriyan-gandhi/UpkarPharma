@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
+import crypto from 'node:crypto';
 import { getAdmin } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
@@ -135,20 +136,30 @@ export async function POST(request: Request) {
         added += batch.length;
       }
     } else if (type === 'users') {
-      // Legacy users import — creates auth.users via admin API + profile via trigger.
+      // Bulk users import — creates auth.users via admin API + profile via trigger.
+      // Each user gets a fresh random one-time password. The `credentials`
+      // array is returned to the admin so they can distribute securely
+      // (WhatsApp/email); the admin should treat this response as sensitive
+      // and hand each password over via a private channel.
       const data = XLSX.utils.sheet_to_json(sheet) as any[];
+      const credentials: Array<{ phone: string; store_name: string; password: string }> = [];
+      // Fetch once — listUsers is expensive.
+      const { data: existing } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 });
+      const existingPhones = new Set(existing?.users.map(u => u.phone).filter(Boolean));
+
       for (const item of data) {
         const rawPhone = item.phone ? String(item.phone) : null;
         if (!rawPhone) continue;
         const phoneE164 = '+' + (rawPhone.startsWith('91') ? rawPhone : '91' + rawPhone);
+        const phoneDigits = phoneE164.replace(/^\+/, '');
 
-        const { data: existing } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 });
-        if (existing?.users.some(u => u.phone === phoneE164.replace(/^\+/, ''))) continue;
+        if (existingPhones.has(phoneDigits)) continue;
 
+        const tempPassword = crypto.randomBytes(9).toString('base64url');
         const { data: created, error: createErr } = await sb.auth.admin.createUser({
           phone: phoneE164,
           phone_confirm: true,
-          password: '123456',
+          password: tempPassword,
           user_metadata: { store_name: item.store_name || 'Unknown Store' },
         });
         if (createErr || !created?.user) continue;
@@ -160,8 +171,22 @@ export async function POST(request: Request) {
           credit_limit: Number(item.credit_limit) || 0,
           role: item.role || 'client',
         }).eq('id', created.user.id);
+
+        credentials.push({
+          phone: phoneDigits,
+          store_name: item.store_name || 'Unknown Store',
+          password: tempPassword,
+        });
         added++;
       }
+
+      return NextResponse.json({
+        success: true,
+        added,
+        credentials,
+        notice:
+          'Each imported user has a one-time random password above. Distribute securely to each user; the passwords are not stored anywhere else.',
+      });
     } else {
       return NextResponse.json({ error: 'Invalid upload type' }, { status: 400 });
     }

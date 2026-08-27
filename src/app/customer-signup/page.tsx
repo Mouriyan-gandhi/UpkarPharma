@@ -40,12 +40,14 @@ export default function CustomerSignupPage() {
     }
     setLoading(true);
     try {
-      // Step 1: Create the profile (signup endpoint creates auth.users + public.users, marked NOT approved).
+      // Single atomic signup — password is set inside /api/auth/signup so
+      // there's no window where the account exists without a password.
       const signupRes = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phone: form.phone,
+          password,
           store_name: form.store_name.trim(),
           user_type: form.user_type,
         }),
@@ -55,18 +57,6 @@ export default function CustomerSignupPage() {
         setError(signupData.error || "Signup failed. Please try again.");
         setLoading(false);
         return;
-      }
-
-      // Step 2: Set a password for the fresh auth user via admin endpoint.
-      // (Password OTP flow will replace this once phone provider is enabled.)
-      const setPwRes = await fetch("/api/auth/set-signup-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: form.phone, password }),
-      });
-      if (!setPwRes.ok) {
-        // Not fatal — user record exists, admin can set/reset password. Show success anyway.
-        console.warn("Set password failed (user was still created)");
       }
       setSuccess(true);
     } catch {
