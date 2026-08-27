@@ -1,413 +1,521 @@
 import { NextResponse } from 'next/server';
-import db from '@/lib/db';
-import { getAdmin, getSessionUser } from '@/lib/auth';
-import { sendWhatsAppB2BNotification } from '@/lib/whatsapp';
+import { getAdmin, getMobileUser, getWebUser } from '@/lib/auth';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createDraftInvoiceForOrder } from '@/lib/invoice';
 
 const MIN_ORDER_VALUE = 2500;
 
-// Strip sensitive fields before returning a user record to a mobile client.
-function sanitizeUser(u: any) {
-  if (!u) return u;
-  const { password_hash, ...safe } = u;
-  return safe;
-}
-
-function populateOrders(orders: any[]) {
-  return orders.map((order: any) => {
-    const items = db.prepare(`
-      SELECT oi.*, p.name, p.company, p.category
-      FROM order_items oi
-      JOIN products p ON oi.product_id = p.id
-      WHERE oi.order_id = ?
-    `).all(order.id);
-
-    const formattedItems = items.map((item: any) => ({
-      id: item.product_id,
-      name: item.name,
-      company: item.company,
-      category: item.category,
-      quantity: item.quantity,
-      price: item.price_at_time
-    }));
-
-    return { ...order, items: formattedItems };
-  });
-}
-
-async function sendPushNotification(expoPushToken: string, title: string, body: string) {
-  if (!expoPushToken) return;
-  const message = {
-    to: expoPushToken,
-    sound: 'default',
-    title: title,
-    body: body,
-    data: { someData: 'goes here' },
-  };
-
+// Best-effort Expo push (won't crash on error).
+async function sendPushNotification(token: string | null | undefined, title: string, body: string) {
+  if (!token) return;
   try {
     await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(message),
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ to: token, sound: 'default', title, body }),
     });
   } catch (err) {
-    console.error('Push Notification Error:', err);
+    console.error('Push error:', err);
   }
 }
 
+// Populate order_items rows onto each order for the client.
+async function attachItemsToOrders(orders: any[]) {
+  if (orders.length === 0) return orders;
+  const ids = orders.map(o => o.id);
+  const sb = supabaseAdmin();
+  const { data: items } = await sb
+    .from('order_items')
+    .select('*')
+    .in('order_id', ids);
+  const byOrder = new Map<string, any[]>();
+  for (const it of items || []) {
+    const arr = byOrder.get(it.order_id) || [];
+    arr.push({
+      id: it.product_id,
+      name: it.product_name,
+      packing: it.packing,
+      hsn: it.hsn,
+      gst_percent: it.gst_percent,
+      mrp: it.mrp,
+      mfr: it.mfr,
+      batch_no: it.batch_no,
+      expiry_date: it.expiry_date,
+      quantity: it.quantity,
+      free_quantity: it.free_quantity,
+      price: Number(it.price_at_time),
+    });
+    byOrder.set(it.order_id, arr);
+  }
+  return orders.map(o => ({ ...o, items: byOrder.get(o.id) || [] }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GET — read-side. Admin gets full dataset; mobile client gets own scoped data.
+// ═══════════════════════════════════════════════════════════════════════════
 export async function GET(request: Request) {
-  try {
-    const products = db.prepare('SELECT * FROM products').all() as any[];
+  const sb = supabaseAdmin();
 
-    // Admin (same-origin dashboard cookie) gets the full dataset.
-    const admin = await getAdmin();
-    if (admin) {
-      const users = db.prepare('SELECT id, phone, store_name, is_approved, role, credit_balance, credit_limit, address, zone, city, created_at FROM users').all() as any[];
-      const orders = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all() as any[];
-      const schemes = db.prepare('SELECT * FROM schemes ORDER BY created_at DESC').all() as any[];
-      return NextResponse.json({ users, products, orders: populateOrders(orders), schemes });
+  // Admin path (dashboard cookie)
+  const admin = await getAdmin();
+  if (admin) {
+    // Products exceed the PostgREST 1000-row cap — page through in batches.
+    async function fetchAllProducts() {
+      const all: any[] = [];
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await sb
+          .from('products').select('*')
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        if (!data?.length) break;
+        all.push(...data);
+        if (data.length < pageSize) break;
+      }
+      return all;
     }
 
-    // Mobile client (session bearer token) gets ONLY its own user record and orders.
-    const user = getSessionUser(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const [usersRes, allProducts, ordersRes, schemesRes] = await Promise.all([
+      sb.from('users').select('*').order('created_at', { ascending: false }),
+      fetchAllProducts(),
+      sb.from('orders').select('*').order('created_at', { ascending: false }),
+      sb.from('schemes').select('*').order('created_at', { ascending: false }),
+    ]);
+    const productsRes = { data: allProducts, error: null };
+
+    if (usersRes.error || productsRes.error || ordersRes.error || schemesRes.error) {
+      const err = usersRes.error || productsRes.error || ordersRes.error || schemesRes.error;
+      console.error('Admin GET error:', err);
+      return NextResponse.json({ error: err?.message || 'Read failed' }, { status: 500 });
     }
-
-    const orders = db.prepare('SELECT * FROM orders WHERE user_phone = ? ORDER BY created_at DESC').all(user.phone) as any[];
-    const today = new Date().toISOString().split('T')[0];
-    const schemes = db.prepare(`
-      SELECT * FROM schemes
-      WHERE is_active = 1 AND start_date <= ? AND end_date >= ?
-      ORDER BY created_at DESC
-    `).all(today, today) as any[];
-
+    const orders = await attachItemsToOrders(ordersRes.data || []);
     return NextResponse.json({
-      users: [sanitizeUser(user)],
-      products,
-      orders: populateOrders(orders),
-      schemes
+      users: usersRes.data,
+      products: productsRes.data,
+      orders,
+      schemes: schemesRes.data,
     });
-  } catch (err) {
-    console.error('DB Read Error:', err);
-    return NextResponse.json({ error: 'Failed to read database' }, { status: 500 });
   }
+
+  // Customer path — accepts EITHER a mobile Bearer token OR a web cookie session.
+  const user = (await getMobileUser(request)) || (await getWebUser());
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const today = new Date().toISOString().split('T')[0];
+  async function fetchAllProducts() {
+    const all: any[] = [];
+    const pageSize = 1000;
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await sb
+        .from('products').select('*')
+        .order('id', { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data?.length) break;
+      all.push(...data);
+      if (data.length < pageSize) break;
+    }
+    return all;
+  }
+
+  const [allProducts, ordersRes, schemesRes] = await Promise.all([
+    fetchAllProducts(),
+    sb.from('orders').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+    sb.from('schemes').select('*')
+      .eq('is_active', true)
+      .lte('start_date', today).gte('end_date', today),
+  ]);
+  const productsRes = { data: allProducts };
+
+  const orders = await attachItemsToOrders(ordersRes.data || []);
+  return NextResponse.json({
+    users: [user],
+    products: productsRes.data || [],
+    orders,
+    schemes: schemesRes.data || [],
+  });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// POST — mutation actions.
+// ═══════════════════════════════════════════════════════════════════════════
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { collection, item, action } = body;
+    const sb = supabaseAdmin();
 
-    // Resolve the caller once. Admin = dashboard cookie; user = mobile bearer token.
     const admin = await getAdmin();
-    const sessionUser = admin ? null : getSessionUser(request);
+    // "mobileUser" identifies any authenticated customer regardless of channel:
+    // native mobile app (Bearer token) OR web /shop (cookie). Kept the name to
+    // minimize diff churn — semantically it's "current customer".
+    const mobileUser = admin
+      ? null
+      : (await getMobileUser(request)) || (await getWebUser());
+    const actor = admin || mobileUser;
 
-    // Actions only the admin dashboard may perform.
-    const adminOnlyActions = ['update_status', 'raw_override', 'add_product', 'update_stock'];
-    if (adminOnlyActions.includes(action) && !admin) {
+    // ── Actions restricted to admin ─────────────────────────────────────────
+    const adminOnly = new Set([
+      'update_status', 'raw_override', 'add_product', 'update_stock',
+      'update_product', 'delete_product', 'update_credit',
+      'update_user_profile', 'block_user', 'unblock_user',
+    ]);
+    if (adminOnly.has(action) && !admin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // ── orders.create (mobile places an order) ──────────────────────────────
     if (collection === 'orders' && action === 'create') {
-      // A logged-in mobile client must own the order; never trust client-supplied identity.
-      if (!sessionUser) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-      item.phone = sessionUser.phone;
-      item.store = sessionUser.store_name;
+      if (!mobileUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-      // Server-side total recomputation — never trust client-supplied total/prices.
       const orderItems: any[] = item.items || [];
       if (orderItems.length === 0) {
         return NextResponse.json({ error: 'Order must contain at least one item.' }, { status: 400 });
       }
 
+      // Fetch all products in one round-trip.
+      const ids = orderItems.map((i: any) => Number(i.id)).filter(Boolean);
+      const { data: products } = await sb
+        .from('products')
+        .select('id, name, packing, hsn, gst_percent, mrp, company, price, price_ptr')
+        .in('id', ids);
+      const productMap = new Map((products || []).map(p => [p.id, p]));
+
       let subtotal = 0;
-      const pricedItems: any[] = [];
+      const priced = [];
       for (const i of orderItems) {
-        const product = db.prepare('SELECT id, price, price_ptr FROM products WHERE id = ?').get(i.id) as any;
-        if (!product) continue;
-        const unitPrice = product.price_ptr || product.price || 0;
-        const lineTotal = unitPrice * (i.quantity || 0);
-        subtotal += lineTotal;
-        pricedItems.push({ ...i, price: unitPrice });
+        const p = productMap.get(Number(i.id));
+        if (!p) continue;
+        const unit = Number(p.price_ptr) || Number(p.price) || 0;
+        const qty = Number(i.quantity) || 0;
+        subtotal += unit * qty;
+        priced.push({
+          product_id: p.id,
+          product_name: p.name,
+          packing: p.packing,
+          hsn: p.hsn,
+          gst_percent: p.gst_percent,
+          mrp: p.mrp,
+          mfr: p.company,
+          quantity: qty,
+          price_at_time: unit,
+        });
       }
-      item.items = pricedItems;
 
       if (subtotal > 0 && subtotal < MIN_ORDER_VALUE) {
         return NextResponse.json(
-          { error: `Minimum order value is ₹${MIN_ORDER_VALUE}.` },
-          { status: 400 }
+          { error: `Minimum order value is ₹${MIN_ORDER_VALUE}.` }, { status: 400 }
         );
       }
 
-      // Server-side scheme discount calculation
-      let discountAmount = 0;
-      if (item.scheme_code) {
+      // Server-side scheme discount
+      let discount = 0;
+      let schemeCode: string | null = item.scheme_code || null;
+      if (schemeCode) {
         const today = new Date().toISOString().split('T')[0];
-        const scheme = db.prepare(
-          'SELECT * FROM schemes WHERE code = ? AND is_active = 1 AND start_date <= ? AND end_date >= ?'
-        ).get(item.scheme_code, today, today) as any;
-        if (scheme) {
-          if (scheme.min_order_value > 0 && subtotal < scheme.min_order_value) {
-            item.scheme_code = null; // silently drop invalid scheme
-          } else {
-            if (scheme.scheme_type === 'Discount' && scheme.discount_percent) {
-              discountAmount = (subtotal * scheme.discount_percent) / 100;
-              if (scheme.max_discount) discountAmount = Math.min(discountAmount, scheme.max_discount);
-            } else if (scheme.scheme_type === 'Flat' && scheme.flat_discount) {
-              discountAmount = Math.min(scheme.flat_discount, subtotal);
-            }
+        const { data: scheme } = await sb
+          .from('schemes')
+          .select('*')
+          .eq('code', schemeCode)
+          .eq('is_active', true)
+          .lte('start_date', today).gte('end_date', today)
+          .maybeSingle();
+        if (!scheme) {
+          schemeCode = null;
+        } else if (scheme.min_order_value > 0 && subtotal < scheme.min_order_value) {
+          schemeCode = null;
+        } else if (scheme.per_user_limit > 0) {
+          const { count: used } = await sb.from('orders').select('*', { head: true, count: 'exact' })
+            .eq('user_id', mobileUser.id).eq('scheme_code', schemeCode);
+          if ((used || 0) >= scheme.per_user_limit) {
+            return NextResponse.json(
+              { error: `Coupon usage limit reached (${scheme.per_user_limit} max).` }, { status: 400 }
+            );
           }
-        } else {
-          item.scheme_code = null;
+          if (scheme.scheme_type === 'Discount' && scheme.discount_percent) {
+            discount = (subtotal * scheme.discount_percent) / 100;
+            if (scheme.max_discount) discount = Math.min(discount, scheme.max_discount);
+          } else if (scheme.scheme_type === 'Flat' && scheme.flat_discount) {
+            discount = Math.min(scheme.flat_discount, subtotal);
+          }
         }
       }
 
-      const taxable = subtotal - discountAmount;
+      const taxable = subtotal - discount;
       const gst = Math.round(taxable * 0.12 * 100) / 100;
-      const computedTotal = Math.round((taxable + gst) * 100) / 100;
+      const total = Math.round((taxable + gst) * 100) / 100;
 
-      // Overwrite client-supplied financials with server-computed values
-      item.total = computedTotal;
-      item.subtotal = subtotal;
-      item.discount_value = discountAmount;
-      item.gst = gst;
-
-      const insertOrder = db.prepare(`
-        INSERT INTO orders (id, user_phone, store_name, status, total, date, scheme_code)
-        VALUES (@id, @phone, @store, @status, @total, @date, @scheme_code)
-      `);
-      
-      const insertOrderItem = db.prepare(`
-        INSERT INTO order_items (order_id, product_id, quantity, price_at_time)
-        VALUES (@order_id, @product_id, @quantity, @price_at_time)
-      `);
-      
-      const updateUserCredit = db.prepare(`
-        UPDATE users SET credit_balance = credit_balance + @total WHERE phone = @phone OR store_name = @store
-      `);
-
-      const incrementSchemeUsage = db.prepare(`
-        UPDATE schemes SET times_used = times_used + 1 WHERE code = @code
-      `);
-
-      const createOrderTransaction = db.transaction((orderData) => {
-        if (orderData.scheme_code) {
-          const scheme = db.prepare('SELECT per_user_limit FROM schemes WHERE code = ?').get(orderData.scheme_code) as any;
-          if (scheme && scheme.per_user_limit > 0) {
-            const usage = db.prepare('SELECT COUNT(*) as count FROM orders WHERE user_phone = ? AND scheme_code = ?').get(orderData.phone, orderData.scheme_code) as any;
-            if (usage.count >= scheme.per_user_limit) {
-              throw new Error(`Coupon usage limit reached for this user (${scheme.per_user_limit} max).`);
-            }
-          }
-        }
-
-        insertOrder.run({
-          id: orderData.id,
-          phone: orderData.phone,
-          store: orderData.store,
-          status: 'Placed',
-          total: orderData.total,
-          date: orderData.date,
-          scheme_code: orderData.scheme_code || null
-        });
-
-        for (const i of orderData.items) {
-          insertOrderItem.run({
-            order_id: orderData.id,
-            product_id: i.id,
-            quantity: i.quantity,
-            price_at_time: i.price
-          });
-        }
-
-        updateUserCredit.run({ total: orderData.total, phone: orderData.phone, store: orderData.store });
-
-        if (orderData.scheme_code) {
-          incrementSchemeUsage.run({ code: orderData.scheme_code });
-        }
+      // Insert order
+      const { error: orderErr } = await sb.from('orders').insert({
+        id: item.id,
+        user_id: mobileUser.id,
+        user_phone: mobileUser.phone,
+        store_name: mobileUser.store_name || 'Partner',
+        status: 'Invoicing',
+        subtotal,
+        discount_value: discount,
+        gst,
+        total,
+        scheme_code: schemeCode,
+        date: item.date || new Date().toLocaleDateString('en-GB'),
       });
+      if (orderErr) {
+        return NextResponse.json({ error: orderErr.message }, { status: 400 });
+      }
 
+      // Insert order_items
+      const { error: itemsErr } = await sb.from('order_items').insert(
+        priced.map(p => ({ ...p, order_id: item.id }))
+      );
+      if (itemsErr) {
+        // rollback: delete the order we just created
+        await sb.from('orders').delete().eq('id', item.id);
+        return NextResponse.json({ error: itemsErr.message }, { status: 400 });
+      }
+
+      // Update user credit balance
+      await sb.from('users')
+        .update({ credit_balance: Number(mobileUser['credit_balance'] || 0) + total })
+        .eq('id', mobileUser.id);
+
+      // Snapshot buyer info onto the invoice (so old invoices stay stable if
+      // the pharmacy later edits their address/GST).
+      const { data: fullBuyer } = await sb.from('users')
+        .select('store_name, phone, address, city, drug_license, gst_number')
+        .eq('id', mobileUser.id).maybeSingle();
+
+      // Auto-create the Draft invoice with an atomic UPD number.
       try {
-        createOrderTransaction(item);
-        
-        // Trigger WhatsApp Notification for Order Placed
-        sendWhatsAppB2BNotification({
-          toPhone: item.phone,
-          type: 'ORDER_PLACED',
-          orderId: item.id,
-          storeName: item.store,
-          amount: item.total
-        }).catch(err => console.error('WhatsApp Notification error:', err));
-
-        return NextResponse.json({ success: true });
+        await createDraftInvoiceForOrder(sb, {
+          order_id: item.id,
+          user_id: mobileUser.id,
+          buyer: {
+            store_name: fullBuyer?.store_name || mobileUser.store_name || 'Partner',
+            phone: fullBuyer?.phone || mobileUser.phone,
+            address: fullBuyer?.address ?? null,
+            city: fullBuyer?.city ?? null,
+            drug_license: fullBuyer?.drug_license ?? null,
+            gst_number: fullBuyer?.gst_number ?? null,
+          },
+          subtotal,
+          discount,
+        });
       } catch (e: any) {
-        return NextResponse.json({ error: e.message || 'Failed to create order.' }, { status: 400 });
+        console.error('Draft invoice create failed:', e.message);
+        // Order stays; admin can regenerate the invoice manually.
       }
-    } 
-    else if (collection === 'orders' && action === 'update_status') {
-      const getOrder = db.prepare('SELECT * FROM orders WHERE id = ?').get(item.id) as any;
-      if (!getOrder) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
 
-      // Get user's push token
-      const user = db.prepare('SELECT expo_push_token FROM users WHERE phone = ?').get(getOrder.user_phone) as any;
+      // Increment scheme usage (fetch-then-update; race-tolerant for MVP scale)
+      if (schemeCode) {
+        const { data: s } = await sb.from('schemes').select('times_used').eq('code', schemeCode).maybeSingle();
+        await sb.from('schemes')
+          .update({ times_used: (s?.times_used ?? 0) + 1 })
+          .eq('code', schemeCode);
+      }
 
-      const updateOrder = db.prepare('UPDATE orders SET status = ?, courier_name = ?, tracking_id = ? WHERE id = ?');
-      const refundCredit = db.prepare('UPDATE users SET credit_balance = MAX(0, credit_balance - ?) WHERE phone = ? OR store_name = ?');
-      const deductStock = db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?');
-      
-      const getItems = db.prepare('SELECT product_id, quantity FROM order_items WHERE order_id = ?').all(item.id) as any[];
-
-      const restoreStock = db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?');
-      const ACCEPTED_STATUSES = ['Accepted', 'Processing', 'Shipped'];
-
-      const updateStatusTransaction = db.transaction(() => {
-        // Deduct stock when order moves from Placed → Accepted
-        if (item.status === 'Accepted' && getOrder.status === 'Placed') {
-          for (const i of getItems) {
-            deductStock.run(i.quantity, i.product_id);
-          }
-        }
-
-        // Rejecting a Placed order: refund credit only (stock was never deducted)
-        if (item.status === 'Rejected' && getOrder.status === 'Placed') {
-          refundCredit.run(getOrder.total, getOrder.user_phone, getOrder.store_name);
-        }
-
-        // Rejecting an already-accepted/processing/shipped order: restore stock + refund credit
-        if (item.status === 'Rejected' && ACCEPTED_STATUSES.includes(getOrder.status)) {
-          for (const i of getItems) {
-            restoreStock.run(i.quantity, i.product_id);
-          }
-          refundCredit.run(getOrder.total, getOrder.user_phone, getOrder.store_name);
-        }
-
-        updateOrder.run(item.status, item.courier_name || null, item.tracking_id || null, item.id);
+      // Notify admins in real-time
+      await sb.from('notifications').insert({
+        for_admin: true,
+        type: 'order_placed',
+        title: 'New order placed',
+        body: `${mobileUser.store_name} placed order ${item.id} for ₹${total}`,
+        meta: { order_id: item.id, user_id: mobileUser.id, amount: total },
       });
-
-      updateStatusTransaction();
-
-      // Trigger WhatsApp Notification for Shipped status
-      if (item.status === 'Shipped') {
-        sendWhatsAppB2BNotification({
-          toPhone: getOrder.user_phone,
-          type: 'ORDER_SHIPPED',
-          orderId: item.id,
-          storeName: getOrder.store_name,
-          amount: getOrder.total,
-          courierName: item.courier_name,
-          trackingId: item.tracking_id
-        }).catch(err => console.error('WhatsApp Notification error:', err));
-      }
-
-      // Send Push Notification
-      if (user && user.expo_push_token) {
-        let title = 'Order Update';
-        let body = `Your order ${item.id} status is now: ${item.status}`;
-        
-        if (item.status === 'Shipped') {
-          title = 'Order Dispatched';
-          body = `Your order ${item.id} has been shipped via ${item.courier_name || 'Courier'}.`;
-        } else if (item.status === 'Accepted') {
-          title = 'Order Accepted';
-          body = `Your order ${item.id} has been accepted and is being processed.`;
-        } else if (item.status === 'Rejected') {
-          title = 'Order Rejected';
-          body = `Unfortunately, your order ${item.id} was rejected. Your credit has been refunded.`;
-        }
-
-        await sendPushNotification(user.expo_push_token, title, body);
-      }
 
       return NextResponse.json({ success: true });
     }
-    else if (action === 'raw_override') {
-      // Powerful sync override from dashboard - Re-implementing for SQLite
-      // Note: Only users updates are implemented from the old codebase raw_override
-      if (body.db && body.db.users) {
-        const updateApprove = db.prepare('UPDATE users SET is_approved = ? WHERE phone = ?');
-        const overrideTransaction = db.transaction((users) => {
-          for (const u of users) {
-            updateApprove.run(u.is_approved ? 1 : 0, u.phone);
-          }
-        });
-        overrideTransaction(body.db.users);
-        return NextResponse.json({ success: true });
+
+    // ── orders.update_status (admin) ────────────────────────────────────────
+    if (collection === 'orders' && action === 'update_status') {
+      const { data: order } = await sb.from('orders').select('*').eq('id', item.id).maybeSingle();
+      if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+
+      // Forward-only lifecycle: Invoicing → Packaging → Dispatch (terminal).
+      // Rejection allowed only from Invoicing or Packaging. Dispatch and
+      // Rejected are terminal — nothing further.
+      const stageOf = (s: string) =>
+        /reject/i.test(s) ? 'Rejected'
+        : /ship|dispatch/i.test(s) ? 'Dispatch'
+        : /pack/i.test(s) ? 'Packaging'
+        : 'Invoicing';
+      const current = stageOf(order.status);
+      const target  = stageOf(item.status);
+      const allowedFrom: Record<string, string[]> = {
+        Invoicing: ['Packaging', 'Rejected'],
+        Packaging: ['Dispatch', 'Rejected'],
+        Dispatch:  [],
+        Rejected:  [],
+      };
+      if (!allowedFrom[current]?.includes(target)) {
+        return NextResponse.json({
+          error: `Cannot move order from ${current} to ${target}. Lifecycle is forward-only.`,
+        }, { status: 400 });
       }
+
+      const patch: any = { status: item.status };
+      if (item.courier_name) patch.courier_name = item.courier_name;
+      if (item.tracking_id) patch.tracking_id = item.tracking_id;
+
+      const { error } = await sb.from('orders').update(patch).eq('id', item.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+      // Push notification to owner
+      const { data: ownerRow } = await sb.from('users').select('expo_push_token').eq('id', order.user_id).maybeSingle();
+      const title = item.status === 'Dispatch' ? 'Order dispatched'
+        : item.status === 'Packaging' ? 'Order being packed'
+        : item.status === 'Rejected' ? 'Order rejected'
+        : 'Order update';
+      const bodyMsg = `Your order ${item.id} is now ${item.status}`;
+      await sendPushNotification(ownerRow?.expo_push_token, title, bodyMsg);
+
+      // In-app notification
+      await sb.from('notifications').insert({
+        user_id: order.user_id,
+        for_admin: false,
+        type: item.status === 'Dispatch' ? 'order_dispatched'
+          : item.status === 'Packaging' ? 'order_packaged'
+          : item.status === 'Rejected' ? 'order_rejected'
+          : 'order_updated',
+        title,
+        body: bodyMsg,
+        meta: { order_id: item.id, ...(item.courier_name ? { courier: item.courier_name, tracking: item.tracking_id } : {}) },
+      });
+
+      return NextResponse.json({ success: true });
     }
-    else if (action === 'add_product') {
-      const insertProduct = db.prepare(`
-        INSERT INTO products (name, company, category, body_system, price, stock, image_url)
-        VALUES (@name, @company, @category, @body_system, @price, @stock, @image_url)
-      `);
-      insertProduct.run({
+
+    // ── raw_override — used by admin panel for approve toggle ───────────────
+    if (action === 'raw_override' && admin && body.db?.users) {
+      for (const u of body.db.users) {
+        await sb.from('users').update({ is_approved: !!u.is_approved }).eq('phone', u.phone);
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    // ── add_product ─────────────────────────────────────────────────────────
+    if (action === 'add_product' && admin) {
+      const { error } = await sb.from('products').insert({
         name: item.name,
         company: item.company,
         category: item.category,
         body_system: item.body_system || 'General',
         price: item.price,
         stock: item.stock,
-        image_url: item.image_url || null
+        image_url: item.image_url || null,
       });
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ success: true });
     }
-    else if (action === 'update_stock') {
+
+    // ── update_stock ────────────────────────────────────────────────────────
+    if (action === 'update_stock' && admin) {
       const { productId, changeAmount } = body;
-      db.prepare('UPDATE products SET stock = MAX(0, stock + ?) WHERE id = ?').run(changeAmount, productId);
+      const { data: p } = await sb.from('products').select('stock').eq('id', productId).maybeSingle();
+      const newStock = Math.max(0, (p?.stock ?? 0) + Number(changeAmount || 0));
+      const { error } = await sb.from('products').update({ stock: newStock }).eq('id', productId);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ success: true });
     }
 
-    else if (action === 'update_address') {
-      const targetPhone = admin ? body.phone : sessionUser?.phone;
-      if (!targetPhone) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      db.prepare('UPDATE users SET address = ? WHERE phone = ?').run(body.address, targetPhone);
+    // ── update_address (self OR admin on any) ──────────────────────────────
+    if (action === 'update_address') {
+      const targetId = admin ? null : mobileUser?.id;
+      const targetPhone = admin ? body.phone : null;
+      let updater = sb.from('users').update({ address: body.address });
+      updater = targetId ? updater.eq('id', targetId) : updater.eq('phone', targetPhone!);
+      const { error } = await updater;
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ success: true });
     }
 
-    else if (action === 'update_credit' && admin) {
+    // ── update_own_profile — customer edits their own free-edit fields ──
+    // Only email/address/city/zone are allowed here. Identity fields (GST,
+    // drug_license, store_name, user_type) must go through
+    // /api/profile-change-requests for admin approval.
+    if (action === 'update_own_profile' && mobileUser) {
+      const patch: any = {};
+      for (const k of ['email', 'address', 'city', 'zone']) {
+        if (body[k] !== undefined) patch[k] = body[k] || null;
+      }
+      if (Object.keys(patch).length === 0) {
+        return NextResponse.json({ error: 'No editable fields provided' }, { status: 400 });
+      }
+      const { error } = await sb.from('users').update(patch).eq('id', mobileUser.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ success: true });
+    }
+
+    // ── update_credit ───────────────────────────────────────────────────────
+    if (action === 'update_credit' && admin) {
       const { phone, credit_limit, credit_balance } = body;
       if (!phone) return NextResponse.json({ error: 'Phone required' }, { status: 400 });
-      db.prepare('UPDATE users SET credit_limit = COALESCE(?, credit_limit), credit_balance = COALESCE(?, credit_balance) WHERE phone = ?')
-        .run(credit_limit ?? null, credit_balance ?? null, phone);
+      const patch: any = {};
+      if (credit_limit !== undefined && credit_limit !== null) patch.credit_limit = credit_limit;
+      if (credit_balance !== undefined && credit_balance !== null) patch.credit_balance = credit_balance;
+      const { error } = await sb.from('users').update(patch).eq('phone', phone);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ success: true });
     }
 
-    else if (action === 'update_product' && admin) {
-      const { id, name, company, category, packing, price, price_ptr, mrp, stock, description, composition } = item;
-      if (!id) return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
-      db.prepare(`
-        UPDATE products SET
-          name = COALESCE(?, name),
-          company = COALESCE(?, company),
-          category = COALESCE(?, category),
-          packing = COALESCE(?, packing),
-          price = COALESCE(?, price),
-          price_ptr = COALESCE(?, price_ptr),
-          mrp = COALESCE(?, mrp),
-          stock = COALESCE(?, stock),
-          description = COALESCE(?, description),
-          composition = COALESCE(?, composition)
-        WHERE id = ?
-      `).run(name, company, category, packing, price, price_ptr, mrp, stock, description, composition, id);
+    // ── update_product ──────────────────────────────────────────────────────
+    if (action === 'update_product' && admin) {
+      if (!item.id) return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
+      const patch: any = {};
+      for (const k of ['name','company','category','packing','price','price_ptr','mrp','stock','description','composition','images','short_expiry','discount_percent','expiry_date','hsn','gst_percent']) {
+        if (item[k] !== undefined) patch[k] = item[k];
+      }
+      const { error } = await sb.from('products').update(patch).eq('id', item.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ success: true });
     }
 
-    else if (action === 'delete_product' && admin) {
-      const { id } = body;
-      if (!id) return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
-      db.prepare('DELETE FROM products WHERE id = ?').run(id);
+    // ── delete_product ──────────────────────────────────────────────────────
+    if (action === 'delete_product' && admin) {
+      const { error } = await sb.from('products').delete().eq('id', body.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ success: true });
+    }
+
+    // ── update_user_profile (admin edits partner details) ───────────────────
+    if (action === 'update_user_profile' && admin) {
+      const { phone } = body;
+      if (!phone) return NextResponse.json({ error: 'Phone required' }, { status: 400 });
+      const patch: any = {};
+      for (const k of ['store_name','drug_license','gst_number','registration_number','address','email','user_type','zone','city']) {
+        if (body[k] !== undefined) patch[k] = body[k];
+      }
+      const { error } = await sb.from('users').update(patch).eq('phone', phone);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ success: true });
+    }
+
+    // ── block_user / unblock_user ───────────────────────────────────────────
+    if ((action === 'block_user' || action === 'unblock_user') && admin) {
+      const { phone, reason } = body;
+      if (!phone) return NextResponse.json({ error: 'Phone required' }, { status: 400 });
+      if (phone === admin.phone) {
+        return NextResponse.json({ error: 'You cannot block your own admin account.' }, { status: 400 });
+      }
+      const { data: target } = await sb.from('users').select('id, role').eq('phone', phone).maybeSingle();
+      if (!target) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      if (target.role === 'admin') {
+        return NextResponse.json({ error: 'Admin accounts cannot be blocked.' }, { status: 400 });
+      }
+
+      if (action === 'block_user') {
+        await sb.from('users').update({ is_blocked: true, blocked_reason: reason || null }).eq('phone', phone);
+        // Revoke all Supabase Auth sessions immediately.
+        await sb.auth.admin.signOut(target.id, 'global').catch(() => {});
+      } else {
+        await sb.from('users').update({ is_blocked: false, blocked_reason: null }).eq('phone', phone);
+      }
       return NextResponse.json({ success: true });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (err) {
+  } catch (err: any) {
     console.error('DB Write Error:', err);
-    return NextResponse.json({ error: 'Failed to save to database' }, { status: 500 });
+    return NextResponse.json({ error: err.message || 'Failed to save' }, { status: 500 });
   }
 }

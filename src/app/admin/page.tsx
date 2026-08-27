@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import ConfirmModal from "@/components/ConfirmModal";
 import {
   Bell, Package, Activity, Plus, Search, RefreshCcw, LogOut, Upload,
   Loader2, Tag, Calendar, Trash2, ToggleLeft, ToggleRight, Gift, Copy,
@@ -25,25 +26,50 @@ function fmt(n: number) {
   return n?.toLocaleString("en-IN") ?? "—";
 }
 
+// 3-stage lifecycle. Old backend statuses map into these stages.
+type StageKey = "Invoicing" | "Packaging" | "Dispatch";
+
+function mapStatusToStage(status: string): StageKey | "Rejected" | null {
+  const s = (status || "").toLowerCase();
+  if (["rejected", "cancelled"].includes(s)) return "Rejected";
+  if (["invoicing", "placed", "accepted", "confirmed"].includes(s)) return "Invoicing";
+  if (["packaging", "processing", "packed"].includes(s)) return "Packaging";
+  if (["dispatch", "dispatched", "shipped", "out for delivery", "delivered", "completed"].includes(s)) return "Dispatch";
+  return null;
+}
+
 function getStatusBadge(status: string) {
-  const map: Record<string, { bg: string; icon: React.ReactNode }> = {
-    Placed:     { bg: "bg-amber-50 border-amber-200 text-amber-800",    icon: <Clock className="w-3 h-3 mr-1 text-amber-600" /> },
-    Accepted:   { bg: "bg-blue-50 border-blue-200 text-blue-800",       icon: <Check className="w-3 h-3 mr-1 text-blue-600" /> },
-    Processing: { bg: "bg-purple-50 border-purple-200 text-purple-800", icon: <RefreshCcw className="w-3 h-3 mr-1 text-purple-600 animate-spin" /> },
-    Shipped:    { bg: "bg-emerald-50 border-emerald-200 text-emerald-800", icon: <Truck className="w-3 h-3 mr-1 text-emerald-600" /> },
-    Delivered:  { bg: "bg-teal-50 border-teal-200 text-teal-800",       icon: <ShieldCheck className="w-3 h-3 mr-1 text-teal-600" /> },
-    Rejected:   { bg: "bg-rose-50 border-rose-200 text-rose-800",       icon: <X className="w-3 h-3 mr-1 text-rose-600" /> },
+  const stage = mapStatusToStage(status);
+  const map: Record<string, { bg: string; icon: React.ReactNode; label: string }> = {
+    Invoicing: { bg: "bg-blue-50 border-blue-200 text-blue-800",             icon: <Clock className="w-3 h-3 mr-1 text-blue-600" />,       label: "Invoicing" },
+    Packaging: { bg: "bg-amber-50 border-amber-200 text-amber-800",          icon: <RefreshCcw className="w-3 h-3 mr-1 text-amber-600" />, label: "Packaging" },
+    Dispatch:  { bg: "bg-emerald-50 border-emerald-200 text-emerald-800",    icon: <Truck className="w-3 h-3 mr-1 text-emerald-600" />,    label: "Dispatch"  },
+    Rejected:  { bg: "bg-rose-50 border-rose-200 text-rose-800",             icon: <X className="w-3 h-3 mr-1 text-rose-600" />,           label: "Rejected"  },
   };
-  const s = map[status];
+  const s = stage ? map[stage] : null;
   if (!s) return <Badge variant="outline" className="text-slate-600 text-xs">{status}</Badge>;
   return (
     <Badge className={`${s.bg} border font-semibold px-2.5 py-0.5 rounded-md text-xs flex items-center w-fit`}>
-      {s.icon}{status}
+      {s.icon}{s.label}
     </Badge>
   );
 }
 
-const ORDER_STATUSES = ["All", "Placed", "Accepted", "Processing", "Shipped", "Delivered", "Rejected"];
+const ORDER_STATUSES = ["All", "Invoicing", "Packaging", "Dispatch", "Rejected"];
+const STATUS_ACTIONS: { value: string; label: string }[] = [
+  { value: "Packaging", label: "Move to Packaging" },
+  { value: "Dispatch",  label: "Dispatch (needs courier)" },
+  { value: "Rejected",  label: "Reject Order" },
+];
+
+// Forward-only lifecycle. Once an order has advanced, admin cannot roll it back.
+// Dispatch + Rejected are terminal. Rejection is only allowed from active stages.
+function allowedNextStages(currentStatus: string): string[] {
+  const stage = mapStatusToStage(currentStatus);
+  if (stage === "Invoicing") return ["Packaging", "Rejected"];
+  if (stage === "Packaging") return ["Dispatch", "Rejected"];
+  return [];   // Dispatch and Rejected are terminal — no further changes
+}
 
 const BLANK_SCHEME = {
   title: "", description: "", code: "", scheme_type: "Discount",
@@ -86,7 +112,6 @@ export default function Dashboard() {
   const ITEMS_PER_PAGE = 50;
   const [editProduct, setEditProduct]   = useState<any>(null);
   const [editProdForm, setEditProdForm] = useState<any>({});
-  const [savingProduct, setSavingProduct] = useState(false);
   const [stockInputs, setStockInputs]   = useState<Record<number, string>>({});
 
   // Orders
@@ -97,13 +122,62 @@ export default function Dashboard() {
   const [courierOrderId, setCourierOrderId] = useState("");
   const [courierForm, setCourierForm] = useState({ courier_name: "", tracking_id: "" });
   const [dispatching, setDispatching] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<
+    { orderId: string; storeName: string; currentStage: string; newStatus: string } | null
+  >(null);
+  const [savingStatus, setSavingStatus] = useState(false);
+
+  // Generic confirm — every action that mutates data flows through this.
+  const [genericConfirm, setGenericConfirm] = useState<null | {
+    title: string;
+    subtitle?: string;
+    bodyText?: string;
+    variant?: "default" | "success" | "warning" | "destructive";
+    confirmLabel?: string;
+    onConfirm: () => Promise<void> | void;
+  }>(null);
+  const [genericSaving, setGenericSaving] = useState(false);
+
+  // Credit management modal (per-user).
+  const [creditModal, setCreditModal] = useState<null | {
+    phone: string;
+    store: string;
+    limit: number;
+    balance: number;
+    addAmount: string;
+    newLimit: string;
+    newBalance: string;
+  }>(null);
+
+  // Partner detail modal (all details in one screen).
+  const [partnerModal, setPartnerModal] = useState<any | null>(null);
+  const [partnerForm, setPartnerForm] = useState<any>({});
+  const [savingPartner, setSavingPartner] = useState(false);
+
+  // Review Invoice modal (Draft invoice review + approve).
+  const [reviewInvoice, setReviewInvoice] = useState<null | {
+    orderId: string;
+    storeName: string;
+    invoice: any;
+    items: any[];
+  }>(null);
+  const [savingLines, setSavingLines] = useState(false);
+  const [approvingInvoice, setApprovingInvoice] = useState(false);
+  const [previewNonce, setPreviewNonce] = useState(0);  // bumps iframe src to force refresh
+
+  // Admin password step-up (for block action).
+  const [passwordPrompt, setPasswordPrompt] = useState<null | {
+    title: string;
+    subtitle: string;
+    onVerified: () => Promise<void> | void;
+  }>(null);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [verifyingPassword, setVerifyingPassword] = useState(false);
 
   // Users
   const [userSearch, setUserSearch]         = useState("");
   const [showPendingOnly, setShowPendingOnly] = useState(false);
-  const [expandedUser, setExpandedUser]     = useState<string | null>(null);
-  const [editingCredit, setEditingCredit]   = useState<{ phone: string; limit: string; balance: string } | null>(null);
-  const [savingCredit, setSavingCredit]     = useState(false);
 
   // Schemes
   const [showSchemeForm, setShowSchemeForm] = useState(false);
@@ -155,9 +229,22 @@ export default function Dashboard() {
     router.push("/login");
   };
 
+  // ── Generic confirm runner ────────────────────────────────────────────────
+
+  const runGenericConfirm = async () => {
+    if (!genericConfirm) return;
+    setGenericSaving(true);
+    try {
+      await genericConfirm.onConfirm();
+      setGenericConfirm(null);
+    } finally {
+      setGenericSaving(false);
+    }
+  };
+
   // ── User Handlers ─────────────────────────────────────────────────────────
 
-  const handleApproveUser = async (phone: string) => {
+  const doApproveUser = async (phone: string) => {
     await fetch("/api/data", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -166,31 +253,256 @@ export default function Dashboard() {
     setUsers((u) => u.map((x) => (x.phone === phone ? { ...x, is_approved: 1 } : x)));
   };
 
-  const handleSaveCredit = async () => {
-    if (!editingCredit) return;
-    setSavingCredit(true);
+  const requestApproveUser = (u: any) => {
+    setGenericConfirm({
+      title: "Approve Partner",
+      subtitle: u.store_name,
+      bodyText: `Verify ${u.store_name} (${u.phone}) as an approved pharmacy partner. They will be able to place orders immediately.`,
+      variant: "success",
+      confirmLabel: "Approve Partner",
+      onConfirm: () => doApproveUser(u.phone),
+    });
+  };
+
+  // Credit modal
+  const openCreditModal = (u: any) => {
+    setCreditModal({
+      phone: u.phone,
+      store: u.store_name || "—",
+      limit: Number(u.credit_limit) || 0,
+      balance: Number(u.credit_balance) || 0,
+      addAmount: "",
+      newLimit: String(u.credit_limit ?? 0),
+      newBalance: String(u.credit_balance ?? 0),
+    });
+  };
+
+  const saveCreditToServer = async (phone: string, credit_limit: number, credit_balance: number) => {
+    await fetch("/api/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update_credit", phone, credit_limit, credit_balance }),
+    });
+    setUsers((u) => u.map((x) => (x.phone === phone ? { ...x, credit_limit, credit_balance } : x)));
+  };
+
+  // ── Review Invoice ─────────────────────────────────────────────────────────
+  const openReviewInvoice = async (order: any) => {
+    const res = await fetch(`/api/invoices/${order.id}`);
+    if (!res.ok) {
+      alert(`No invoice yet for this order. It will be created when the customer places a new order.`);
+      return;
+    }
+    const data = await res.json();
+    setReviewInvoice({
+      orderId: order.id,
+      storeName: order.store_name || 'Partner',
+      invoice: data.invoice,
+      items: data.items || [],
+    });
+  };
+
+  const updateLineField = (id: number, field: 'batch_no' | 'expiry_date', value: string) => {
+    setReviewInvoice((r) => r ? {
+      ...r,
+      items: r.items.map((it) => it.id === id ? { ...it, [field]: value } : it),
+    } : r);
+  };
+
+  const saveInvoiceLines = async () => {
+    if (!reviewInvoice) return;
+    setSavingLines(true);
+    try {
+      const lines = reviewInvoice.items.map(({ id, batch_no, expiry_date }) => ({
+        id, batch_no, expiry_date,
+      }));
+      const res = await fetch(`/api/invoices/${reviewInvoice.orderId}/lines`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to save batch/expiry');
+        return;
+      }
+      setPreviewNonce((n) => n + 1);  // refresh iframe
+    } finally {
+      setSavingLines(false);
+    }
+  };
+
+  const approveInvoice = async () => {
+    if (!reviewInvoice) return;
+    setGenericConfirm({
+      title: 'Approve & Send Invoice',
+      subtitle: `${reviewInvoice.invoice.invoice_no} · ${reviewInvoice.storeName}`,
+      bodyText: 'Save any unsaved batch/expiry edits, mark the invoice as Approved, move the order to Packaging, and notify the customer. This cannot be undone.',
+      variant: 'success',
+      confirmLabel: 'Approve & Send',
+      onConfirm: async () => {
+        setApprovingInvoice(true);
+        try {
+          // First save any pending line changes
+          await saveInvoiceLines();
+          const res = await fetch(`/api/invoices/${reviewInvoice.orderId}/approve`, { method: 'POST' });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            alert(data.error || 'Failed to approve invoice');
+            return;
+          }
+          setReviewInvoice(null);
+          fetchData();
+        } finally {
+          setApprovingInvoice(false);
+        }
+      },
+    });
+  };
+
+  // Partner detail modal
+  const openPartnerModal = (u: any) => {
+    setPartnerModal(u);
+    setPartnerForm({
+      phone: u.phone,
+      store_name: u.store_name ?? "",
+      drug_license: u.drug_license ?? "",
+      gst_number: u.gst_number ?? "",
+      registration_number: u.registration_number ?? "",
+      email: u.email ?? "",
+      user_type: u.user_type ?? "",
+      address: u.address ?? "",
+      city: u.city ?? "",
+      zone: u.zone ?? "",
+    });
+  };
+
+  const doSavePartnerProfile = async () => {
+    if (!partnerModal) return;
+    setSavingPartner(true);
     try {
       await fetch("/api/data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "update_credit",
-          phone: editingCredit.phone,
-          credit_limit: Number(editingCredit.limit) || 0,
-          credit_balance: Number(editingCredit.balance) || 0,
-        }),
+        body: JSON.stringify({ action: "update_user_profile", ...partnerForm }),
       });
-      setUsers((u) =>
-        u.map((x) =>
-          x.phone === editingCredit.phone
-            ? { ...x, credit_limit: Number(editingCredit.limit), credit_balance: Number(editingCredit.balance) }
-            : x
-        )
-      );
-      setEditingCredit(null);
+      setUsers((u) => u.map((x) => x.phone === partnerForm.phone ? { ...x, ...partnerForm } : x));
+      setPartnerModal((m: any) => m ? { ...m, ...partnerForm } : m);
     } finally {
-      setSavingCredit(false);
+      setSavingPartner(false);
     }
+  };
+
+  const requestSavePartnerProfile = () => {
+    if (!partnerModal) return;
+    setGenericConfirm({
+      title: "Save Partner Details",
+      subtitle: partnerForm.store_name,
+      bodyText: `Update this pharmacy's registration details. Changes are saved immediately.`,
+      variant: "default",
+      confirmLabel: "Save Details",
+      onConfirm: doSavePartnerProfile,
+    });
+  };
+
+  // Admin-password step-up
+  const requestPasswordConfirm = (title: string, subtitle: string, onVerified: () => Promise<void> | void) => {
+    setPasswordInput("");
+    setPasswordError("");
+    setPasswordPrompt({ title, subtitle, onVerified });
+  };
+
+  const runPasswordVerify = async () => {
+    if (!passwordPrompt) return;
+    setPasswordError("");
+    setVerifyingPassword(true);
+    try {
+      const res = await fetch("/api/auth/verify-admin-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: passwordInput }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setPasswordError(data.error || "Incorrect password");
+        return;
+      }
+      const cb = passwordPrompt.onVerified;
+      setPasswordPrompt(null);
+      setPasswordInput("");
+      await cb();
+    } finally {
+      setVerifyingPassword(false);
+    }
+  };
+
+  // Block / Unblock flow
+  const doBlockPartner = async (phone: string, block: boolean, reason?: string) => {
+    const res = await fetch("/api/data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: block ? "block_user" : "unblock_user", phone, reason }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Failed to update block status");
+    }
+    setUsers((u) => u.map((x) => x.phone === phone ? { ...x, is_blocked: block ? 1 : 0, blocked_reason: block ? reason || null : null } : x));
+    setPartnerModal((m: any) => m && m.phone === phone ? { ...m, is_blocked: block ? 1 : 0, blocked_reason: block ? reason || null : null } : m);
+  };
+
+  const requestBlockPartner = (u: any, reason: string) => {
+    // Step 1: admin password. Step 2: final confirm modal. Step 3: block.
+    requestPasswordConfirm(
+      "Block Partner — Admin Confirmation",
+      `Enter your admin password to block ${u.store_name}. Blocking will sign the pharmacy out of the app immediately.`,
+      () => {
+        setGenericConfirm({
+          title: "Confirm Block Partner",
+          subtitle: u.store_name,
+          bodyText: reason
+            ? `Reason: "${reason}". This partner will be unable to place orders or sign in until unblocked.`
+            : `This partner will be unable to place orders or sign in until unblocked.`,
+          variant: "destructive",
+          confirmLabel: "Block Partner",
+          onConfirm: () => doBlockPartner(u.phone, true, reason),
+        });
+      }
+    );
+  };
+
+  const requestUnblockPartner = (u: any) => {
+    setGenericConfirm({
+      title: "Unblock Partner",
+      subtitle: u.store_name,
+      bodyText: `Restore access for this pharmacy. They will be able to sign in and place orders immediately.`,
+      variant: "success",
+      confirmLabel: "Unblock Partner",
+      onConfirm: () => doBlockPartner(u.phone, false),
+    });
+  };
+
+  const requestCreditSave = () => {
+    if (!creditModal) return;
+    const addAmt = Number(creditModal.addAmount) || 0;
+    const finalLimit = addAmt > 0 ? creditModal.limit + addAmt : Number(creditModal.newLimit) || 0;
+    const finalBalance = Number(creditModal.newBalance) || 0;
+    const diffLimit = finalLimit - creditModal.limit;
+    const diffBalance = finalBalance - creditModal.balance;
+    setGenericConfirm({
+      title: addAmt > 0 ? "Add Credit" : "Update Credit Facility",
+      subtitle: creditModal.store,
+      bodyText:
+        addAmt > 0
+          ? `Increase credit limit by ₹${fmt(addAmt)} — new limit will be ₹${fmt(finalLimit)}.`
+          : `Set credit limit to ₹${fmt(finalLimit)} (${diffLimit >= 0 ? "+" : ""}₹${fmt(diffLimit)}) and used balance to ₹${fmt(finalBalance)} (${diffBalance >= 0 ? "+" : ""}₹${fmt(diffBalance)}).`,
+      variant: addAmt > 0 ? "success" : "default",
+      confirmLabel: addAmt > 0 ? "Add & Save" : "Save Changes",
+      onConfirm: async () => {
+        await saveCreditToServer(creditModal.phone, finalLimit, finalBalance);
+        setCreditModal(null);
+      },
+    });
   };
 
   // ── Order Handlers ────────────────────────────────────────────────────────
@@ -212,11 +524,39 @@ export default function Dashboard() {
     setCourierModal(true);
   };
 
+  // Route a status change through the confirmation flow.
+  // Dispatch always needs courier details, so it opens the courier modal directly.
+  const requestStatusChange = (order: any, newStatus: string) => {
+    if (newStatus === "Dispatch") {
+      openCourierModal(order.id);
+      return;
+    }
+    setPendingStatus({
+      orderId: order.id,
+      storeName: order.store_name || "—",
+      currentStage: mapStatusToStage(order.status) || "—",
+      newStatus,
+    });
+  };
+
+  const confirmPendingStatus = async () => {
+    if (!pendingStatus) return;
+    setSavingStatus(true);
+    try {
+      await handleOrderStatus(pendingStatus.orderId, pendingStatus.newStatus);
+      setPendingStatus(null);
+    } finally {
+      setSavingStatus(false);
+    }
+  };
+
   const handleDispatch = async () => {
-    if (!courierForm.courier_name.trim() || !courierForm.tracking_id.trim()) return;
+    if (!courierForm.courier_name.trim()) return;
     setDispatching(true);
     try {
-      await handleOrderStatus(courierOrderId, "Shipped", courierForm);
+      // We reuse the existing courier_name column to store the staff name so
+      // no DB migration is needed. Tracking_id stays unused / empty.
+      await handleOrderStatus(courierOrderId, "Dispatch", { courier_name: courierForm.courier_name });
       setCourierModal(false);
     } finally {
       setDispatching(false);
@@ -239,6 +579,7 @@ export default function Dashboard() {
 
   const openEditProduct = (product: any) => {
     setEditProduct(product);
+    const rawImages = Array.isArray(product.images) ? product.images : (product.image ? [product.image] : []);
     setEditProdForm({
       name: product.name ?? "",
       company: product.company ?? product.manufacturer ?? "",
@@ -249,33 +590,74 @@ export default function Dashboard() {
       stock: product.stock ?? 0,
       composition: product.composition ?? product.drug_name ?? "",
       description: product.description ?? "",
+      images: rawImages,
+      short_expiry: !!product.short_expiry,
+      discount_percent: product.discount_percent ?? "",
+      expiry_date: product.expiry_date ?? "",
     });
   };
 
-  const handleSaveProduct = async () => {
+  const doSaveProduct = async () => {
     if (!editProduct) return;
-    setSavingProduct(true);
-    try {
-      await fetch("/api/data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update_product", item: { id: editProduct.id, ...editProdForm, price: Number(editProdForm.price), mrp: Number(editProdForm.mrp), stock: Number(editProdForm.stock) } }),
-      });
-      setInventory((inv) => inv.map((p) => p.id === editProduct.id ? { ...p, ...editProdForm, price: Number(editProdForm.price), mrp: Number(editProdForm.mrp), stock: Number(editProdForm.stock) } : p));
-      setEditProduct(null);
-    } finally {
-      setSavingProduct(false);
-    }
-  };
-
-  const handleDeleteProduct = async (id: number) => {
-    if (!confirm("Permanently delete this product? This cannot be undone.")) return;
+    const payload = {
+      ...editProdForm,
+      price: Number(editProdForm.price),
+      mrp: Number(editProdForm.mrp),
+      stock: Number(editProdForm.stock),
+      discount_percent: editProdForm.discount_percent ? Number(editProdForm.discount_percent) : 0,
+    };
     await fetch("/api/data", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "delete_product", id }),
+      body: JSON.stringify({ action: "update_product", item: { id: editProduct.id, ...payload } }),
     });
-    setInventory((inv) => inv.filter((p) => p.id !== id));
+    setInventory((inv) => inv.map((p) => p.id === editProduct.id ? { ...p, ...payload } : p));
+    setEditProduct(null);
+  };
+
+  const requestSaveProduct = () => {
+    if (!editProduct) return;
+    setGenericConfirm({
+      title: "Save Product Changes",
+      subtitle: editProduct.name,
+      bodyText: `Update this product's details across all fields — price, stock, images, and metadata. Changes go live immediately for all pharmacy partners.`,
+      variant: "default",
+      confirmLabel: "Save Changes",
+      onConfirm: doSaveProduct,
+    });
+  };
+
+  const requestDeleteProduct = (p: any) => {
+    setGenericConfirm({
+      title: "Delete Product?",
+      subtitle: p.name,
+      bodyText: "This permanently removes the product from the catalog. This action cannot be undone.",
+      variant: "destructive",
+      confirmLabel: "Delete Product",
+      onConfirm: async () => {
+        await fetch("/api/data", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete_product", id: p.id }),
+        });
+        setInventory((inv) => inv.filter((x) => x.id !== p.id));
+      },
+    });
+  };
+
+  // Read one image file as a data URL (base64). Keeps uploads working without a backend endpoint.
+  const readFileAsDataURL = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const handleImageFilesSelected = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const urls = await Promise.all(Array.from(files).slice(0, 8).map(readFileAsDataURL));
+    setEditProdForm((f: any) => ({ ...f, images: [...(f.images || []), ...urls] }));
   };
 
   // ── Scheme Handlers ───────────────────────────────────────────────────────
@@ -397,7 +779,8 @@ export default function Dashboard() {
   });
 
   const filteredOrders = orders.filter((o) => {
-    const matchStatus = orderStatusFilter === "All" || o.status === orderStatusFilter;
+    const stage = mapStatusToStage(o.status);
+    const matchStatus = orderStatusFilter === "All" || stage === orderStatusFilter;
     const q = orderSearch.toLowerCase();
     const matchSearch = !q || o.id?.toLowerCase().includes(q) || o.store_name?.toLowerCase().includes(q) || o.user_phone?.includes(q);
     return matchStatus && matchSearch;
@@ -415,10 +798,10 @@ export default function Dashboard() {
   const totalPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
 
   // Analytics
-  const nonRejectedOrders = orders.filter((o) => o.status !== "Rejected");
+  const nonRejectedOrders = orders.filter((o) => mapStatusToStage(o.status) !== "Rejected");
   const totalRevenue = nonRejectedOrders.reduce((s, o) => s + (o.total ?? 0), 0);
   const pendingUsersCount = users.filter((u) => !u.is_approved && u.role !== "admin").length;
-  const newOrdersCount = orders.filter((o) => o.status === "Placed").length;
+  const newOrdersCount = orders.filter((o) => mapStatusToStage(o.status) === "Invoicing").length;
 
   const monthlyRevenue: Record<string, number> = {};
   const monthlyOrders: Record<string, number> = {};
@@ -458,24 +841,24 @@ export default function Dashboard() {
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
-      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
+      <header className="bg-brand-900 text-white border-b border-brand-800 sticky top-0 z-40 shadow-md">
         <div className="max-w-[1440px] mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-emerald-500 flex items-center justify-center">
-              <Pill className="w-5 h-5 text-slate-950" />
+            <div className="w-9 h-9 rounded-lg bg-brand-400 flex items-center justify-center">
+              <Pill className="w-5 h-5 text-brand-900" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold tracking-tight text-lg text-white">UPKEM B2B PHARMA</span>
-                <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono font-semibold uppercase tracking-wide border border-emerald-500/30">Wholesale Portal</span>
+                <span className="text-xs bg-brand-500/20 text-brand-100 px-2 py-0.5 rounded font-mono font-semibold uppercase tracking-wide border border-brand-400/40">Wholesale Portal</span>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium">Licensed Pharmaceutical Distributor Command Center</p>
+              <p className="text-[11px] text-brand-100/80 font-medium">Licensed Pharmaceutical Distributor Command Center</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 text-xs font-semibold text-slate-300 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="hidden md:flex items-center gap-2 text-xs font-semibold text-brand-100 bg-brand-800/80 px-3 py-1.5 rounded-full border border-brand-700">
+              <span className="w-2 h-2 rounded-full bg-brand-400 animate-pulse" />
               Live Sync
             </div>
 
@@ -483,10 +866,10 @@ export default function Dashboard() {
             <div className="relative">
               <button
                 onClick={() => { setShowSessions((v) => !v); setShowNotif(false); }}
-                className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700 border border-slate-700 transition-colors"
+                className="p-2 bg-brand-800 rounded-lg hover:bg-brand-700 border border-brand-700 transition-colors"
                 title="Active Sessions"
               >
-                <Shield className="w-4 h-4 text-slate-300" />
+                <Shield className="w-4 h-4 text-brand-100" />
               </button>
               {adminSessions.length > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">
@@ -499,20 +882,20 @@ export default function Dashboard() {
             <div className="relative">
               <button
                 onClick={() => { setShowNotif((v) => !v); setNotifCount(0); setShowSessions(false); }}
-                className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700 border border-slate-700 transition-colors"
+                className="p-2 bg-brand-800 rounded-lg hover:bg-brand-700 border border-brand-700 transition-colors"
               >
-                <Bell className="w-4 h-4 text-slate-300" />
+                <Bell className="w-4 h-4 text-brand-100" />
               </button>
               {notifCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400 text-[10px] font-bold text-slate-950">
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-400 text-[10px] font-bold text-brand-900">
                   {notifCount}
                 </span>
               )}
             </div>
 
-            <div className="h-6 w-px bg-slate-800" />
+            <div className="h-6 w-px bg-brand-700" />
 
-            <Button variant="ghost" onClick={handleLogout} className="text-slate-300 hover:text-white hover:bg-slate-800 gap-2 h-9 px-3 text-xs font-semibold rounded-lg">
+            <Button variant="ghost" onClick={handleLogout} className="text-brand-100 hover:text-white hover:bg-brand-800 gap-2 h-9 px-3 text-xs font-semibold rounded-lg">
               <LogOut className="w-4 h-4" /> Logout
             </Button>
           </div>
@@ -581,10 +964,10 @@ export default function Dashboard() {
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {[
-            { label: "Total SKUs", value: inventory.length.toLocaleString(), sub: "Upkar & Swasthik Catalog", icon: <Package className="w-5 h-5" />, bg: "bg-slate-50 text-slate-700" },
+            { label: "Total SKUs", value: inventory.length.toLocaleString(), sub: "Upkar & Swasthik Catalog", icon: <Package className="w-5 h-5" />, bg: "bg-brand-50 text-brand-800" },
             { label: "Pharmacy Partners", value: users.filter((u) => u.role !== "admin").length, sub: `${pendingUsersCount} Pending Approvals`, icon: <Building2 className="w-5 h-5" />, bg: "bg-blue-50 text-blue-700" },
             { label: "Wholesale Orders", value: orders.length, sub: `${newOrdersCount} New Orders`, icon: <Activity className="w-5 h-5" />, bg: "bg-amber-50 text-amber-700" },
-            { label: "Total Sales", value: `₹${fmt(totalRevenue)}`, sub: "Verified Orders Only", icon: <BarChart2 className="w-5 h-5" />, bg: "bg-emerald-50 text-emerald-700" },
+            { label: "Total Sales", value: `₹${fmt(totalRevenue)}`, sub: "Verified Orders Only", icon: <BarChart2 className="w-5 h-5" />, bg: "bg-brand-100 text-brand-800" },
           ].map((kpi, i) => (
             <Card key={i} className="bg-white border border-slate-200 shadow-sm rounded-xl p-5">
               <div className="flex justify-between items-start">
@@ -609,7 +992,7 @@ export default function Dashboard() {
               { val: "schemes", icon: <Tag className="w-4 h-4" />, label: "Schemes" },
               { val: "analytics", icon: <BarChart2 className="w-4 h-4" />, label: "Analytics" },
             ].map((t) => (
-              <TabsTrigger key={t.val} value={t.val} className="data-[state=active]:bg-slate-900 data-[state=active]:text-white rounded-lg px-4 font-semibold text-xs transition-all flex items-center gap-2 whitespace-nowrap">
+              <TabsTrigger key={t.val} value={t.val} className="data-[state=active]:bg-brand-800 data-[state=active]:text-white rounded-lg px-4 font-semibold text-xs transition-all flex items-center gap-2 whitespace-nowrap">
                 {t.icon} {t.label}
               </TabsTrigger>
             ))}
@@ -634,17 +1017,20 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Status filter tabs */}
+                {/* Status filter tabs — 3-stage lifecycle */}
                 <div className="flex gap-1.5 mt-4 flex-wrap">
-                  {ORDER_STATUSES.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setOrderStatusFilter(s)}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${orderStatusFilter === s ? "bg-slate-900 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`}
-                    >
-                      {s}{s !== "All" && ` (${orders.filter((o) => o.status === s).length})`}
-                    </button>
-                  ))}
+                  {ORDER_STATUSES.map((s) => {
+                    const count = s === "All" ? orders.length : orders.filter((o) => mapStatusToStage(o.status) === s).length;
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => setOrderStatusFilter(s)}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${orderStatusFilter === s ? "bg-brand-800 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-brand-50"}`}
+                      >
+                        {s}{s !== "All" && ` (${count})`}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -673,25 +1059,45 @@ export default function Dashboard() {
                         <TableCell className="py-4 text-xs font-medium text-slate-500">{o.date}</TableCell>
                         <TableCell className="py-4 text-xs text-slate-600">{o.items?.length ?? 0} SKUs</TableCell>
                         <TableCell className="py-4 font-extrabold text-slate-900 text-sm tabular-nums">₹{fmt(o.total)}</TableCell>
-                        <TableCell className="py-4">{getStatusBadge(o.status)}</TableCell>
-                        <TableCell className="py-4 pr-6 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex justify-end gap-1.5">
-                            {o.status === "Placed" && (
-                              <>
-                                <Button size="sm" onClick={() => handleOrderStatus(o.id, "Accepted")} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-7 px-3">Accept</Button>
-                                <Button size="sm" variant="outline" onClick={() => handleOrderStatus(o.id, "Rejected")} className="border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold text-xs h-7 px-3">Reject</Button>
-                              </>
-                            )}
-                            {o.status === "Accepted" && (
-                              <Button size="sm" onClick={() => handleOrderStatus(o.id, "Processing")} className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs h-7 px-3">Process</Button>
-                            )}
-                            {o.status === "Processing" && (
-                              <Button size="sm" onClick={() => openCourierModal(o.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-7 px-3">Dispatch</Button>
-                            )}
-                            {o.status === "Shipped" && (
-                              <Button size="sm" onClick={() => handleOrderStatus(o.id, "Delivered")} className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs h-7 px-3">Mark Delivered</Button>
+                        <TableCell className="py-4" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(o.status)}
+                            {/* Invoice icon appears once the invoice has been approved
+                                (order has moved past Invoicing). Opens the invoice HTML in a new tab. */}
+                            {["Packaging", "Dispatch"].includes(mapStatusToStage(o.status) || "") && (
+                              <a
+                                href={`/api/invoices/${o.id}/html`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="View invoice"
+                                className="inline-flex items-center justify-center w-6 h-6 rounded bg-brand-50 border border-brand-200 text-brand-800 hover:bg-brand-100 transition-colors"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                              </a>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="py-4 pr-6 text-right" onClick={(e) => e.stopPropagation()}>
+                          {(() => {
+                            const stage = mapStatusToStage(o.status);
+                            if (stage === "Invoicing") return (
+                              <div className="flex items-center justify-end gap-2">
+                                <Button size="sm" onClick={() => openReviewInvoice(o)} className="bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs h-8 px-3">
+                                  <FileText className="w-3.5 h-3.5 mr-1" /> Review Invoice
+                                </Button>
+                                <button onClick={() => requestStatusChange(o, "Rejected")} className="text-xs font-semibold text-rose-600 hover:text-rose-800 hover:underline px-1">Reject</button>
+                              </div>
+                            );
+                            if (stage === "Packaging") return (
+                              <div className="flex items-center justify-end gap-2">
+                                <Button size="sm" onClick={() => openCourierModal(o.id)} className="bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs h-8 px-3">
+                                  <Truck className="w-3.5 h-3.5 mr-1" /> Dispatch
+                                </Button>
+                                <button onClick={() => requestStatusChange(o, "Rejected")} className="text-xs font-semibold text-rose-600 hover:text-rose-800 hover:underline px-1">Reject</button>
+                              </div>
+                            );
+                            return <span className="text-[11px] text-slate-400 italic px-2">Order complete</span>;
+                          })()}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -792,7 +1198,7 @@ export default function Dashboard() {
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900" onClick={() => openEditProduct(p)} title="Edit">
                                 <Edit2 className="w-3.5 h-3.5" />
                               </Button>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-rose-400 hover:text-rose-700 hover:bg-rose-50" onClick={() => handleDeleteProduct(p.id)} title="Delete">
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-rose-400 hover:text-rose-700 hover:bg-rose-50" onClick={() => requestDeleteProduct(p)} title="Delete">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </Button>
                             </div>
@@ -839,7 +1245,7 @@ export default function Dashboard() {
                       {showPendingOnly ? "Showing Pending" : "All Partners"}
                     </button>
                     <input type="file" accept=".xlsx,.xls" className="hidden" ref={userFileInput} onChange={(e) => handleFileUpload(e, "users")} />
-                    <Button size="sm" className="bg-slate-900 text-white font-semibold text-xs" onClick={() => userFileInput.current?.click()} disabled={uploadingUsers}>
+                    <Button size="sm" className="bg-brand-800 hover:bg-brand-900 text-white font-semibold text-xs" onClick={() => userFileInput.current?.click()} disabled={uploadingUsers}>
                       <Upload className="w-3.5 h-3.5 mr-1.5" /> Import
                     </Button>
                   </div>
@@ -854,101 +1260,41 @@ export default function Dashboard() {
                 {filteredUsers.length === 0 ? (
                   <div className="py-12 text-center text-slate-400 text-sm">No partners match this filter</div>
                 ) : filteredUsers.map((u) => {
-                  const isExpanded = expandedUser === u.phone;
                   const creditUsedPct = u.credit_limit > 0 ? Math.min(100, (u.credit_balance / u.credit_limit) * 100) : 0;
+                  const isBlocked = !!u.is_blocked;
                   return (
-                    <div key={u.phone} className="bg-white hover:bg-slate-50/60 transition-colors">
-                      {/* Main row */}
-                      <div className="p-4 flex items-center gap-4 cursor-pointer" onClick={() => setExpandedUser(isExpanded ? null : u.phone)}>
-                        <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                          <span className="font-bold text-emerald-800 text-sm">{u.store_name?.[0]?.toUpperCase()}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-bold text-sm text-slate-900 truncate">{u.store_name}</p>
-                            {u.is_approved
-                              ? <Badge className="bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-semibold px-1.5">Verified</Badge>
+                    <div
+                      key={u.phone}
+                      className={`bg-white hover:bg-brand-50/60 transition-colors p-4 flex items-center gap-4 cursor-pointer ${isBlocked ? "opacity-70" : ""}`}
+                      onClick={() => openPartnerModal(u)}
+                    >
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isBlocked ? "bg-rose-100" : "bg-brand-100"}`}>
+                        <span className={`font-bold text-sm ${isBlocked ? "text-rose-800" : "text-brand-800"}`}>{u.store_name?.[0]?.toUpperCase()}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-sm text-slate-900 truncate">{u.store_name}</p>
+                          {isBlocked
+                            ? <Badge className="bg-rose-50 text-rose-800 border border-rose-200 text-[10px] font-semibold px-1.5">Blocked</Badge>
+                            : u.is_approved
+                              ? <Badge className="bg-brand-50 text-brand-800 border border-brand-200 text-[10px] font-semibold px-1.5">Verified</Badge>
                               : <Badge className="bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-semibold px-1.5">Pending</Badge>}
-                          </div>
-                          <p className="text-xs text-slate-500 font-mono mt-0.5">{u.phone}</p>
                         </div>
-                        <div className="hidden md:block text-right mr-4">
-                          <p className="text-xs font-bold text-slate-900 tabular-nums">₹{fmt(u.credit_balance)} / ₹{fmt(u.credit_limit)}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5">Credit Used / Limit</p>
-                          <div className="w-28 h-1.5 bg-slate-200 rounded-full mt-1 ml-auto">
-                            <div className={`h-1.5 rounded-full ${creditUsedPct > 80 ? "bg-rose-500" : creditUsedPct > 50 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${creditUsedPct}%` }} />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {!u.is_approved && (
-                            <Button size="sm" onClick={(e) => { e.stopPropagation(); handleApproveUser(u.phone); }} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-7 px-3">Approve</Button>
-                          )}
-                          {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                        <p className="text-xs text-slate-500 font-mono mt-0.5">{u.phone}{u.city ? ` · ${u.city}` : u.zone ? ` · ${u.zone}` : ""}</p>
+                      </div>
+                      <div className="hidden md:block text-right mr-4">
+                        <p className="text-xs font-bold text-slate-900 tabular-nums">₹{fmt(u.credit_balance)} / ₹{fmt(u.credit_limit)}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Credit Used / Limit</p>
+                        <div className="w-28 h-1.5 bg-slate-200 rounded-full mt-1 ml-auto">
+                          <div className={`h-1.5 rounded-full ${creditUsedPct > 80 ? "bg-rose-500" : creditUsedPct > 50 ? "bg-amber-500" : "bg-brand-600"}`} style={{ width: `${creditUsedPct}%` }} />
                         </div>
                       </div>
-
-                      {/* Expanded details */}
-                      {isExpanded && (
-                        <div className="px-4 pb-4 bg-slate-50/60 border-t border-slate-100">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
-                            {/* Info fields */}
-                            <div className="space-y-2 text-xs">
-                              {[
-                                { label: "Drug License", value: u.drug_license, icon: <FileText className="w-3 h-3" /> },
-                                { label: "GST Number", value: u.gst_number, icon: <CreditCard className="w-3 h-3" /> },
-                                { label: "City", value: u.city || u.zone, icon: <MapPin className="w-3 h-3" /> },
-                                { label: "Address", value: u.address, icon: <MapPin className="w-3 h-3" /> },
-                                { label: "Email", value: u.email, icon: <FileText className="w-3 h-3" /> },
-                                { label: "User Type", value: u.user_type, icon: <Building2 className="w-3 h-3" /> },
-                              ].map(({ label, value, icon }) => value ? (
-                                <div key={label} className="flex items-start gap-2">
-                                  <span className="text-slate-400 mt-0.5">{icon}</span>
-                                  <div>
-                                    <span className="font-semibold text-slate-500">{label}: </span>
-                                    <span className="text-slate-800">{value}</span>
-                                  </div>
-                                </div>
-                              ) : null)}
-                            </div>
-
-                            {/* Credit editor */}
-                            <div className="bg-white rounded-lg border border-slate-200 p-3">
-                              <p className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1"><CreditCard className="w-3.5 h-3.5" /> Credit Facility</p>
-                              {editingCredit?.phone === u.phone ? (
-                                <div className="space-y-2">
-                                  <div>
-                                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Credit Limit (₹)</label>
-                                    <input type="number" value={editingCredit?.limit ?? ""} onChange={(e) => setEditingCredit((c) => c && { ...c, limit: e.target.value })} className="w-full mt-1 h-8 px-2 border border-slate-200 rounded text-xs font-mono focus:ring-1 focus:ring-slate-900 focus:outline-none" />
-                                  </div>
-                                  <div>
-                                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Credit Used (₹)</label>
-                                    <input type="number" value={editingCredit?.balance ?? ""} onChange={(e) => setEditingCredit((c) => c && { ...c, balance: e.target.value })} className="w-full mt-1 h-8 px-2 border border-slate-200 rounded text-xs font-mono focus:ring-1 focus:ring-slate-900 focus:outline-none" />
-                                  </div>
-                                  <div className="flex gap-2 pt-1">
-                                    <Button size="sm" onClick={handleSaveCredit} disabled={savingCredit} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 flex-1">
-                                      {savingCredit ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
-                                    </Button>
-                                    <Button size="sm" variant="outline" onClick={() => setEditingCredit(null)} className="text-xs h-7 flex-1">Cancel</Button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div>
-                                  <div className="flex justify-between text-xs mb-1">
-                                    <span className="text-slate-500">Used: <span className="font-bold text-slate-800">₹{fmt(u.credit_balance)}</span></span>
-                                    <span className="text-slate-500">Limit: <span className="font-bold text-slate-800">₹{fmt(u.credit_limit)}</span></span>
-                                  </div>
-                                  <div className="w-full h-2 bg-slate-200 rounded-full">
-                                    <div className={`h-2 rounded-full ${creditUsedPct > 80 ? "bg-rose-500" : creditUsedPct > 50 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${creditUsedPct}%` }} />
-                                  </div>
-                                  <Button size="sm" variant="outline" onClick={() => setEditingCredit({ phone: u.phone, limit: String(u.credit_limit ?? 0), balance: String(u.credit_balance ?? 0) })} className="mt-2 w-full text-xs h-7 border-slate-200">
-                                    <Edit2 className="w-3 h-3 mr-1" /> Edit Credit
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {!u.is_approved && !isBlocked && (
+                          <Button size="sm" onClick={(e) => { e.stopPropagation(); requestApproveUser(u); }} className="bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs h-7 px-3">Approve</Button>
+                        )}
+                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                      </div>
                     </div>
                   );
                 })}
@@ -964,7 +1310,7 @@ export default function Dashboard() {
                   <h2 className="text-lg font-bold text-slate-900">B2B Discount Schemes</h2>
                   <p className="text-xs text-slate-500 font-medium mt-0.5">Create and manage promotional codes for pharmacy partners</p>
                 </div>
-                <Button size="sm" className="bg-slate-900 text-white font-semibold text-xs h-9 px-4 flex items-center gap-2" onClick={() => { setEditingScheme(null); setSchemeForm(BLANK_SCHEME); setShowSchemeForm((v) => !v); }}>
+                <Button size="sm" className="bg-brand-800 hover:bg-brand-900 text-white font-semibold text-xs h-9 px-4 flex items-center gap-2" onClick={() => { setEditingScheme(null); setSchemeForm(BLANK_SCHEME); setShowSchemeForm((v) => !v); }}>
                   <Plus className="w-3.5 h-3.5" /> {showSchemeForm && !editingScheme ? "Cancel" : "Create Scheme"}
                 </Button>
               </div>
@@ -1144,8 +1490,8 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               {[
                 { label: "Avg. Order Value", value: `₹${orders.length > 0 ? fmt(Math.round(totalRevenue / Math.max(nonRejectedOrders.length, 1))) : "—"}`, sub: "Non-rejected orders" },
-                { label: "Fulfillment Rate", value: `${orders.length > 0 ? Math.round((orders.filter((o) => ["Shipped", "Delivered"].includes(o.status)).length / orders.length) * 100) : 0}%`, sub: "Shipped + Delivered" },
-                { label: "Rejection Rate", value: `${orders.length > 0 ? Math.round((orders.filter((o) => o.status === "Rejected").length / orders.length) * 100) : 0}%`, sub: "Of total orders" },
+                { label: "Fulfillment Rate", value: `${orders.length > 0 ? Math.round((orders.filter((o) => mapStatusToStage(o.status) === "Dispatch").length / orders.length) * 100) : 0}%`, sub: "Dispatched orders" },
+                { label: "Rejection Rate", value: `${orders.length > 0 ? Math.round((orders.filter((o) => mapStatusToStage(o.status) === "Rejected").length / orders.length) * 100) : 0}%`, sub: "Of total orders" },
                 { label: "Active Schemes", value: schemes.filter((s) => s.is_active).length, sub: `${schemes.length} total` },
               ].map((stat, i) => (
                 <Card key={i} className="bg-white border border-slate-200 shadow-sm rounded-xl p-4">
@@ -1259,47 +1605,194 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Courier info */}
+              {/* Dispatch info — appointed staff for this delivery */}
               {selectedOrder.courier_name && (
-                <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
-                  <h4 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-2 flex items-center gap-1"><Truck className="w-3.5 h-3.5" /> Courier Info</h4>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div><span className="text-blue-600 font-semibold">Courier: </span><span className="text-blue-900 font-bold">{selectedOrder.courier_name}</span></div>
-                    <div><span className="text-blue-600 font-semibold">AWB: </span><span className="font-mono font-bold text-blue-900">{selectedOrder.tracking_id}</span></div>
-                  </div>
+                <div className="bg-brand-50 rounded-lg border border-brand-200 p-4">
+                  <h4 className="text-xs font-bold text-brand-800 uppercase tracking-wider mb-2 flex items-center gap-1"><Truck className="w-3.5 h-3.5" /> Delivery Assigned To</h4>
+                  <p className="text-sm font-bold text-brand-900">{selectedOrder.courier_name}</p>
                 </div>
               )}
 
-              {/* Status actions in panel */}
-              <div>
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Actions</h4>
-                <div className="flex flex-wrap gap-2">
-                  {selectedOrder.status === "Placed" && (
-                    <>
-                      <Button size="sm" onClick={() => handleOrderStatus(selectedOrder.id, "Accepted")} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8 px-4">Accept Order</Button>
-                      <Button size="sm" variant="outline" onClick={() => handleOrderStatus(selectedOrder.id, "Rejected")} className="border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold text-xs h-8 px-4">Reject Order</Button>
-                    </>
-                  )}
-                  {selectedOrder.status === "Accepted" && (
-                    <Button size="sm" onClick={() => handleOrderStatus(selectedOrder.id, "Processing")} className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs h-8 px-4">Move to Processing</Button>
-                  )}
-                  {selectedOrder.status === "Processing" && (
-                    <Button size="sm" onClick={() => { openCourierModal(selectedOrder.id); }} className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8 px-4">Dispatch Order</Button>
-                  )}
-                  {selectedOrder.status === "Shipped" && (
-                    <Button size="sm" onClick={() => handleOrderStatus(selectedOrder.id, "Delivered")} className="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs h-8 px-4">Mark Delivered</Button>
-                  )}
-                  {!["Rejected", "Delivered"].includes(selectedOrder.status) && (
-                    <Button size="sm" variant="outline" onClick={() => handleOrderStatus(selectedOrder.id, "Rejected")} className="border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold text-xs h-8 px-4">Reject</Button>
-                  )}
+              {/* Invoice link — visible once invoice is approved */}
+              {["Packaging", "Dispatch"].includes(mapStatusToStage(selectedOrder.status) || "") && (
+                <div className="mb-3">
+                  <a
+                    href={`/api/invoices/${selectedOrder.id}/html`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-brand-50 border border-brand-200 text-brand-800 rounded-lg text-xs font-bold hover:bg-brand-100"
+                  >
+                    <FileText className="w-4 h-4" /> View Invoice
+                  </a>
                 </div>
-              </div>
+              )}
+
+              {/* Actions — direct buttons per stage. Forward-only. */}
+              {(() => {
+                const stage = mapStatusToStage(selectedOrder.status);
+                if (!stage || (stage !== "Invoicing" && stage !== "Packaging")) {
+                  return (
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                        Status · <span className="text-brand-800 font-extrabold normal-case">{stage || selectedOrder.status}</span>
+                      </h4>
+                      <p className="text-xs text-slate-500 italic">Order is {String(stage || selectedOrder.status).toLowerCase()} — no further changes allowed.</p>
+                    </div>
+                  );
+                }
+                return (
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      Status · <span className="text-brand-800 font-extrabold normal-case">{stage}</span>
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      {stage === "Invoicing" && (
+                        <Button size="sm" onClick={() => { openReviewInvoice(selectedOrder); setSelectedOrder(null); }} className="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs h-9">
+                          <FileText className="w-3.5 h-3.5 mr-1" /> Review Invoice
+                        </Button>
+                      )}
+                      {stage === "Packaging" && (
+                        <Button size="sm" onClick={() => openCourierModal(selectedOrder.id)} className="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs h-9">
+                          <Truck className="w-3.5 h-3.5 mr-1" /> Dispatch
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => requestStatusChange(selectedOrder, "Rejected")} className="text-rose-700 border-rose-200 hover:bg-rose-50 font-semibold text-xs h-9 px-4">
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </>
       )}
 
-      {/* ── COURIER MODAL ──────────────────────────────────────────────────────── */}
+      {/* ── STATUS CONFIRM MODAL (shared) ──────────────────────────────────────── */}
+      <ConfirmModal
+        open={!!pendingStatus}
+        title="Confirm Status Change"
+        subtitle={pendingStatus ? `${pendingStatus.storeName} · ${pendingStatus.orderId.slice(0, 12)}…` : ""}
+        fromLabel={pendingStatus?.currentStage}
+        toLabel={pendingStatus?.newStatus}
+        fromTone="slate"
+        toTone={
+          pendingStatus?.newStatus === "Rejected" ? "rose"
+          : pendingStatus?.newStatus === "Packaging" ? "amber"
+          : pendingStatus?.newStatus === "Invoicing" ? "slate"
+          : "emerald"
+        }
+        variant={pendingStatus?.newStatus === "Rejected" ? "destructive" : "default"}
+        confirmLabel="Confirm & Save"
+        saving={savingStatus}
+        onCancel={() => setPendingStatus(null)}
+        onConfirm={confirmPendingStatus}
+      />
+
+      {/* ── GENERIC CONFIRM MODAL (shared) ─────────────────────────────────────── */}
+      <ConfirmModal
+        open={!!genericConfirm}
+        title={genericConfirm?.title || ""}
+        subtitle={genericConfirm?.subtitle}
+        bodyText={genericConfirm?.bodyText}
+        variant={genericConfirm?.variant || "default"}
+        confirmLabel={genericConfirm?.confirmLabel}
+        saving={genericSaving}
+        onCancel={() => setGenericConfirm(null)}
+        onConfirm={runGenericConfirm}
+      />
+
+      {/* ── CREDIT MANAGEMENT MODAL ────────────────────────────────────────────── */}
+      {creditModal && (
+        <div className="fixed inset-0 z-[65] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md p-6">
+            <div className="flex justify-between items-start mb-5">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">Manage Credit</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{creditModal.store} · <span className="font-mono">{creditModal.phone}</span></p>
+              </div>
+              <button onClick={() => setCreditModal(null)} className="p-1 rounded-lg hover:bg-slate-100 text-slate-500"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Current facility */}
+            <div className="grid grid-cols-2 gap-2 mb-5">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Current Limit</p>
+                <p className="text-base font-bold text-slate-900 mt-1 tabular-nums">₹{fmt(creditModal.limit)}</p>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Used Balance</p>
+                <p className="text-base font-bold text-slate-900 mt-1 tabular-nums">₹{fmt(creditModal.balance)}</p>
+              </div>
+            </div>
+
+            {/* Quick action: add more credit */}
+            <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-4 mb-4">
+              <p className="text-xs font-bold text-emerald-900 mb-2 flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> Add Credit (increase limit)</p>
+              <div className="flex gap-2">
+                <input
+                  type="number" min="0" placeholder="Amount (₹)"
+                  value={creditModal.addAmount}
+                  onChange={(e) => setCreditModal((c) => c && { ...c, addAmount: e.target.value })}
+                  className="flex-1 h-9 px-3 rounded-lg border border-emerald-200 bg-white text-xs font-mono focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+                />
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 px-4"
+                  disabled={!creditModal.addAmount || Number(creditModal.addAmount) <= 0}
+                  onClick={requestCreditSave}
+                >
+                  Add & Confirm
+                </Button>
+              </div>
+              <p className="text-[10px] text-emerald-800 mt-1.5">Use this when a pharmacy requests more credit — quickest way to top up the limit.</p>
+            </div>
+
+            {/* Direct edit: set exact values */}
+            <div className="border border-slate-200 rounded-lg p-4">
+              <p className="text-xs font-bold text-slate-700 mb-3">Or set exact values</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">New Credit Limit (₹)</label>
+                  <input
+                    type="number" min="0"
+                    value={creditModal.newLimit}
+                    onChange={(e) => setCreditModal((c) => c && { ...c, newLimit: e.target.value })}
+                    className="w-full mt-1 h-9 px-3 border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Used Balance (₹)</label>
+                  <input
+                    type="number" min="0"
+                    value={creditModal.newBalance}
+                    onChange={(e) => setCreditModal((c) => c && { ...c, newBalance: e.target.value })}
+                    className="w-full mt-1 h-9 px-3 border border-slate-200 rounded-lg text-xs font-mono focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                  />
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 w-full text-xs h-9 border-slate-300 font-semibold"
+                onClick={() => {
+                  // Clear the quick-add so requestCreditSave uses newLimit/newBalance path.
+                  setCreditModal((c) => c && { ...c, addAmount: "" });
+                  setTimeout(requestCreditSave, 0);
+                }}
+              >
+                <Edit2 className="w-3.5 h-3.5 mr-1" /> Save Exact Values (with confirmation)
+              </Button>
+            </div>
+
+            <div className="flex gap-2 mt-5">
+              <Button variant="outline" className="flex-1 text-xs h-10" onClick={() => setCreditModal(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DISPATCH MODAL — just the appointed staff name ─────────────────────── */}
       {courierModal && (
         <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-sm p-6">
@@ -1310,21 +1803,23 @@ export default function Dashboard() {
               </div>
               <button onClick={() => setCourierModal(false)} className="p-1 rounded-lg hover:bg-slate-100 text-slate-500"><X className="w-5 h-5" /></button>
             </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Courier Partner</label>
-                <input type="text" placeholder="e.g. BlueDart, Delhivery, DTDC" value={courierForm.courier_name} onChange={(e) => setCourierForm((f) => ({ ...f, courier_name: e.target.value }))} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-slate-900 focus:outline-none" autoFocus />
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">AWB / Tracking Number</label>
-                <input type="text" placeholder="Enter tracking number" value={courierForm.tracking_id} onChange={(e) => setCourierForm((f) => ({ ...f, tracking_id: e.target.value }))} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm font-mono font-bold focus:ring-2 focus:ring-slate-900 focus:outline-none" />
-              </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Appointed Staff Name</label>
+              <input
+                type="text"
+                placeholder="e.g. Ramesh Kumar"
+                value={courierForm.courier_name}
+                onChange={(e) => setCourierForm((f) => ({ ...f, courier_name: e.target.value }))}
+                className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-brand-700 focus:outline-none"
+                autoFocus
+              />
+              <p className="text-[11px] text-slate-500 mt-1.5">Name of the person handling this delivery.</p>
             </div>
             <div className="flex gap-2 mt-5">
               <Button variant="outline" className="flex-1 text-xs h-10" onClick={() => setCourierModal(false)}>Cancel</Button>
               <Button
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-10"
-                disabled={dispatching || !courierForm.courier_name.trim() || !courierForm.tracking_id.trim()}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs h-10"
+                disabled={dispatching || !courierForm.courier_name.trim()}
                 onClick={handleDispatch}
               >
                 {dispatching ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Truck className="w-4 h-4 mr-1" />}
@@ -1335,10 +1830,357 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── REVIEW INVOICE MODAL — fill batch/expiry, preview, approve & send ─── */}
+      {reviewInvoice && (
+        <div className="fixed inset-0 z-[65] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-[95vw] h-[92vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-200 bg-brand-900 text-white flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-white text-base">Invoice {reviewInvoice.invoice.invoice_no}</h3>
+                  <Badge className="bg-amber-500/20 text-amber-100 border border-amber-400/40 text-[10px] font-semibold px-1.5">DRAFT</Badge>
+                </div>
+                <p className="text-xs text-brand-100/80 mt-0.5">
+                  {reviewInvoice.storeName} · Order <span className="font-mono">{reviewInvoice.orderId}</span> · Net ₹{Number(reviewInvoice.invoice.net_amount).toFixed(2)}
+                </p>
+              </div>
+              <button onClick={() => setReviewInvoice(null)} className="p-1 rounded-lg hover:bg-white/10 text-white/80"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Body: two-column split */}
+            <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-0">
+              {/* Left: editable lines */}
+              <div className="overflow-y-auto border-r border-slate-200 p-4">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <Edit2 className="w-3.5 h-3.5" /> Line Items — fill batch &amp; expiry
+                </h4>
+                <div className="space-y-3">
+                  {reviewInvoice.items.map((it, i) => (
+                    <div key={it.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-900">{i + 1}. {it.product_name}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {it.packing || '—'} · HSN {it.hsn || '—'} · GST {it.gst_percent || 12}%
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-xs font-bold text-slate-900 tabular-nums">₹{Number(it.line_total ?? (it.price_at_time * it.quantity)).toFixed(2)}</p>
+                          <p className="text-[10px] text-slate-500">{it.quantity} × ₹{Number(it.price_at_time).toFixed(2)}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Batch No.</label>
+                          <input
+                            type="text"
+                            value={it.batch_no ?? ''}
+                            onChange={(e) => updateLineField(it.id, 'batch_no', e.target.value)}
+                            placeholder="e.g. B6815"
+                            className="w-full mt-1 h-8 px-2 rounded border border-slate-200 text-xs font-mono focus:ring-2 focus:ring-brand-700 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Expiry (MM/YY)</label>
+                          <input
+                            type="text"
+                            value={it.expiry_date ?? ''}
+                            onChange={(e) => updateLineField(it.id, 'expiry_date', e.target.value)}
+                            placeholder="12/28"
+                            className="w-full mt-1 h-8 px-2 rounded border border-slate-200 text-xs font-mono focus:ring-2 focus:ring-brand-700 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm" variant="outline"
+                    className="flex-1 text-xs h-9 border-slate-300 font-semibold"
+                    disabled={savingLines}
+                    onClick={saveInvoiceLines}
+                  >
+                    {savingLines ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                    Save Batch/Expiry (Draft)
+                  </Button>
+                </div>
+              </div>
+
+              {/* Right: live preview */}
+              <div className="overflow-hidden bg-slate-100 flex flex-col">
+                <div className="px-4 py-2 bg-slate-200 flex items-center justify-between">
+                  <span className="text-slate-700 text-[11px] font-bold uppercase tracking-wider">Live Preview</span>
+                  <a
+                    href={`/api/invoices/${reviewInvoice.orderId}/html`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold text-brand-800 hover:text-brand-900 underline decoration-dotted"
+                  >
+                    Open Full Invoice ↗
+                  </a>
+                </div>
+                <iframe
+                  key={previewNonce}
+                  src={`/api/invoices/${reviewInvoice.orderId}/html`}
+                  className="flex-1 w-full bg-white"
+                  title="Invoice preview"
+                  style={{ minHeight: '520px' }}
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center gap-2">
+              <p className="text-[11px] text-slate-500">Approving will move the order to <strong>Packaging</strong> and notify the customer.</p>
+              <div className="flex gap-2">
+                <Button variant="outline" className="text-xs h-10" onClick={() => setReviewInvoice(null)}>Cancel</Button>
+                <Button
+                  className="bg-brand-800 hover:bg-brand-900 text-white font-bold text-xs h-10 px-5"
+                  disabled={approvingInvoice}
+                  onClick={approveInvoice}
+                >
+                  {approvingInvoice ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Check className="w-4 h-4 mr-1" />}
+                  Approve &amp; Send Invoice
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PARTNER DETAIL MODAL — everything about one partner in one screen ──── */}
+      {partnerModal && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-200 bg-brand-900 text-white flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${partnerModal.is_blocked ? "bg-rose-500/20" : "bg-brand-500/20"}`}>
+                  <span className={`font-bold text-lg ${partnerModal.is_blocked ? "text-rose-100" : "text-brand-100"}`}>{partnerModal.store_name?.[0]?.toUpperCase()}</span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-white text-lg">{partnerModal.store_name}</h3>
+                    {partnerModal.is_blocked
+                      ? <Badge className="bg-rose-500/20 text-rose-100 border border-rose-400/40 text-[10px] font-semibold px-1.5">Blocked</Badge>
+                      : partnerModal.is_approved
+                        ? <Badge className="bg-brand-500/30 text-brand-100 border border-brand-400/40 text-[10px] font-semibold px-1.5">Verified</Badge>
+                        : <Badge className="bg-amber-500/20 text-amber-100 border border-amber-400/40 text-[10px] font-semibold px-1.5">Pending</Badge>}
+                  </div>
+                  <p className="text-xs text-brand-100/80 font-mono mt-0.5">{partnerModal.phone}</p>
+                </div>
+              </div>
+              <button onClick={() => setPartnerModal(null)} className="p-1 rounded-lg hover:bg-white/10 text-white/80"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 overflow-y-auto space-y-5">
+              {partnerModal.is_blocked && partnerModal.blocked_reason && (
+                <div className="p-3 rounded-lg border border-rose-200 bg-rose-50 text-xs">
+                  <span className="font-bold text-rose-800">Blocked reason: </span>
+                  <span className="text-rose-700">{partnerModal.blocked_reason}</span>
+                </div>
+              )}
+
+              {/* Registration details — all editable */}
+              <section>
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5" /> Registration Details
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: "Store / Firm Name", key: "store_name", full: true },
+                    { label: "Drug License No.", key: "drug_license" },
+                    { label: "GST Number", key: "gst_number" },
+                    { label: "Registration Number", key: "registration_number" },
+                    { label: "Email", key: "email", type: "email" },
+                    { label: "User Type", key: "user_type" },
+                    { label: "City", key: "city" },
+                    { label: "Zone", key: "zone" },
+                    { label: "Address", key: "address", full: true, textarea: true },
+                  ].map(({ label, key, type, full, textarea }) => (
+                    <div key={key} className={`flex flex-col gap-1 ${full ? "col-span-2" : ""}`}>
+                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</label>
+                      {textarea ? (
+                        <textarea
+                          rows={2}
+                          value={partnerForm[key] ?? ""}
+                          onChange={(e) => setPartnerForm((f: any) => ({ ...f, [key]: e.target.value }))}
+                          className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-brand-700 focus:outline-none"
+                        />
+                      ) : (
+                        <input
+                          type={type || "text"}
+                          value={partnerForm[key] ?? ""}
+                          onChange={(e) => setPartnerForm((f: any) => ({ ...f, [key]: e.target.value }))}
+                          className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-brand-700 focus:outline-none"
+                        />
+                      )}
+                    </div>
+                  ))}
+                  {/* Read-only: phone */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Phone (locked)</label>
+                    <input value={partnerModal.phone} disabled className="h-9 px-3 rounded-lg border border-slate-200 bg-slate-50 text-xs font-mono text-slate-500" />
+                  </div>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    size="sm"
+                    className="bg-brand-800 hover:bg-brand-900 text-white font-bold text-xs h-8 px-4"
+                    disabled={savingPartner}
+                    onClick={requestSavePartnerProfile}
+                  >
+                    <Check className="w-3.5 h-3.5 mr-1" /> Save Details
+                  </Button>
+                </div>
+              </section>
+
+              {/* Credit facility */}
+              <section className="border-t border-slate-200 pt-5">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5" /> Credit Facility
+                </h4>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Current Limit</p>
+                    <p className="text-base font-bold text-slate-900 mt-1 tabular-nums">₹{fmt(partnerModal.credit_limit)}</p>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Used Balance</p>
+                    <p className="text-base font-bold text-slate-900 mt-1 tabular-nums">₹{fmt(partnerModal.credit_balance)}</p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full border-slate-300 text-slate-700 font-semibold text-xs h-9"
+                  onClick={() => { openCreditModal(partnerModal); }}
+                >
+                  <Edit2 className="w-3.5 h-3.5 mr-1" /> Manage Credit (Add or Set)
+                </Button>
+              </section>
+
+              {/* Approval */}
+              {!partnerModal.is_approved && !partnerModal.is_blocked && (
+                <section className="border-t border-slate-200 pt-5">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Pending Approval
+                  </h4>
+                  <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-900 mb-3">
+                    This pharmacy is waiting for admin verification. Approve to unlock ordering.
+                  </div>
+                  <Button
+                    size="sm"
+                    className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs h-9"
+                    onClick={() => requestApproveUser(partnerModal)}
+                  >
+                    <Check className="w-3.5 h-3.5 mr-1" /> Approve Partner
+                  </Button>
+                </section>
+              )}
+
+              {/* Danger zone — block/unblock */}
+              {partnerModal.role !== "admin" && (
+                <section className="border-t border-slate-200 pt-5">
+                  <h4 className="text-xs font-bold text-rose-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5" /> Danger Zone
+                  </h4>
+                  <div className="p-4 rounded-lg border border-rose-200 bg-rose-50/50">
+                    {partnerModal.is_blocked ? (
+                      <>
+                        <p className="text-xs text-rose-900 font-medium mb-3">This partner is currently blocked and cannot use the app. Unblocking restores full access.</p>
+                        <Button
+                          size="sm"
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9"
+                          onClick={() => requestUnblockPartner(partnerModal)}
+                        >
+                          <Check className="w-3.5 h-3.5 mr-1" /> Unblock Partner
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-rose-900 font-medium mb-2">Block this pharmacy from using the app. All active sessions will be revoked. Requires your admin password.</p>
+                        <label className="text-[11px] font-bold text-rose-800 uppercase tracking-wider block mb-1">Reason (optional)</label>
+                        <input
+                          id="block-reason"
+                          type="text"
+                          placeholder="e.g. Fraudulent orders, License expired…"
+                          className="w-full h-9 px-3 rounded-lg border border-rose-200 bg-white text-xs font-medium focus:ring-2 focus:ring-rose-600 focus:outline-none mb-3"
+                        />
+                        <Button
+                          size="sm"
+                          className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs h-9"
+                          onClick={() => {
+                            const reason = (document.getElementById('block-reason') as HTMLInputElement | null)?.value?.trim() || "";
+                            requestBlockPartner(partnerModal, reason);
+                          }}
+                        >
+                          <Shield className="w-3.5 h-3.5 mr-1" /> Block Partner (requires password)
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </section>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end">
+              <Button variant="outline" className="text-xs h-9" onClick={() => setPartnerModal(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADMIN PASSWORD STEP-UP MODAL ────────────────────────────────────────── */}
+      {passwordPrompt && (
+        <div className="fixed inset-0 z-[75] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-sm p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-brand-100 text-brand-800 flex items-center justify-center shrink-0">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm leading-tight">{passwordPrompt.title}</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">{passwordPrompt.subtitle}</p>
+                </div>
+              </div>
+              <button onClick={() => !verifyingPassword && setPasswordPrompt(null)} className="p-1 rounded-lg hover:bg-slate-100 text-slate-500"><X className="w-5 h-5" /></button>
+            </div>
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Admin Password</label>
+            <input
+              type="password"
+              autoFocus
+              value={passwordInput}
+              onChange={(e) => { setPasswordInput(e.target.value); if (passwordError) setPasswordError(""); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && passwordInput) runPasswordVerify(); }}
+              className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-brand-700 focus:outline-none"
+              placeholder="Enter your password"
+            />
+            {passwordError && <p className="text-xs text-rose-600 font-semibold mt-2">{passwordError}</p>}
+            <div className="flex gap-2 mt-5">
+              <Button variant="outline" className="flex-1 text-xs h-10" disabled={verifyingPassword} onClick={() => setPasswordPrompt(null)}>Cancel</Button>
+              <Button
+                className="flex-1 bg-brand-800 hover:bg-brand-900 text-white font-bold text-xs h-10"
+                disabled={verifyingPassword || !passwordInput}
+                onClick={runPasswordVerify}
+              >
+                {verifyingPassword ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                {verifyingPassword ? "Verifying…" : "Verify Password"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── EDIT PRODUCT MODAL ──────────────────────────────────────────────────── */}
       {editProduct && (
         <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-2xl p-6 max-h-[92vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-5">
               <div>
                 <h3 className="font-bold text-slate-900">Edit Product</h3>
@@ -1346,6 +2188,84 @@ export default function Dashboard() {
               </div>
               <button onClick={() => setEditProduct(null)} className="p-1 rounded-lg hover:bg-slate-100 text-slate-500"><X className="w-5 h-5" /></button>
             </div>
+
+            {/* Photos — file upload + optional URL fallback */}
+            <div className="mb-5">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Photos</label>
+              <div className="mt-2 border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+                {editProdForm.images && editProdForm.images.length > 0 ? (
+                  <div className="flex gap-2 overflow-x-auto pb-2 mb-2">
+                    {editProdForm.images.map((uri: string, i: number) => (
+                      <div key={i} className="relative shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={uri} alt={`Photo ${i + 1}`} className="w-20 h-20 rounded-lg object-cover border border-slate-200 bg-white" />
+                        <button
+                          onClick={() => setEditProdForm((f: any) => ({ ...f, images: (f.images || []).filter((_: any, idx: number) => idx !== i) }))}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center hover:bg-rose-700"
+                          type="button"
+                          aria-label={`Remove photo ${i + 1}`}
+                        >×</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 mb-2">No photos yet. Upload from your device or paste an image URL.</p>
+                )}
+
+                {/* File upload — hidden input opened by button */}
+                <input
+                  id="product-image-upload"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    handleImageFilesSelected(e.target.files);
+                    e.currentTarget.value = "";
+                  }}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-8 px-3 border-slate-300 font-semibold"
+                    onClick={() => document.getElementById('product-image-upload')?.click()}
+                    type="button"
+                  >
+                    <Upload className="w-3.5 h-3.5 mr-1" /> Upload from device
+                  </Button>
+                  <input
+                    id="new-image-url"
+                    placeholder="…or paste image URL"
+                    className="flex-1 h-8 px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const el = e.currentTarget;
+                        const v = el.value.trim();
+                        if (v) {
+                          setEditProdForm((f: any) => ({ ...f, images: [...(f.images || []), v] }));
+                          el.value = '';
+                        }
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    className="bg-brand-800 hover:bg-brand-900 text-white font-bold text-xs h-8 px-3"
+                    onClick={() => {
+                      const el = document.getElementById('new-image-url') as HTMLInputElement | null;
+                      const v = el?.value.trim();
+                      if (v) {
+                        setEditProdForm((f: any) => ({ ...f, images: [...(f.images || []), v] }));
+                        if (el) el.value = '';
+                      }
+                    }}
+                  >Add URL</Button>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2">Up to 8 images per upload. First image is used as the product thumbnail.</p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               {[
                 { label: "Product Name", key: "name", full: true },
@@ -1365,12 +2285,44 @@ export default function Dashboard() {
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Composition</label>
                 <input value={editProdForm.composition ?? ""} onChange={(e) => setEditProdForm((f: any) => ({ ...f, composition: e.target.value }))} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-slate-900 focus:outline-none" />
               </div>
+              <div className="col-span-2 flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Description</label>
+                <textarea rows={3} value={editProdForm.description ?? ""} onChange={(e) => setEditProdForm((f: any) => ({ ...f, description: e.target.value }))} className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium focus:ring-2 focus:ring-slate-900 focus:outline-none" />
+              </div>
             </div>
+
+            {/* Short expiry offer */}
+            <div className="mt-4 p-3 border border-amber-200 bg-amber-50 rounded-lg">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!editProdForm.short_expiry}
+                  onChange={(e) => setEditProdForm((f: any) => ({ ...f, short_expiry: e.target.checked }))}
+                  className="w-4 h-4 accent-amber-600"
+                />
+                <div>
+                  <div className="text-xs font-bold text-amber-900">Short expiry offer</div>
+                  <div className="text-[11px] text-amber-800">Shown in the customer "Short expiry" filter and homepage deals</div>
+                </div>
+              </label>
+              {editProdForm.short_expiry && (
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Discount %</label>
+                    <input type="number" min="0" max="90" value={editProdForm.discount_percent ?? ""} onChange={(e) => setEditProdForm((f: any) => ({ ...f, discount_percent: e.target.value }))} className="h-9 px-3 rounded-lg border border-amber-200 bg-white text-xs font-medium focus:ring-2 focus:ring-amber-600 focus:outline-none" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">Expiry date</label>
+                    <input type="text" placeholder="MM/YYYY" value={editProdForm.expiry_date ?? ""} onChange={(e) => setEditProdForm((f: any) => ({ ...f, expiry_date: e.target.value }))} className="h-9 px-3 rounded-lg border border-amber-200 bg-white text-xs font-medium focus:ring-2 focus:ring-amber-600 focus:outline-none" />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-2 mt-5">
               <Button variant="outline" className="flex-1 text-xs h-10" onClick={() => setEditProduct(null)}>Cancel</Button>
-              <Button className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs h-10" disabled={savingProduct} onClick={handleSaveProduct}>
-                {savingProduct ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Check className="w-4 h-4 mr-1" />}
-                {savingProduct ? "Saving…" : "Save Changes"}
+              <Button className="flex-1 bg-brand-800 hover:bg-brand-900 text-white font-bold text-xs h-10" onClick={requestSaveProduct}>
+                <Check className="w-4 h-4 mr-1" /> Save Changes
               </Button>
             </div>
           </div>

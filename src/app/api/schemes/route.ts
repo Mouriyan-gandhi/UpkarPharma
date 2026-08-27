@@ -1,153 +1,96 @@
 import { NextResponse } from 'next/server';
-import db from '@/lib/db';
-import { getAdmin, getSessionUser } from '@/lib/auth';
+import { getAdmin, getMobileUser } from '@/lib/auth';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
-// GET — fetch all schemes (admin), or active-only via ?active=true (mobile)
+// GET — full list (admin) or active-only (mobile with ?active=true)
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const activeOnly = searchParams.get('active') === 'true';
+  const { searchParams } = new URL(request.url);
+  const activeOnly = searchParams.get('active') === 'true';
+  const admin = await getAdmin();
+  const mobile = admin ? null : await getMobileUser(request);
 
-    // Active-only is the mobile catalog feed (any logged-in user); the full
-    // list is admin-only.
-    const admin = await getAdmin();
-    if (activeOnly) {
-      if (!admin && !getSessionUser(request)) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-    } else if (!admin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    let schemes;
-    if (activeOnly) {
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-      schemes = db.prepare(`
-        SELECT * FROM schemes 
-        WHERE is_active = 1 AND start_date <= ? AND end_date >= ?
-        ORDER BY created_at DESC
-      `).all(today, today);
-    } else {
-      schemes = db.prepare('SELECT * FROM schemes ORDER BY created_at DESC').all();
-    }
-
-    return NextResponse.json({ schemes });
-  } catch (err) {
-    console.error('Schemes GET Error:', err);
-    return NextResponse.json({ error: 'Failed to fetch schemes' }, { status: 500 });
+  if (activeOnly) {
+    if (!admin && !mobile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabaseAdmin()
+      .from('schemes')
+      .select('*')
+      .eq('is_active', true)
+      .lte('start_date', today).gte('end_date', today)
+      .order('created_at', { ascending: false });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ schemes: data });
   }
+
+  if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { data, error } = await supabaseAdmin()
+    .from('schemes').select('*').order('created_at', { ascending: false });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ schemes: data });
 }
 
 // POST — create a new scheme
 export async function POST(request: Request) {
-  try {
-    if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    const body = await request.json();
-    const {
-      title, description, code, scheme_type,
-      discount_percent, flat_discount, min_order_value,
-      max_discount, start_date, end_date, usage_limit, per_user_limit
-    } = body;
-
-    if (!title || !code || !scheme_type || !start_date || !end_date) {
-      return NextResponse.json({ error: 'Title, Code, Type, Start/End dates are required' }, { status: 400 });
-    }
-
-    // Check for duplicate code
-    const existing = db.prepare('SELECT id FROM schemes WHERE code = ?').get(code.toUpperCase());
-    if (existing) {
-      return NextResponse.json({ error: 'A scheme with this code already exists' }, { status: 400 });
-    }
-
-    const insertScheme = db.prepare(`
-      INSERT INTO schemes (
-        title, description, code, scheme_type,
-        discount_percent, flat_discount, min_order_value,
-        max_discount, start_date, end_date, usage_limit, per_user_limit
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    insertScheme.run(
-      title,
-      description || null,
-      code.toUpperCase(),
-      scheme_type,
-      discount_percent || null,
-      flat_discount || null,
-      min_order_value || 0,
-      max_discount || null,
-      start_date,
-      end_date,
-      usage_limit || 0,
-      per_user_limit !== undefined ? per_user_limit : 1
-    );
-
-    return NextResponse.json({ success: true, message: 'Scheme created successfully' });
-  } catch (err) {
-    console.error('Schemes POST Error:', err);
-    return NextResponse.json({ error: 'Failed to create scheme' }, { status: 500 });
+  if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const body = await request.json();
+  const { title, code, scheme_type, start_date, end_date } = body;
+  if (!title || !code || !scheme_type || !start_date || !end_date) {
+    return NextResponse.json({ error: 'Title, Code, Type, Start/End dates are required' }, { status: 400 });
   }
+  const sb = supabaseAdmin();
+  const { data: existing } = await sb.from('schemes').select('id').eq('code', code.toUpperCase()).maybeSingle();
+  if (existing) return NextResponse.json({ error: 'A scheme with this code already exists' }, { status: 400 });
+
+  const { error } = await sb.from('schemes').insert({
+    title: body.title,
+    description: body.description || null,
+    code: code.toUpperCase(),
+    scheme_type: body.scheme_type,
+    discount_percent: body.discount_percent || null,
+    flat_discount: body.flat_discount || null,
+    min_order_value: body.min_order_value || 0,
+    max_discount: body.max_discount || null,
+    start_date: body.start_date,
+    end_date: body.end_date,
+    usage_limit: body.usage_limit || 0,
+    per_user_limit: body.per_user_limit !== undefined ? body.per_user_limit : 1,
+  });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true, message: 'Scheme created successfully' });
 }
 
-// PUT — update a scheme (edit or toggle active)
+// PUT — update or toggle active
 export async function PUT(request: Request) {
-  try {
-    if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    const body = await request.json();
-    const { id, action } = body;
+  if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const body = await request.json();
+  const { id, action } = body;
+  if (!id) return NextResponse.json({ error: 'Scheme ID is required' }, { status: 400 });
+  const sb = supabaseAdmin();
 
-    if (!id) {
-      return NextResponse.json({ error: 'Scheme ID is required' }, { status: 400 });
-    }
-
-    if (action === 'toggle') {
-      db.prepare('UPDATE schemes SET is_active = NOT is_active WHERE id = ?').run(id);
-      return NextResponse.json({ success: true });
-    }
-
-    // Full update
-    const {
-      title, description, code, scheme_type,
-      discount_percent, flat_discount, min_order_value,
-      max_discount, start_date, end_date, usage_limit, per_user_limit
-    } = body;
-
-    db.prepare(`
-      UPDATE schemes SET
-        title = ?, description = ?, code = ?, scheme_type = ?,
-        discount_percent = ?, flat_discount = ?, min_order_value = ?,
-        max_discount = ?, start_date = ?, end_date = ?, usage_limit = ?, per_user_limit = ?
-      WHERE id = ?
-    `).run(
-      title, description || null, code?.toUpperCase(), scheme_type,
-      discount_percent || null, flat_discount || null, min_order_value || 0,
-      max_discount || null, start_date, end_date, usage_limit || 0,
-      per_user_limit !== undefined ? per_user_limit : 1,
-      id
-    );
-
+  if (action === 'toggle') {
+    const { data: s } = await sb.from('schemes').select('is_active').eq('id', id).maybeSingle();
+    const { error } = await sb.from('schemes').update({ is_active: !s?.is_active }).eq('id', id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error('Schemes PUT Error:', err);
-    return NextResponse.json({ error: 'Failed to update scheme' }, { status: 500 });
   }
+
+  const patch: any = {};
+  for (const k of ['title','description','scheme_type','discount_percent','flat_discount','min_order_value','max_discount','start_date','end_date','usage_limit','per_user_limit']) {
+    if (body[k] !== undefined) patch[k] = body[k];
+  }
+  if (body.code) patch.code = String(body.code).toUpperCase();
+  const { error } = await sb.from('schemes').update(patch).eq('id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }
 
-// DELETE — delete a scheme
+// DELETE
 export async function DELETE(request: Request) {
-  try {
-    if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Scheme ID is required' }, { status: 400 });
-    }
-
-    db.prepare('DELETE FROM schemes WHERE id = ?').run(id);
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error('Schemes DELETE Error:', err);
-    return NextResponse.json({ error: 'Failed to delete scheme' }, { status: 500 });
-  }
+  if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'Scheme ID is required' }, { status: 400 });
+  const { error } = await supabaseAdmin().from('schemes').delete().eq('id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }

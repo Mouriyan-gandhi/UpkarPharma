@@ -1,5 +1,3 @@
-import db from '@/lib/db';
-
 /**
  * WhatsApp B2B Messaging Engine
  * Supports Twilio WhatsApp API, OpenWA (@open-wa/wa-automate), or Baileys webhooks.

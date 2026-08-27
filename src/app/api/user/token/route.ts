@@ -1,28 +1,21 @@
 import { NextResponse } from 'next/server';
-import db from '@/lib/db';
-import { getSessionUser } from '@/lib/auth';
+import { getMobileUser } from '@/lib/auth';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 
+// Register the Expo push notification token for the authenticated mobile user.
 export async function POST(request: Request) {
   try {
     const { token } = await request.json();
+    const user = await getMobileUser(request);
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 400 });
 
-    // The push token may only be registered for the authenticated user.
-    const user = getSessionUser(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error } = await supabaseAdmin()
+      .from('users')
+      .update({ expo_push_token: token })
+      .eq('id', user.id);
 
-    if (!token) {
-      return NextResponse.json({ error: 'Missing token' }, { status: 400 });
-    }
-
-    const updateToken = db.prepare('UPDATE users SET expo_push_token = ? WHERE phone = ?');
-    const result = updateToken.run(token, user.phone);
-
-    if (result.changes === 0) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Token Registration Error:', err);
