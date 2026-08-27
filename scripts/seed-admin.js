@@ -1,4 +1,9 @@
-// Idempotent admin seeder. Usage on Railway console:
+// Idempotent admin seeder — LEGACY (SQLite/bcrypt). No longer functional
+// against the Supabase-backed schema. Kept for reference during the migration;
+// for creating admins on Supabase, use scripts/backfill-admin-emails.mjs
+// together with a Supabase Auth user, or add the row via SQL.
+//
+// Usage (legacy, SQLite only):
 //   node scripts/seed-admin.js <phone> <password> [store_name]
 // Re-running with the same phone updates the password (safe to run repeatedly).
 

@@ -2,7 +2,7 @@
 //
 // Production build:
 //   APP_ENV=production \
-//   API_BASE_URL=https://your-app.railway.app \
+//   API_BASE_URL=https://your-app.vercel.app \
 //   FIREBASE_API_KEY=AIza... \
 //   FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com \
 //   FIREBASE_PROJECT_ID=your-project-id \

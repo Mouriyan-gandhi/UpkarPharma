@@ -17,7 +17,6 @@ Full-stack B2B pharmacy platform for Upkar Pharma — a Next.js 16 web app (admi
 | `mobile/` | Expo React Native app — the same platform for pharmacy staff on Android/iOS |
 | `supabase/migrations/` | Postgres schema (`0001_init.sql`, `0002_profile_change_requests.sql`) |
 | `scripts/` | Ops + one-shot maintenance scripts (see [Scripts](#scripts)) |
-| `railway.json` | Railway deploy config |
 
 ---
 
@@ -152,14 +151,28 @@ Legacy Python / older JS scripts (`ocr_and_match_catalog.py`, `parse_excel_*`, `
 
 ## Deploy
 
-### Web — Railway
-`railway.json` uses NIXPACKS, `npm run start`, healthcheck at `/login`. Set every env var above in the Railway dashboard.
-
 ### Web — Vercel
-Also works out of the box for the App Router. Same env vars.
+
+Native fit for the Next.js 16 App Router — Route Handlers deploy as serverless functions, static assets go on the edge, and there's zero config.
+
+1. Import the repo in the Vercel dashboard (Framework preset: **Next.js**, Root Directory: **`/`**, Node version: **22.x**).
+2. Add every env var from `.env.example` under **Settings → Environment Variables** (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `JWT_SECRET`, and any optional ones you use).
+3. Deploy. Preview URL will be at `https://<project>.vercel.app`.
+
+Post-deploy: set `NEXT_PUBLIC_BASE_URL` to the production URL so invoice/WhatsApp links resolve correctly.
 
 ### Mobile — Expo Application Services (EAS)
-`mobile/eas.json` for build profiles; ship OTA updates via `expo publish`.
+
+`mobile/eas.json` holds the build profiles. Build:
+
+```bash
+cd mobile
+APP_ENV=production \
+API_BASE_URL=https://your-app.vercel.app \
+eas build --profile production
+```
+
+Ship OTA updates via `expo publish`.
 
 ---
 
