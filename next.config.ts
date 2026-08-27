@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
+  // Pin the workspace root — otherwise Next picks up /Users/apple/package-lock.json
+  // and serves the wrong project.
+  turbopack: { root: path.resolve(__dirname) },
   async headers() {
     return [
       {

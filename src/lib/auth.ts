@@ -1,100 +1,93 @@
-import { cookies } from 'next/headers';
-import * as jose from 'jose';
-import { randomUUID } from 'crypto';
-import db from './db';
+import { supabaseServer } from './supabase/server';
+import { supabaseAdmin } from './supabase/admin';
 
-const rawSecret = process.env.JWT_SECRET;
-if (!rawSecret) {
-  if (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE !== 'phase-production-build') {
-    throw new Error('JWT_SECRET environment variable is required.');
-  }
-  console.warn('[auth] JWT_SECRET not set — using insecure dev fallback. Set it before deploying.');
-}
-export const JWT_SECRET = new TextEncoder().encode(
-  rawSecret || 'upkem-dev-only-secret-change-me'
-);
-
-export interface AdminPayload {
+// Public shape used across API routes + admin pages.
+export interface AdminUser {
+  id: string;            // auth.users UUID
   phone: string;
-  role: string;
   store_name?: string;
-  session_id?: string;
+  role: 'admin' | 'client';
+  is_approved: boolean;
+  is_blocked: boolean;
 }
 
 /**
- * Verify the admin dashboard session cookie.
- * Validates the JWT AND confirms the session still exists in admin_sessions
- * (allows per-session revocation across concurrent admin logins).
+ * Returns the current admin user if the caller has a valid Supabase session AND
+ * their public.users row has role='admin' and is not blocked. Otherwise null.
+ *
+ * Uses the request's cookies to identify the caller. Safe in API routes + RSC.
  */
-export async function getAdmin(): Promise<AdminPayload | null> {
-  try {
-    const store = await cookies();
-    const token = store.get('admin_session')?.value;
-    if (!token) return null;
-    const { payload } = await jose.jwtVerify(token, JWT_SECRET);
-    if (payload.role !== 'admin') return null;
+export async function getAdmin(): Promise<AdminUser | null> {
+  const supabase = await supabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
 
-    const sessionId = payload.session_id as string | undefined;
-    if (!sessionId) return null;
+  // Look up the profile via service-role (bypasses RLS to avoid recursion).
+  const admin = supabaseAdmin();
+  const { data: profile, error } = await admin
+    .from('users')
+    .select('id, phone, store_name, role, is_approved, is_blocked')
+    .eq('id', user.id)
+    .maybeSingle();
 
-    const session = db
-      .prepare('SELECT id FROM admin_sessions WHERE id = ?')
-      .get(sessionId) as { id: string } | undefined;
-    if (!session) return null;
-
-    db.prepare('UPDATE admin_sessions SET last_active = CURRENT_TIMESTAMP WHERE id = ?').run(sessionId);
-
-    return payload as unknown as AdminPayload;
-  } catch {
-    return null;
-  }
-}
-
-/** Create a new admin session row. Returns the new session ID. */
-export function createAdminSession(phone: string, userAgent: string, ip: string): string {
-  const sessionId = randomUUID();
-  db.prepare(
-    'INSERT INTO admin_sessions (id, phone, user_agent, ip) VALUES (?, ?, ?, ?)'
-  ).run(sessionId, phone, userAgent, ip);
-  return sessionId;
-}
-
-/** Delete a specific admin session (logout or revoke). */
-export function deleteAdminSession(sessionId: string): void {
-  db.prepare('DELETE FROM admin_sessions WHERE id = ?').run(sessionId);
-}
-
-/** List all active admin sessions. */
-export function listAdminSessions(): any[] {
-  return db
-    .prepare('SELECT id, phone, user_agent, ip, created_at, last_active FROM admin_sessions ORDER BY last_active DESC')
-    .all() as any[];
+  if (error || !profile) return null;
+  if (profile.role !== 'admin' || profile.is_blocked) return null;
+  return profile as AdminUser;
 }
 
 /**
- * Verify a mobile client session bearer token.
- * Returns the approved user row, or null.
+ * Returns the current mobile client user, if the caller has a valid Supabase
+ * session AND the user is approved + not blocked. Used by /api/data endpoints
+ * that mobile hits with the Supabase session token in the Authorization header.
  */
-export function getSessionUser(request: Request): any | null {
+export async function getMobileUser(request: Request): Promise<AdminUser | null> {
   const authHeader = request.headers.get('authorization') || '';
-  const headerId = request.headers.get('x-session-id') || '';
-  const sessionId = authHeader.toLowerCase().startsWith('bearer ')
+  const token = authHeader.toLowerCase().startsWith('bearer ')
     ? authHeader.slice(7).trim()
-    : headerId.trim();
+    : '';
+  if (!token) return null;
 
-  if (!sessionId) return null;
+  const admin = supabaseAdmin();
+  const { data: { user }, error: uErr } = await admin.auth.getUser(token);
+  if (uErr || !user) return null;
 
-  const session = db
-    .prepare('SELECT user_phone FROM sessions WHERE id = ?')
-    .get(sessionId) as { user_phone: string } | undefined;
-  if (!session) return null;
+  const { data: profile, error } = await admin
+    .from('users')
+    .select('id, phone, store_name, role, is_approved, is_blocked')
+    .eq('id', user.id)
+    .maybeSingle();
 
-  const user = db
-    .prepare('SELECT * FROM users WHERE phone = ?')
-    .get(session.user_phone) as any;
-  if (!user || !user.is_approved) return null;
+  if (error || !profile) return null;
+  if (!profile.is_approved || profile.is_blocked) return null;
+  return profile as AdminUser;
+}
 
-  db.prepare('UPDATE sessions SET last_active = CURRENT_TIMESTAMP WHERE id = ?').run(sessionId);
+/**
+ * Returns the current customer if there's a valid Supabase COOKIE session
+ * (used by the web customer app /shop/*). Returns admins too — admins can
+ * preview the customer view. Requires approved + not blocked.
+ */
+export async function getWebUser(): Promise<AdminUser | null> {
+  const supabase = await supabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
 
-  return user;
+  const admin = supabaseAdmin();
+  const { data: profile, error } = await admin
+    .from('users')
+    .select('id, phone, store_name, role, is_approved, is_blocked')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (error || !profile) return null;
+  if (profile.is_blocked || !profile.is_approved) return null;
+  return profile as AdminUser;
+}
+
+/**
+ * Compat shim — some old routes reference these session functions.
+ * Supabase Auth manages sessions natively so these are no-ops now.
+ */
+export function listAdminSessions(): any[] {
+  return [];
 }

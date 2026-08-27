@@ -1,47 +1,53 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import * as jose from 'jose';
+import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 
-// Edge middleware cannot import Node-only modules (better-sqlite3). JWT verification
-// is sufficient here for redirect-protection; the per-request DB session validation
-// happens inside getAdmin() on each API/page server call.
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'upkem-dev-only-secret-change-me'
-);
-
-async function isValidAdminToken(token: string): Promise<boolean> {
-  try {
-    await jose.jwtVerify(token, JWT_SECRET);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
+// Edge middleware: verify Supabase session for admin-only routes.
+// Uses the anon key + cookies — no service_role, no DB access here.
+// Admin role check happens in the API layer via getAdmin() with the user's session.
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const token = request.cookies.get('admin_session')?.value;
+  const response = NextResponse.next({ request });
 
-  // Protect both root and /admin (and all sub-paths under /admin)
-  const isProtected = pathname === '/' || pathname.startsWith('/admin');
-  const isLoginPage = pathname === '/login';
-
-  if (isProtected) {
-    if (!token || !(await isValidAdminToken(token))) {
-      const response = NextResponse.redirect(new URL('/login', request.url));
-      response.cookies.delete('admin_session');
-      return response;
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
     }
-    return NextResponse.next();
-  }
+  );
 
-  if (isLoginPage && token && (await isValidAdminToken(token))) {
+  // Refreshes session if needed and returns the current user (or null).
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const isAdminProtected    = pathname === '/' || pathname.startsWith('/admin');
+  const isCustomerProtected = pathname.startsWith('/shop');
+  const isAdminLogin        = pathname === '/login';
+  const isCustomerLogin     = pathname === '/customer-login' || pathname === '/customer-signup';
+
+  if ((isAdminProtected || isCustomerProtected) && !user) {
+    const to = isCustomerProtected ? '/customer-login' : '/login';
+    return NextResponse.redirect(new URL(to, request.url));
+  }
+  if (isAdminLogin && user) {
     return NextResponse.redirect(new URL('/admin', request.url));
   }
+  if (isCustomerLogin && user) {
+    return NextResponse.redirect(new URL('/shop', request.url));
+  }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
-  matcher: ['/', '/admin', '/admin/:path*', '/login'],
+  matcher: ['/', '/admin', '/admin/:path*', '/login', '/shop', '/shop/:path*', '/customer-login', '/customer-signup'],
 };

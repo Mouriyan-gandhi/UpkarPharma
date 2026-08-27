@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { createClient } from '@supabase/supabase-js';
 
 function toE164(phone: string): string {
   const d = String(phone).replace(/\D/g, '');
@@ -9,50 +9,47 @@ function toE164(phone: string): string {
   return phone.startsWith('+') ? phone : '+' + d;
 }
 
-// Mobile app: verify the phone OTP the user typed.
-// On success, Supabase creates/logs-in the auth.users row; our trigger creates
-// the matching public.users row. We return the session tokens to the mobile app.
+// Dev-only phone+password login for the mobile app so we can test without
+// real OTP delivery. Returns a Supabase access_token the mobile app uses as
+// its Authorization bearer for subsequent API calls.
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { phone, otp, device_info = 'MobileApp' } = body;
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not available in production' }, { status: 404 });
+  }
 
-    if (!phone || !otp) {
-      return NextResponse.json({ error: 'Phone and OTP required' }, { status: 400 });
+  try {
+    const { phone, password } = await request.json();
+    if (!phone || !password) {
+      return NextResponse.json({ error: 'Missing credentials' }, { status: 400 });
     }
 
+    // Sign in against Supabase Auth
     const client = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { auth: { persistSession: false } }
     );
-
-    const phoneE164 = toE164(phone);
-    const { data, error } = await client.auth.verifyOtp({
-      phone: phoneE164,
-      token: otp,
-      type: 'sms',
+    const { data, error } = await client.auth.signInWithPassword({
+      phone: toE164(phone),
+      password,
     });
-
     if (error || !data.session) {
-      return NextResponse.json({ error: error?.message || 'Invalid OTP' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
-    // Fetch full profile (service_role bypasses RLS)
+    // Fetch profile via service_role (bypasses RLS)
     const sb = supabaseAdmin();
     const { data: profile } = await sb
       .from('users')
       .select('*')
-      .eq('id', data.user!.id)
+      .eq('id', data.user.id)
       .maybeSingle();
 
     if (!profile) {
       return NextResponse.json({ error: 'User profile not found' }, { status: 404 });
     }
     if (profile.is_blocked) {
-      return NextResponse.json({
-        error: 'This account has been blocked. Contact UPKEM support.',
-      }, { status: 403 });
+      return NextResponse.json({ error: 'Account blocked' }, { status: 403 });
     }
     if (!profile.is_approved) {
       return NextResponse.json({
@@ -67,12 +64,12 @@ export async function POST(request: Request) {
       user: profile,
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,
-      // Legacy alias for the current mobile client:
+      // Legacy alias so the mobile app doesn't break during the cut-over:
       session_id: data.session.access_token,
-      message: 'Login successful',
+      message: 'Dev login successful',
     });
   } catch (err) {
-    console.error('OTP verify error:', err);
+    console.error('Dev Login Error:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
