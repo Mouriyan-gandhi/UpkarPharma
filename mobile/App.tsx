@@ -34,7 +34,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const DEFAULT_IP = '192.168.1.100';
+const DEFAULT_IP = '192.168.1.18';
 // HTTPS API base injected at build time via app.config.js (extra.apiBaseUrl).
 // When present (production/preview builds) it overrides the dev IP entirely.
 // Guard for string only — the public manifest may serialize an unset value as {}.
@@ -113,6 +113,147 @@ const AnimatedPressable = ({ onPress, style, children, disabled }) => {
     </TouchableOpacity>
   );
 };
+
+// ── ProductImageCarousel — swipeable images + dot indicator ───────────────────
+function getProductImages(product: any): string[] {
+  if (Array.isArray(product?.images) && product.images.length > 0) {
+    return product.images.filter((u: any) => typeof u === 'string' && u.length > 0);
+  }
+  if (typeof product?.image === 'string' && product.image.length > 0) return [product.image];
+  return [CATEGORY_IMAGES[product?.category] || DEFAULT_PRODUCT_IMAGE];
+}
+
+function ProductImageCarousel({ product, height = 260, cornerRadius = 20 }: { product: any; height?: number; cornerRadius?: number; }) {
+  const images = getProductImages(product);
+  const scrollRef = useRef<any>(null);
+  const [idx, setIdx] = useState(0);
+  const width = SCREEN_WIDTH - 48; // fits inside bottomSheet (padding 24 each side)
+
+  const onEnd = (e: any) => {
+    const x = e.nativeEvent.contentOffset.x;
+    const i = Math.round(x / width);
+    if (i !== idx) setIdx(i);
+  };
+
+  if (images.length === 1) {
+    return (
+      <Image
+        source={{ uri: images[0] }}
+        style={{ width: '100%', height, borderRadius: cornerRadius, marginBottom: 12, backgroundColor: '#f1f5f9' }}
+        resizeMode="cover"
+      />
+    );
+  }
+
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={onEnd}
+        style={{ borderRadius: cornerRadius, overflow: 'hidden', backgroundColor: '#f1f5f9' }}
+      >
+        {images.map((uri, i) => (
+          <Image
+            key={i}
+            source={{ uri }}
+            style={{ width, height, backgroundColor: '#f1f5f9' }}
+            resizeMode="cover"
+          />
+        ))}
+      </ScrollView>
+      {/* Dots */}
+      <View style={{ position: 'absolute', bottom: 10, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
+        {images.map((_, i) => (
+          <View
+            key={i}
+            style={{
+              width: i === idx ? 18 : 6,
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: i === idx ? '#fff' : 'rgba(255,255,255,0.6)',
+            }}
+          />
+        ))}
+      </View>
+      {/* Counter chip */}
+      <View style={{ position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
+        <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }}>{idx + 1} / {images.length}</Text>
+      </View>
+    </View>
+  );
+}
+
+// ── QtyControl — reusable qty stepper with tap-to-type ────────────────────────
+function QtyControl({
+  value,
+  onAdd,
+  onSub,
+  onSet,
+  compact = false,
+}: {
+  value: number;
+  onAdd: () => void;
+  onSub: () => void;
+  onSet: (n: number) => void;
+  compact?: boolean;
+}) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => { setText(String(value)); }, [value]);
+
+  const dim = compact
+    ? { padH: 12, padV: 8, fs: 15, width: 44 }
+    : { padH: 14, padV: 10, fs: 16, width: 52 };
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0' }}>
+      <TouchableOpacity
+        onPress={onSub}
+        style={{ paddingHorizontal: dim.padH, paddingVertical: dim.padV }}
+        hitSlop={{ top: 8, left: 8, bottom: 8, right: 4 }}
+      >
+        <Text style={{ fontSize: 18, fontWeight: '800', color: BRAND[800] }}>−</Text>
+      </TouchableOpacity>
+      <TextInput
+        style={{
+          width: dim.width,
+          textAlign: 'center',
+          fontSize: dim.fs,
+          fontWeight: '800',
+          color: '#1A1A1A',
+          paddingVertical: dim.padV - 2,
+        }}
+        keyboardType="number-pad"
+        selectTextOnFocus
+        maxLength={5}
+        value={text}
+        onChangeText={(v) => {
+          const clean = v.replace(/[^0-9]/g, '');
+          setText(clean);
+          if (clean === '') return; // wait for blur before committing removal
+          const n = parseInt(clean, 10);
+          if (!isNaN(n)) onSet(n);
+        }}
+        onBlur={() => {
+          const n = parseInt(text, 10);
+          if (text === '' || isNaN(n) || n <= 0) {
+            onSet(0);
+            setText('0');
+          }
+        }}
+      />
+      <TouchableOpacity
+        onPress={onAdd}
+        style={{ paddingHorizontal: dim.padH, paddingVertical: dim.padV }}
+        hitSlop={{ top: 8, right: 8, bottom: 8, left: 4 }}
+      >
+        <Text style={{ fontSize: 18, fontWeight: '800', color: BRAND[800] }}>+</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 // ── Toast System ──────────────────────────────────────────────────────────────
 let _showToast: ((msg: string, type?: 'success' | 'error' | 'info') => void) | null = null;
@@ -410,7 +551,8 @@ const generateInvoiceHTML = (order: any, user: any) => {
   `;
 };
 
-// Generate and share invoice PDF
+// Generate and share invoice PDF (client-side fallback — used only if server
+// invoice fetch fails or for legacy orders without an invoice row).
 const handleInvoiceGenerate = async (order: any, user: any) => {
   try {
     const html = generateInvoiceHTML(order, user);
@@ -418,6 +560,54 @@ const handleInvoiceGenerate = async (order: any, user: any) => {
     await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
   } catch (err) {
     Alert.alert('Error', 'Could not generate invoice. Please try again.');
+  }
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Server-authoritative invoice helpers. Fetch /api/invoices/{id}/html which
+// includes admin-filled batch/expiry + Draft/Approved badge.
+// ────────────────────────────────────────────────────────────────────────────
+async function fetchServerInvoiceHTML(orderId: string): Promise<string | null> {
+  const { serverIp, sessionId } = useStore.getState();
+  const base = API_BASE_URL || `http://${serverIp}:3000`;
+  const url = `${base}/api/invoices/${encodeURIComponent(orderId)}/html?token=${encodeURIComponent(sessionId || '')}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
+// Open the invoice in the native PDF preview (print dialog).
+// Users can save-to-Files, share, or print from the native sheet.
+const viewServerInvoice = async (order: any, user: any) => {
+  const html = await fetchServerInvoiceHTML(order.id);
+  if (!html) {
+    Alert.alert(
+      'Invoice not ready',
+      'The admin hasn\'t generated your invoice yet. Once they approve it, you\'ll get a push notification.',
+      [{ text: 'View draft anyway (client-side)', onPress: () => handleInvoiceGenerate(order, user) }, { text: 'OK' }]
+    );
+    return;
+  }
+  try {
+    await Print.printAsync({ html });
+  } catch (err) {
+    Alert.alert('Error', 'Could not open invoice.');
+  }
+};
+
+// Generate PDF from server HTML and share (WhatsApp/Files/etc.).
+const downloadServerInvoice = async (order: any, user: any) => {
+  const html = await fetchServerInvoiceHTML(order.id);
+  const source = html || generateInvoiceHTML(order, user);   // fallback
+  try {
+    const { uri } = await Print.printToFileAsync({ html: source, width: 612, height: 792 });
+    await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+  } catch (err) {
+    Alert.alert('Error', 'Could not download invoice.');
   }
 };
 
@@ -474,8 +664,31 @@ const useStore = create((set, get) => ({
     });
   },
   clearCart: () => set({ cart: {} }),
+  repeatOrder: (order) => {
+    if (!order?.items?.length) return 0;
+    const newCart: Record<string, number> = {};
+    let added = 0;
+    order.items.forEach((it: any) => {
+      const id = it.id ?? it.product_id;
+      const qty = Number(it.quantity) || 0;
+      if (id != null && qty > 0) {
+        newCart[id] = (newCart[id] || 0) + qty;
+        added += qty;
+      }
+    });
+    set({ cart: newCart });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    showToast(`${order.items.length} items added to cart`);
+    return added;
+  },
   orders: [],
   setOrders: (orders) => set({ orders }),
+  notifications: [],
+  unreadNotifs: 0,
+  setNotifications: (notifications: any[]) => set({
+    notifications,
+    unreadNotifs: (notifications || []).filter((n) => !n.read).length,
+  }),
   
   // Production builds use the HTTPS base URL baked in via app.config.js
   // (extra.apiBaseUrl). The plain-IP override is a LOCAL DEV fallback only.
@@ -485,6 +698,7 @@ const useStore = create((set, get) => ({
   getDeleteAccountUrl: () => `${get().getBaseUrl()}/api/user/delete`,
   getOtpUrl: () => `${get().getBaseUrl()}/api/auth/otp`,
   getVerifyUrl: () => `${get().getBaseUrl()}/api/auth/verify`,
+  getDevLoginUrl: () => `${get().getBaseUrl()}/api/auth/dev-login`,
   getSignupUrl: () => `${get().getBaseUrl()}/api/auth/signup`,
   getSchemesUrl: () => `${get().getBaseUrl()}/api/schemes`,
   getSchemesValidateUrl: () => `${get().getBaseUrl()}/api/schemes/validate`,
@@ -575,29 +789,28 @@ const PremiumTextInput = ({ label, value, onChangeText, keyboardType = 'default'
     left: 0,
     top: animValue.interpolate({ inputRange: [0, 1], outputRange: [18, 6] }),
     fontSize: animValue.interpolate({ inputRange: [0, 1], outputRange: [14, 10] }),
-    color: animValue.interpolate({ inputRange: [0, 1], outputRange: ['#64748b', BRAND[500]] }),
+    color: animValue.interpolate({ inputRange: [0, 1], outputRange: ['#94a3b8', BRAND[700]] }),
     fontWeight: '800',
     letterSpacing: 0.5,
   };
 
   return (
     <View style={{ marginBottom: 12 }}>
-      <View style={{ 
-        backgroundColor: '#0A1E13', 
-        borderRadius: 14, 
-        borderWidth: 1.5, 
-        borderColor: isFocused ? BRAND[500] : 'rgba(216, 243, 220, 0.05)',
+      <View style={{
+        backgroundColor: '#F7FAF8',
+        borderRadius: 14,
+        borderWidth: 1.5,
+        borderColor: isFocused ? BRAND[700] : '#e2e8f0',
         height: 58,
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 14,
-        ...(isFocused ? SHADOWS.glowGreen : {})
       }}>
-        {icon && <Ionicons name={icon} size={18} color={isFocused ? BRAND[500] : '#475569'} style={{ marginRight: 12 }} />}
+        {icon && <Ionicons name={icon} size={18} color={isFocused ? BRAND[700] : '#94a3b8'} style={{ marginRight: 12 }} />}
         <View style={{ flex: 1, position: 'relative', height: '100%', justifyContent: 'center' }}>
           <Animated.Text style={labelStyle}>{label}</Animated.Text>
           <TextInput
-            style={{ color: '#fff', fontSize: 15, fontWeight: '700', height: '100%', paddingTop: 16, paddingBottom: 0 }}
+            style={{ color: '#1A1A1A', fontSize: 15, fontWeight: '700', height: '100%', paddingTop: 16, paddingBottom: 0 }}
             value={value}
             onChangeText={onChangeText}
             onFocus={() => setIsFocused(true)}
@@ -610,172 +823,176 @@ const PremiumTextInput = ({ label, value, onChangeText, keyboardType = 'default'
   );
 };
 
-// --- Signup Screen ---
+// --- Signup Screen (Simplified — 3 fields: firm, phone, business type) ---
 function SignupScreen({ setCurrentScreen }) {
-  const [form, setForm] = useState({ phone: '', store_name: '', user_type: 'Retailer', drug_license: '', gst_number: '', registration_number: '', address: '', email: '', zone: 'Tamil Nadu', city: '' });
+  const [form, setForm] = useState({ phone: '', store_name: '', user_type: 'Retailer' });
   const [isLoading, setIsLoading] = useState(false);
-  const [showCityPicker, setShowCityPicker] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [tempIp, setTempIp] = useState('');
-  
+
   const serverIp = useStore((state) => state.serverIp);
   const setServerIp = useStore((state) => state.setServerIp);
   const getSignupUrl = useStore((state) => state.getSignupUrl);
 
-  // Entrance Animations
-  const boxAnims = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
+  const boxAnims = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
 
-  useEffect(() => { 
-    setTempIp(serverIp); 
+  useEffect(() => {
+    setTempIp(serverIp);
     Animated.stagger(150, boxAnims.map(anim => Animated.spring(anim, { toValue: 1, useNativeDriver: true, tension: 50, friction: 8 }))).start();
   }, [serverIp]);
 
+  const canSubmit = form.phone.trim().length >= 10 && form.store_name.trim().length > 0 && form.user_type;
+
   const handleSignup = async () => {
-    if(!form.phone || !form.store_name) return Alert.alert('Error', 'Phone and Firm Name are required.');
-    
+    if (!canSubmit) return Alert.alert('Missing info', 'Please enter your firm name, phone (10 digits), and select a business type.');
     setIsLoading(true);
     try {
       const res = await fetch(getSignupUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify(form),
       });
       const data = await res.json();
-      if(data.success) {
-        Alert.alert('Success', 'Registration submitted. Awaiting admin approval.');
+      if (data.success) {
+        Alert.alert('Request sent', 'Registration submitted. Please log in once approved — you can complete your profile after signing in.');
         setCurrentScreen('Login');
       } else {
         Alert.alert('Error', data.error || 'Signup failed');
       }
     } catch (e) {
-      Alert.alert('Error', 'Network Error');
+      Alert.alert('Error', 'Network error. Please try again.');
     }
     setIsLoading(false);
   };
 
+  const businessTypes = [
+    { key: 'Retailer',              label: 'Retailer / Pharmacy', icon: 'storefront',       hint: 'GST required later' },
+    { key: 'Clinic',                label: 'Clinic / Hospital',   icon: 'business',         hint: 'Registration required later' },
+    { key: 'Doctor',                label: 'Doctor',              icon: 'medkit',           hint: 'DMC / Registration later' },
+    { key: 'Doctor with Pharmacy',  label: 'Doctor + Pharmacy',   icon: 'fitness',          hint: 'DL + GST required later' },
+  ];
+
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#05120B' }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#F7FAF8' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <StatusBar barStyle="dark-content" />
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20, paddingTop: 60 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        
-        {/* Hero Header */}
-        <View style={{ marginBottom: 32, alignItems: 'center' }}>
-          <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: BRAND[800], justifyContent: 'center', alignItems: 'center', marginBottom: 16, ...SHADOWS.glowGreen }}>
-            <Ionicons name="shield-checkmark" size={32} color="#fff" />
+        {/* Header */}
+        <View style={{ marginBottom: 28, alignItems: 'center' }}>
+          <View style={{ width: 68, height: 68, borderRadius: 22, backgroundColor: BRAND[50], borderWidth: 1.5, borderColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginBottom: 18 }}>
+            <Ionicons name="shield-checkmark" size={32} color={BRAND[800]} />
           </View>
-          <Text style={{ fontSize: 32, fontWeight: '900', color: '#fff', letterSpacing: -1 }}>Register Firm</Text>
-          <Text style={{ fontSize: 14, color: '#94a3b8', fontWeight: '600', marginTop: 4, letterSpacing: 0.5, textTransform: 'uppercase' }}>Join the B2B Command Network</Text>
+          <Text style={{ fontSize: 30, fontWeight: '900', color: '#1A1A1A', letterSpacing: -1 }}>Get started</Text>
+          <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '600', marginTop: 8, textAlign: 'center', maxWidth: 300, lineHeight: 20 }}>
+            Just 3 details to submit for approval.{'\n'}You can complete your profile after signing in.
+          </Text>
         </View>
 
-        {/* Bento Box 1: Identity */}
-        <Animated.View style={{ opacity: boxAnims[0], transform: [{ translateY: boxAnims[0].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }], backgroundColor: '#0D2A1B', borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(216, 243, 220, 0.1)' }}>
-          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800', marginBottom: 16, letterSpacing: 1.5, textTransform: 'uppercase' }}>Identity</Text>
-          <PremiumTextInput label="Firm / Clinic Name" icon="business" value={form.store_name} onChangeText={(t) => setForm({...form, store_name: t})} />
-          <PremiumTextInput label="Phone Number" icon="call" keyboardType="phone-pad" value={form.phone} onChangeText={(t) => setForm({...form, phone: t})} />
-          <PremiumTextInput label="Email Address" icon="mail" keyboardType="email-address" value={form.email} onChangeText={(t) => setForm({...form, email: t})} />
+        {/* Box 1: Identity — just firm + phone */}
+        <Animated.View
+          style={{
+            opacity: boxAnims[0],
+            transform: [{ translateY: boxAnims[0].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
+            backgroundColor: '#fff', borderRadius: 20, padding: 18, marginBottom: 14,
+            borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm,
+          }}
+        >
+          <Text style={{ color: BRAND[800], fontSize: 11, fontWeight: '800', marginBottom: 14, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+            Your firm
+          </Text>
+          <PremiumTextInput
+            label="Firm / Clinic Name"
+            icon="business"
+            value={form.store_name}
+            onChangeText={(t) => setForm({ ...form, store_name: t })}
+          />
+          <PremiumTextInput
+            label="Phone Number (10 digits)"
+            icon="call"
+            keyboardType="phone-pad"
+            value={form.phone}
+            onChangeText={(t) => setForm({ ...form, phone: t.replace(/[^0-9]/g, '').slice(0, 10) })}
+          />
         </Animated.View>
 
-        {/* Bento Box 2: Role */}
-        <Animated.View style={{ opacity: boxAnims[1], transform: [{ translateY: boxAnims[1].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }], backgroundColor: '#0D2A1B', borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(216, 243, 220, 0.1)' }}>
-          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800', marginBottom: 16, letterSpacing: 1.5, textTransform: 'uppercase' }}>Select Role</Text>
+        {/* Box 2: Business type */}
+        <Animated.View
+          style={{
+            opacity: boxAnims[1],
+            transform: [{ translateY: boxAnims[1].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
+            backgroundColor: '#fff', borderRadius: 20, padding: 18, marginBottom: 24,
+            borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm,
+          }}
+        >
+          <Text style={{ color: BRAND[800], fontSize: 11, fontWeight: '800', marginBottom: 14, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+            Business type
+          </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
-            {['Retailer', 'Clinic', 'Doctor', 'Pharmacy'].map(type => {
-              // Map 'Pharmacy' back to 'Doctor with Pharmacy' for data consistency
-              const actualType = type === 'Pharmacy' ? 'Doctor with Pharmacy' : type;
-              const isSelected = form.user_type === actualType;
+            {businessTypes.map((bt) => {
+              const isSelected = form.user_type === bt.key;
               return (
-                <TouchableOpacity 
-                  key={actualType} 
-                  onPress={() => { Haptics.selectionAsync(); setForm({...form, user_type: actualType}); }} 
+                <TouchableOpacity
+                  key={bt.key}
+                  onPress={() => { Haptics.selectionAsync(); setForm({ ...form, user_type: bt.key }); }}
                   style={{
-                    width: '48%', 
-                    backgroundColor: isSelected ? BRAND[800] : '#0A1E13', 
-                    borderRadius: 16, 
-                    padding: 16, 
-                    borderWidth: 1.5, 
-                    borderColor: isSelected ? BRAND[500] : 'transparent',
-                    ...(isSelected ? SHADOWS.glowGreen : {})
+                    width: '48%',
+                    backgroundColor: isSelected ? BRAND[800] : '#F7FAF8',
+                    borderRadius: 16,
+                    padding: 14,
+                    borderWidth: 1.5,
+                    borderColor: isSelected ? BRAND[800] : '#e2e8f0',
                   }}
-                  activeOpacity={0.9}
+                  activeOpacity={0.85}
                 >
-                  <Ionicons name={type === 'Retailer' ? 'storefront' : type === 'Clinic' ? 'business' : type === 'Doctor' ? 'medkit' : 'fitness'} size={24} color={isSelected ? '#fff' : '#475569'} style={{marginBottom: 12}} />
-                  <Text style={{color: isSelected ? '#fff' : '#94a3b8', fontWeight: isSelected ? '800' : '600', fontSize: 13}}>{type}</Text>
-                  {isSelected && <View style={{ position: 'absolute', top: 12, right: 12 }}><Ionicons name="checkmark-circle" size={16} color="#fff" /></View>}
+                  <Ionicons name={bt.icon as any} size={22} color={isSelected ? '#fff' : BRAND[700]} style={{ marginBottom: 10 }} />
+                  <Text style={{ color: isSelected ? '#fff' : '#1A1A1A', fontWeight: isSelected ? '800' : '700', fontSize: 13 }} numberOfLines={2}>
+                    {bt.label}
+                  </Text>
+                  <Text style={{ color: isSelected ? BRAND[100] : '#64748b', fontSize: 10, fontWeight: '600', marginTop: 3 }} numberOfLines={1}>
+                    {bt.hint}
+                  </Text>
+                  {isSelected && (
+                    <View style={{ position: 'absolute', top: 10, right: 10 }}>
+                      <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                    </View>
+                  )}
                 </TouchableOpacity>
-              )
+              );
             })}
           </View>
         </Animated.View>
 
-        {/* Bento Box 3: Location */}
-        <Animated.View style={{ opacity: boxAnims[2], transform: [{ translateY: boxAnims[2].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }], backgroundColor: '#0D2A1B', borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(216, 243, 220, 0.1)' }}>
-          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800', marginBottom: 16, letterSpacing: 1.5, textTransform: 'uppercase' }}>Location</Text>
-          
-          <TouchableOpacity 
-            style={{ backgroundColor: '#0A1E13', borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(216, 243, 220, 0.05)', height: 58, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, marginBottom: 12 }}
-            onPress={() => { Haptics.selectionAsync(); setShowCityPicker(true); }}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="map" size={18} color={BRAND[500]} style={{ marginRight: 12 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: form.city ? '#fff' : '#64748b', fontSize: 15, fontWeight: '700' }}>{form.city || 'Select District'}</Text>
-              {form.city && <Text style={{ color: '#64748b', fontSize: 10, fontWeight: '800', marginTop: 2 }}>TAMIL NADU</Text>}
-            </View>
-            <Ionicons name="chevron-down" size={18} color="#475569" />
-          </TouchableOpacity>
-
-          <PremiumTextInput label="Full Delivery Address" icon="location" value={form.address} onChangeText={(t) => setForm({...form, address: t})} />
-        </Animated.View>
-
-        {/* Bento Box 4: Credentials */}
-        <Animated.View style={{ opacity: boxAnims[3], transform: [{ translateY: boxAnims[3].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }], backgroundColor: '#0D2A1B', borderRadius: 24, padding: 20, marginBottom: 32, borderWidth: 1, borderColor: 'rgba(216, 243, 220, 0.1)' }}>
-          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800', marginBottom: 16, letterSpacing: 1.5, textTransform: 'uppercase' }}>Compliance & Credentials</Text>
-          {form.user_type !== 'Doctor' && <PremiumTextInput label="Drug License Number" icon="document-text" value={form.drug_license} onChangeText={(t) => setForm({...form, drug_license: t})} />}
-          {(form.user_type === 'Retailer' || form.user_type === 'Doctor with Pharmacy') && <PremiumTextInput label="GST Number" icon="receipt" value={form.gst_number} onChangeText={(t) => setForm({...form, gst_number: t})} />}
-          {form.user_type !== 'Retailer' && <PremiumTextInput label="Registration Number" icon="shield-checkmark" value={form.registration_number} onChangeText={(t) => setForm({...form, registration_number: t})} />}
-        </Animated.View>
-
         {/* Submit */}
-        <AnimatedPressable style={[styles.buttonPrimary, { marginBottom: 24, paddingVertical: 18, ...SHADOWS.glowGreen }]} onPress={handleSignup} disabled={isLoading}>
-          <Text style={[styles.buttonPrimaryText, { fontSize: 18 }]}>{isLoading ? 'Submitting...' : 'Submit Application'}</Text>
+        <AnimatedPressable
+          style={[
+            styles.buttonPrimary,
+            { marginBottom: 20, paddingVertical: 18, opacity: canSubmit ? 1 : 0.55, backgroundColor: BRAND[800] },
+            canSubmit ? SHADOWS.glowGreen : {},
+          ]}
+          onPress={handleSignup}
+          disabled={isLoading || !canSubmit}
+        >
+          <Text style={[styles.buttonPrimaryText, { fontSize: 17, color: '#fff' }]}>
+            {isLoading ? 'Submitting…' : 'Submit for approval'}
+          </Text>
         </AnimatedPressable>
-        
+
         <TouchableOpacity style={{ alignItems: 'center', marginBottom: 12 }} onPress={() => setCurrentScreen('Login')}>
-          <Text style={{ color: '#64748b', fontWeight: '700', fontSize: 14 }}>Already registered? <Text style={{color: BRAND[500], fontWeight: '900'}}>Log In</Text></Text>
+          <Text style={{ color: '#64748b', fontWeight: '700', fontSize: 14 }}>
+            Already registered? <Text style={{ color: BRAND[700], fontWeight: '900' }}>Log in</Text>
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={{ alignItems: 'center', marginBottom: 40 }} onPress={() => setShowConfig(true)}>
           <Text style={{ color: '#475569', fontWeight: '800', fontSize: 10, letterSpacing: 1 }}>NETWORK SETUP</Text>
         </TouchableOpacity>
 
-        {/* City/District Picker Modal */}
-        <Modal visible={showCityPicker} transparent animationType="slide">
-          <View style={styles.modalOverlayBottom}>
-            <View style={[styles.bottomSheet, { maxHeight: '70%', backgroundColor: '#0B2618', paddingBottom: 40 }]}>
-              <View style={styles.dragHandle} />
-              <Text style={[styles.modalTitle, { color: '#fff' }]}>Select District</Text>
-              <Text style={{color: BRAND[500], fontSize: 13, marginBottom: 16, fontWeight: '800', letterSpacing: 1}}>{form.zone.toUpperCase()}</Text>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {TN_DISTRICTS.map(city => (
-                  <TouchableOpacity key={city} style={{ paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#1e293b', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: form.city === city ? BRAND[800] : 'transparent' }} onPress={() => { Haptics.selectionAsync(); setForm({...form, city}); setShowCityPicker(false); }}>
-                    <Text style={{fontSize: 16, fontWeight: form.city === city ? '900' : '600', color: form.city === city ? '#fff' : '#cbd5e1'}}>{city}</Text>
-                    {form.city === city && <Ionicons name="checkmark-circle" size={20} color="#fff" />}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <AnimatedPressable style={[styles.buttonPrimary, {marginTop: 16, backgroundColor: '#0A1E13', borderWidth: 1, borderColor: '#1e293b'}]} onPress={() => setShowCityPicker(false)}>
-                <Text style={[styles.buttonPrimaryText, { color: '#fff' }]}>Close</Text>
-              </AnimatedPressable>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Network Config Modal */}
+        {/* Network Config Modal (kept for dev) */}
         <Modal visible={showConfig} transparent animationType="fade">
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Network Setup</Text>
               <Text style={{ marginBottom: 20, color: '#64748b', fontSize: 14 }}>Enter the Next.js API IPv4 address.</Text>
-              <TextInput style={styles.inputFieldConfig} value={tempIp} onChangeText={setTempIp} placeholder="192.168.x.x" keyboardType="numbers-and-punctuation"/>
+              <TextInput style={styles.inputFieldConfig} value={tempIp} onChangeText={setTempIp} placeholder="192.168.x.x" keyboardType="numbers-and-punctuation" />
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
                 <TouchableOpacity onPress={() => setShowConfig(false)} style={styles.btnCancel}><Text style={{ fontWeight: '700', color: '#475569' }}>Cancel</Text></TouchableOpacity>
                 <TouchableOpacity onPress={() => { setServerIp(tempIp); setShowConfig(false); }} style={styles.btnSave}><Text style={{ color: '#fff', fontWeight: '800' }}>Save IP</Text></TouchableOpacity>
@@ -792,6 +1009,7 @@ function SignupScreen({ setCurrentScreen }) {
 // --- Login Screen (Premium Animated) ---
 function LoginScreen({ setCurrentScreen }) {
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [otpSent, setOtpSent] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
@@ -816,6 +1034,7 @@ function LoginScreen({ setCurrentScreen }) {
   const setServerIp = useStore((state) => state.setServerIp);
   const getOtpUrl = useStore((state) => state.getOtpUrl);
   const getVerifyUrl = useStore((state) => state.getVerifyUrl);
+  const getDevLoginUrl = useStore((state) => state.getDevLoginUrl);
 
   useEffect(() => { setTempIp(serverIp); }, [serverIp]);
 
@@ -875,9 +1094,41 @@ function LoginScreen({ setCurrentScreen }) {
     }
   };
 
+  const devLogin = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(getDevLoginUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password, device_info: Platform.OS }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        useStore.getState().setSessionId(data.session_id);
+        setUser(data.user);
+        await AsyncStorage.setItem('@upkem_session_id', data.session_id);
+        await AsyncStorage.setItem('@upkem_user', JSON.stringify(data.user));
+        setCurrentScreen('Home');
+      } else if (data.pending) {
+        setUser(data.user);
+        setCurrentScreen('PendingApproval');
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert('Login failed', data.error || 'Check phone and password.');
+      }
+    } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Connection Error', 'Could not reach the server. Check NETWORK CONFIGURATION.');
+    }
+    setIsLoading(false);
+  };
+
   const requestOtp = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (phone.length < 10) return Alert.alert('Invalid', 'Enter a valid 10-digit phone number');
+    // Dev bypass: if a password is provided, skip Firebase OTP entirely.
+    if (password && password.length > 0) return devLogin();
     setIsLoading(true);
     try {
       const result = await auth().signInWithPhoneNumber('+91' + phone);
@@ -969,10 +1220,26 @@ function LoginScreen({ setCurrentScreen }) {
                 <View style={styles.inputDivider} />
                 <TextInput style={styles.inputField} placeholder="00000 00000" placeholderTextColor="#94a3b8" keyboardType="phone-pad" value={phone} onChangeText={setPhone} maxLength={10} returnKeyType="done" />
               </View>
-              <Text style={{color: '#6B7280', fontSize: 13, marginBottom: 24, lineHeight: 20}}>By continuing you agree to Upkem's <Text style={{textDecorationLine: 'underline', fontWeight: '700'}}>Terms</Text> & <Text style={{textDecorationLine: 'underline', fontWeight: '700'}}>Privacy Policy</Text></Text>
+              <View style={[styles.inputWrapper, { marginTop: 12 }]}>
+                <TextInput
+                  style={[styles.inputField, { paddingLeft: 16 }]}
+                  placeholder="Dev password (skip OTP)"
+                  placeholderTextColor="#94a3b8"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  value={password}
+                  onChangeText={setPassword}
+                  returnKeyType="go"
+                />
+              </View>
+              <Text style={{color: '#6B7280', fontSize: 13, marginBottom: 24, marginTop: 12, lineHeight: 20}}>By continuing you agree to Upkem's <Text style={{textDecorationLine: 'underline', fontWeight: '700'}}>Terms</Text> & <Text style={{textDecorationLine: 'underline', fontWeight: '700'}}>Privacy Policy</Text></Text>
               <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
                 <AnimatedPressable style={styles.buttonPrimary} onPress={requestOtp} disabled={isLoading}>
-                  <Text style={styles.buttonPrimaryText}>{isLoading ? 'Sending...' : 'Send OTP  →'}</Text>
+                  <Text style={styles.buttonPrimaryText}>
+                    {isLoading
+                      ? (password ? 'Signing in...' : 'Sending...')
+                      : (password ? 'Sign in  →' : 'Send OTP  →')}
+                  </Text>
                 </AnimatedPressable>
               </Animated.View>
             </>
@@ -1088,7 +1355,41 @@ function PendingApprovalScreen({ setCurrentScreen }) {
   );
 }
 
-// --- Home Screen (MedPlus-style) ---
+// --- Profile completeness helpers ---
+type ProfileField = { key: string; label: string; icon: string; };
+
+function getRequiredProfileFields(userType?: string): ProfileField[] {
+  const base: ProfileField[] = [
+    { key: 'address',           label: 'Delivery address', icon: 'location-outline' },
+    { key: 'city',              label: 'District',         icon: 'map-outline' },
+    { key: 'email',             label: 'Email',            icon: 'mail-outline' },
+  ];
+  const t = (userType || '').toLowerCase();
+  if (t.includes('retailer')) {
+    base.push({ key: 'gst_number',   label: 'GST number',   icon: 'receipt-outline' });
+    base.push({ key: 'drug_license', label: 'Drug licence', icon: 'document-text-outline' });
+  } else if (t.includes('doctor with pharmacy')) {
+    base.push({ key: 'drug_license',        label: 'Drug licence',        icon: 'document-text-outline' });
+    base.push({ key: 'gst_number',          label: 'GST number',          icon: 'receipt-outline' });
+    base.push({ key: 'registration_number', label: 'Registration number', icon: 'shield-checkmark-outline' });
+  } else if (t.includes('doctor')) {
+    base.push({ key: 'registration_number', label: 'Registration number', icon: 'shield-checkmark-outline' });
+  } else if (t.includes('clinic') || t.includes('hospital')) {
+    base.push({ key: 'registration_number', label: 'Registration number', icon: 'shield-checkmark-outline' });
+    base.push({ key: 'gst_number',          label: 'GST number',          icon: 'receipt-outline' });
+  }
+  return base;
+}
+
+function getMissingProfileFields(user: any): ProfileField[] {
+  if (!user) return [];
+  return getRequiredProfileFields(user.user_type).filter(f => {
+    const v = user[f.key];
+    return v === undefined || v === null || String(v).trim() === '';
+  });
+}
+
+// --- Home Screen ---
 const HOME_CATEGORIES = [
   { name: 'Analgesics',       icon: 'medkit-outline',          bg: BRAND[100] },
   { name: 'Antibiotics',      icon: 'medical-outline',         bg: BRAND[100] },
@@ -1102,24 +1403,166 @@ const HOME_CATEGORIES = [
   { name: 'Ointments',        icon: 'color-fill-outline',      bg: BRAND[100] },
 ];
 
+// Banner slots — admin-editable later. Keep 4 slots.
+// action: 'catalog' | 'short-expiry' | 'orders' | 'profile'
+const HOME_BANNERS: any[] = [
+  {
+    id: 'b1',
+    kicker: 'Just landed',
+    title: 'New arrivals from top brands',
+    subtitle: 'Fresh stock ready to dispatch',
+    cta: 'Browse now',
+    bg: BRAND[800], fg: '#fff', accent: BRAND[100], iconColor: BRAND[800],
+    icon: 'sparkles', ctaBg: 'rgba(255,255,255,0.18)', action: 'catalog',
+  },
+  {
+    id: 'b2',
+    kicker: 'Better margins',
+    title: 'Short-expiry offers, up to 40% off',
+    subtitle: 'Select SKUs at special rates',
+    cta: 'See deals',
+    bg: '#F59E0B', fg: '#1A1A1A', accent: '#FEF3C7', iconColor: '#B45309',
+    icon: 'flame', ctaBg: 'rgba(0,0,0,0.10)', action: 'short-expiry',
+  },
+  {
+    id: 'b3',
+    kicker: 'One tap reorder',
+    title: 'Bring back your last order',
+    subtitle: 'Same items, one tap away',
+    cta: 'Repeat now',
+    bg: BRAND[100], fg: BRAND[900], accent: BRAND[800], iconColor: '#fff',
+    icon: 'repeat', ctaBg: 'rgba(0,0,0,0.08)', action: 'orders',
+  },
+  {
+    id: 'b4',
+    kicker: 'Free delivery',
+    title: 'Orders above ₹5,000 ship free',
+    subtitle: 'Same-day dispatch on Chennai orders',
+    cta: 'Order now',
+    bg: '#0EA5E9', fg: '#fff', accent: '#E0F2FE', iconColor: '#0369A1',
+    icon: 'car', ctaBg: 'rgba(255,255,255,0.18)', action: 'catalog',
+  },
+];
+
+function HeroCarousel({ onAction }) {
+  const scrollRef = useRef<any>(null);
+  const [idx, setIdx] = useState(0);
+  const CARD_WIDTH = SCREEN_WIDTH - 32;
+  const SNAP = CARD_WIDTH + 12;
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setIdx((prev) => {
+        const next = (prev + 1) % HOME_BANNERS.length;
+        scrollRef.current?.scrollTo({ x: next * SNAP, animated: true });
+        return next;
+      });
+    }, 4500);
+    return () => clearInterval(t);
+  }, []);
+
+  const onMomentumEnd = (e: any) => {
+    const x = e.nativeEvent.contentOffset.x;
+    const i = Math.round(x / SNAP);
+    if (i !== idx) setIdx(i);
+  };
+
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={SNAP}
+        decelerationRate="fast"
+        onMomentumScrollEnd={onMomentumEnd}
+        contentContainerStyle={{ paddingHorizontal: 16 }}
+      >
+        {HOME_BANNERS.map((b, i) => (
+          <TouchableOpacity
+            key={b.id}
+            activeOpacity={0.92}
+            onPress={() => onAction?.(b)}
+            style={{
+              width: CARD_WIDTH,
+              marginRight: i === HOME_BANNERS.length - 1 ? 0 : 12,
+              backgroundColor: b.bg,
+              borderRadius: 22,
+              padding: 18,
+              minHeight: 140,
+              justifyContent: 'space-between',
+              overflow: 'hidden',
+              ...SHADOWS.md,
+            }}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={{ fontSize: 11, fontWeight: '800', letterSpacing: 1, color: b.fg, opacity: 0.75, textTransform: 'uppercase', marginBottom: 6 }}>
+                  {b.kicker}
+                </Text>
+                <Text style={{ fontSize: 20, fontWeight: '900', color: b.fg, letterSpacing: -0.4, lineHeight: 24 }}>
+                  {b.title}
+                </Text>
+                <Text style={{ fontSize: 12, color: b.fg, opacity: 0.8, fontWeight: '600', marginTop: 4, lineHeight: 16 }}>
+                  {b.subtitle}
+                </Text>
+              </View>
+              <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: b.accent, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name={b.icon} size={26} color={b.iconColor} />
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+              <View style={{ backgroundColor: b.ctaBg, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ color: b.fg, fontWeight: '800', fontSize: 12 }}>{b.cta}</Text>
+                <Ionicons name="arrow-forward" size={12} color={b.fg} />
+              </View>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 10, gap: 6 }}>
+        {HOME_BANNERS.map((_, i) => (
+          <View
+            key={i}
+            style={{
+              width: i === idx ? 20 : 6,
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: i === idx ? BRAND[800] : '#CBD5E1',
+            }}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function HomeScreen({ setCurrentScreen, onCategorySelect, onRefresh }) {
   const products = useStore((s) => s.products);
   const user = useStore((s) => s.user);
   const orders = useStore((s) => s.orders);
-  const schemes = useStore((s) => s.schemes)?.filter(s => s.is_active);
+  const repeatOrderAction = useStore((s) => s.repeatOrder);
+  const notifications = useStore((s) => s.notifications);
+  const unreadNotifs = useStore((s) => s.unreadNotifs);
   const featured = products.slice(0, 8);
   const lastOrder = orders.length > 0 ? orders[0] : null;
   const availableCredit = user ? Math.max(0, (user.credit_limit || 0) - (user.credit_balance || 0)) : 0;
   const [refreshing, setRefreshing] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
   const creditUtilization = user ? ((user.credit_balance || 0) / Math.max(user.credit_limit || 1, 1)) * 100 : 0;
 
-  // This Month: only count orders whose date matches current month/year
-  const currentMonth = new Date().toISOString().slice(0, 7); // "2024-01"
-  const thisMonthOrders = orders.filter(o => {
-    const d = o.created_at || o.date || '';
-    return d.startsWith(currentMonth) || d.slice(3, 10) === currentMonth.slice(5) + '/' + currentMonth.slice(0, 4);
-  });
-  const thisMonthTotal = thisMonthOrders.reduce((a, o) => a + (o.total || 0), 0);
+  const markAllRead = async () => {
+    try {
+      await fetch(`${useStore.getState().getBaseUrl()}/api/notifications`, {
+        method: 'PATCH',
+        headers: useStore.getState().authHeaders(),
+        body: JSON.stringify({ all: true }),
+      });
+      useStore.getState().setNotifications(
+        (useStore.getState().notifications || []).map((n: any) => ({ ...n, read: true }))
+      );
+    } catch { /* ignore */ }
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -1127,172 +1570,439 @@ function HomeScreen({ setCurrentScreen, onCategorySelect, onRefresh }) {
     setTimeout(() => setRefreshing(false), 1000);
   };
 
+  const handleBanner = (b: any) => {
+    Haptics.selectionAsync();
+    if (b.action === 'catalog') { onCategorySelect('All'); setCurrentScreen('Catalog'); }
+    else if (b.action === 'short-expiry') { onCategorySelect('__short_expiry__'); setCurrentScreen('Catalog'); }
+    else if (b.action === 'orders') { setCurrentScreen('Orders'); }
+    else if (b.action === 'profile') { setCurrentScreen('Profile'); }
+  };
+
+  const handleRepeat = () => {
+    if (!lastOrder) return;
+    const added = repeatOrderAction(lastOrder);
+    if (added > 0) setCurrentScreen('Cart');
+  };
+
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={BRAND[800]} colors={[BRAND[800]]} />}>
-        {/* Header with greeting */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={BRAND[800]} colors={[BRAND[800]]} />}
+      >
+        {/* Header */}
         <View style={styles.homeHeader}>
-          <View style={{flexDirection: 'row', alignItems: 'center'}}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Image source={require('./assets/pharma_logo.jpeg')} style={styles.headerLogo} />
-            <View style={{marginLeft: 10}}>
-              <Text style={{fontSize: 12, color: '#6B7280', fontWeight: '600'}}>Good {getTimeOfDay()},</Text>
-              <Text style={{fontSize: 16, fontWeight: '900', color: BRAND[800], letterSpacing: -0.3}}>{user?.store_name || 'UPKEM LABS'}</Text>
+            <View style={{ marginLeft: 10 }}>
+              <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: '600' }}>Good {getTimeOfDay()},</Text>
+              <Text style={{ fontSize: 16, fontWeight: '900', color: BRAND[800], letterSpacing: -0.3 }} numberOfLines={1}>
+                {user?.store_name || 'UPKEM LABS'}
+              </Text>
             </View>
           </View>
-          <View style={{flexDirection: 'row', alignItems: 'center', gap: 16}}>
-            <TouchableOpacity onPress={() => setCurrentScreen('Orders')}>
-              <Ionicons name="notifications-outline" size={24} color="#1A1A1A" />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <TouchableOpacity onPress={() => setShowNotifs(true)} style={{ position: 'relative' }}>
+              <Ionicons name={unreadNotifs > 0 ? 'notifications' : 'notifications-outline'} size={24} color={unreadNotifs > 0 ? BRAND[800] : '#1A1A1A'} />
+              {unreadNotifs > 0 && (
+                <View style={{ position: 'absolute', top: -4, right: -6, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#dc2626', paddingHorizontal: 5, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#F7FAF8' }}>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>{unreadNotifs > 9 ? '9+' : unreadNotifs}</Text>
+                </View>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setCurrentScreen('Profile')} style={{width: 36, height: 36, borderRadius: 18, backgroundColor: BRAND[800], justifyContent: 'center', alignItems: 'center'}}>
-              <Text style={{color: '#fff', fontWeight: '800', fontSize: 14}}>{user?.store_name?.[0] || 'U'}</Text>
+            <TouchableOpacity
+              onPress={() => setCurrentScreen('Profile')}
+              style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: BRAND[800], justifyContent: 'center', alignItems: 'center' }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>{user?.store_name?.[0] || 'U'}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Credit Health Banner */}
+        {/* Credit warning — safety alert, keep on top */}
         {creditUtilization > 75 && (
-          <TouchableOpacity onPress={() => setCurrentScreen('Profile')} style={{ marginHorizontal: 16, marginBottom: 12, backgroundColor: creditUtilization > 90 ? '#FEF2F2' : '#FFF7ED', padding: 14, borderRadius: 16, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: creditUtilization > 90 ? '#FEE2E2' : '#FED7AA' }} activeOpacity={0.85}>
-            <Ionicons name={creditUtilization > 90 ? 'warning' : 'alert-circle-outline'} size={20} color={creditUtilization > 90 ? '#DC2626' : '#EA580C'} style={{ marginRight: 10 }} />
+          <TouchableOpacity
+            onPress={() => setCurrentScreen('Profile')}
+            style={{
+              marginHorizontal: 16, marginBottom: 12,
+              backgroundColor: creditUtilization > 90 ? '#FEF2F2' : '#FFF7ED',
+              padding: 14, borderRadius: 16,
+              flexDirection: 'row', alignItems: 'center',
+              borderWidth: 1, borderColor: creditUtilization > 90 ? '#FEE2E2' : '#FED7AA',
+            }}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name={creditUtilization > 90 ? 'warning' : 'alert-circle-outline'}
+              size={20}
+              color={creditUtilization > 90 ? '#DC2626' : '#EA580C'}
+              style={{ marginRight: 10 }}
+            />
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '800', color: creditUtilization > 90 ? '#991B1B' : '#9A3412' }}>{creditUtilization > 90 ? 'Credit almost full' : 'Credit running low'}</Text>
-              <Text style={{ fontSize: 11, fontWeight: '600', color: creditUtilization > 90 ? '#B91C1C' : '#C2410C', marginTop: 1 }}>₹{availableCredit.toLocaleString('en-IN')} remaining · Tap to view payment options</Text>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: creditUtilization > 90 ? '#991B1B' : '#9A3412' }}>
+                {creditUtilization > 90 ? 'Credit almost full' : 'Credit running low'}
+              </Text>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: creditUtilization > 90 ? '#B91C1C' : '#C2410C', marginTop: 1 }}>
+                ₹{availableCredit.toLocaleString('en-IN')} remaining · Tap to view payment options
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
           </TouchableOpacity>
         )}
 
+        {/* Complete your profile — nudges only when required fields are missing */}
+        {(() => {
+          const missing = getMissingProfileFields(user);
+          const requiredCount = getRequiredProfileFields(user?.user_type).length;
+          if (!user || missing.length === 0) return null;
+          const filled = requiredCount - missing.length;
+          const pct = requiredCount > 0 ? Math.round((filled / requiredCount) * 100) : 0;
+          return (
+            <TouchableOpacity
+              onPress={() => setCurrentScreen('Profile')}
+              activeOpacity={0.9}
+              style={{
+                marginHorizontal: 16, marginBottom: 12,
+                backgroundColor: '#EFF6FF', padding: 14, borderRadius: 16,
+                borderWidth: 1, borderColor: '#BFDBFE',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                  <Ionicons name="person-circle-outline" size={22} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '900', color: '#1E3A8A' }}>Complete your profile</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#1D4ED8', marginTop: 2 }}>
+                    {filled} of {requiredCount} done · add {missing.slice(0, 2).map(m => m.label).join(', ')}
+                    {missing.length > 2 ? ` +${missing.length - 2} more` : ''}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#93C5FD" />
+              </View>
+              {/* Progress bar */}
+              <View style={{ height: 4, backgroundColor: '#DBEAFE', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+                <View style={{ width: `${pct}%`, height: 4, backgroundColor: '#2563EB', borderRadius: 2 }} />
+              </View>
+            </TouchableOpacity>
+          );
+        })()}
+
         {/* Search shortcut */}
-        <TouchableOpacity style={styles.homeSearchBar} onPress={() => setCurrentScreen('Catalog')} activeOpacity={0.85}>
-          <Ionicons name="search-outline" size={18} color="#94a3b8" style={{marginRight: 10}} />
+        <TouchableOpacity
+          style={styles.homeSearchBar}
+          onPress={() => setCurrentScreen('Catalog')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="search-outline" size={18} color="#94a3b8" style={{ marginRight: 10 }} />
           <Text style={styles.homeSearchPlaceholder}>Search medicines, brands…</Text>
         </TouchableOpacity>
 
-        {/* Stats Row */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>LAST ORDER</Text>
-            <Text style={styles.statValue}>₹{lastOrder ? lastOrder.total?.toLocaleString('en-IN') : '0'}</Text>
-            <Text style={styles.statSub}>{lastOrder ? lastOrder.date : '—'}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>THIS MONTH</Text>
-            <Text style={styles.statValue}>₹{thisMonthTotal.toLocaleString('en-IN', {notation: 'compact', compactDisplay: 'short'})}</Text>
-            <Text style={styles.statSub}>{thisMonthOrders.length} orders</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>CREDIT LEFT</Text>
-            <Text style={styles.statValue}>₹{availableCredit.toLocaleString('en-IN', {notation: 'compact', compactDisplay: 'short'})}</Text>
-            <Text style={styles.statSub}>of ₹{(user?.credit_limit || 0).toLocaleString('en-IN', {notation: 'compact', compactDisplay: 'short'})}</Text>
-          </View>
-        </View>
+        {/* 1. HERO BANNER CAROUSEL */}
+        <HeroCarousel onAction={handleBanner} />
 
-        {/* Active Schemes / Special Offers */}
-        {schemes && schemes.length > 0 && (
-          <View style={{ marginBottom: 16 }}>
-            <View style={styles.homeSectionRow}>
-              <Text style={styles.homeSectionTitle}>Active Offers</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
-              {schemes.map((scheme, idx) => (
-                <View key={scheme.id || idx} style={{ width: 280, backgroundColor: BRAND[800], padding: 20, borderRadius: 20, ...SHADOWS.md }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                    <View style={{ backgroundColor: BRAND[600], paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
-                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' }}>{scheme.scheme_type}</Text>
-                    </View>
-                    <Ionicons name="pricetag" size={20} color={BRAND[100]} />
-                  </View>
-                  <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900', letterSpacing: -0.3, marginBottom: 4 }}>{scheme.title}</Text>
-                  <Text style={{ color: BRAND[100], fontSize: 13, fontWeight: '500', marginBottom: 16 }}>{scheme.description || 'Apply code at checkout'}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, alignSelf: 'flex-start' }}>
-                    <Text style={{ color: '#64748b', fontSize: 11, fontWeight: '700', marginRight: 6 }}>CODE:</Text>
-                    <Text style={{ color: BRAND[800], fontSize: 14, fontWeight: '900', letterSpacing: 1 }}>{scheme.code}</Text>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Browse by Category */}
+        {/* 2. CATEGORIES */}
         <View style={styles.homeSectionRow}>
-          <Text style={styles.homeSectionTitle}>Browse by category</Text>
+          <Text style={styles.homeSectionTitle}>Shop by category</Text>
           <TouchableOpacity onPress={() => { onCategorySelect('All'); setCurrentScreen('Catalog'); }}>
             <Text style={styles.seeAllText}>See all</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 16 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 14 }}
+        >
           {HOME_CATEGORIES.map((cat) => (
             <TouchableOpacity
               key={cat.name}
-              style={styles.homeCategoryItem}
+              style={{ alignItems: 'center', width: 68 }}
               onPress={() => { Haptics.selectionAsync(); onCategorySelect(cat.name); setCurrentScreen('Catalog'); }}
               activeOpacity={0.8}
             >
-              <View style={[styles.homeCategoryCircle, { backgroundColor: BRAND[800] }]}>
-                <Ionicons name={cat.icon} size={22} color="#fff" />
+              <View style={[styles.homeCategoryCircle, { backgroundColor: BRAND[800], width: 56, height: 56, borderRadius: 20, marginBottom: 6 }]}>
+                <Ionicons name={cat.icon as any} size={24} color="#fff" />
               </View>
-              <Text style={styles.homeCategoryText} numberOfLines={1}>{cat.name}</Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#1A1A1A', textAlign: 'center' }} numberOfLines={2}>
+                {cat.name}
+              </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {/* Frequently Ordered */}
-        <View style={[styles.homeSectionRow, {marginTop: 8}]}>
+        {/* 3. TOP PRODUCTS */}
+        <View style={[styles.homeSectionRow, { marginTop: 20 }]}>
           <View>
-            <Text style={styles.homeSectionTitle}>Frequently ordered</Text>
-            <Text style={{fontSize: 12, color: '#6B7280', fontWeight: '500'}}>Based on last 30 days</Text>
+            <Text style={styles.homeSectionTitle}>Top products</Text>
+            <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: '500', marginTop: 2 }}>Hot sellers this month</Text>
           </View>
           <TouchableOpacity onPress={() => { onCategorySelect('All'); setCurrentScreen('Catalog'); }}>
             <Text style={styles.seeAllText}>View all</Text>
           </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-          {featured.map((p) => (
+          {featured.length === 0 ? (
+            [1, 2, 3].map(i => (
+              <View key={i} style={[styles.featuredCard, { padding: 10 }]}>
+                <SkeletonCard height={110} style={{ marginBottom: 8 }} />
+                <SkeletonCard height={12} style={{ width: '80%', marginBottom: 6 }} />
+                <SkeletonCard height={10} style={{ width: '50%', marginBottom: 6 }} />
+                <SkeletonCard height={16} style={{ width: '40%' }} />
+              </View>
+            ))
+          ) : featured.map((p: any) => (
             <TouchableOpacity
               key={p.id}
               style={styles.featuredCard}
               onPress={() => { onCategorySelect('All'); setCurrentScreen('Catalog'); }}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
-              <Image source={{ uri: getProductImage(p) }} style={styles.featuredCardImage} />
+              <View>
+                <Image source={{ uri: getProductImage(p) }} style={styles.featuredCardImage} />
+                {/* Top-seller badge */}
+                <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: BRAND[800], paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                  <Ionicons name="flame" size={10} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 0.3 }}>TOP</Text>
+                </View>
+              </View>
               <Text style={styles.featuredCardName} numberOfLines={2}>{p.name}</Text>
               <Text style={styles.featuredCardCompany} numberOfLines={1}>{p.company}</Text>
-              <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 10, marginBottom: 10}}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 10, marginBottom: 10 }}>
                 <Text style={styles.featuredCardPrice}>₹{p.price_ptr || p.price}</Text>
-                <View style={{backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6}}>
-                  <Text style={{fontSize: 10, color: '#16a34a', fontWeight: '700'}}>● In stock</Text>
+                <View style={{ backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                  <Text style={{ fontSize: 10, color: '#16a34a', fontWeight: '700' }}>● In stock</Text>
                 </View>
               </View>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {/* Recently Ordered */}
+        {/* 4. LAST ORDER → REPEAT */}
         {lastOrder && (
           <>
-            <View style={[styles.homeSectionRow, {marginTop: 8}]}>
+            <View style={[styles.homeSectionRow, { marginTop: 20 }]}>
               <View>
-                <Text style={styles.homeSectionTitle}>Recently ordered</Text>
-                <Text style={{fontSize: 12, color: '#6B7280', fontWeight: '500'}}>From order {lastOrder.id}</Text>
+                <Text style={styles.homeSectionTitle}>Your last order</Text>
+                <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: '500', marginTop: 2 }}>
+                  Repeat with one tap
+                </Text>
               </View>
               <TouchableOpacity onPress={() => setCurrentScreen('Profile')}>
-                <Text style={styles.seeAllText}>View all</Text>
+                <Text style={styles.seeAllText}>All orders</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-              {(lastOrder.items || []).slice(0, 4).map((item, idx) => (
-                <View key={idx} style={[styles.featuredCard, {width: 160}]}>
-                  <Image source={{ uri: getProductImage(item) }} style={styles.featuredCardImage} />
-                  <Text style={styles.featuredCardName} numberOfLines={2}>{item.name}</Text>
-                  <Text style={styles.featuredCardCompany} numberOfLines={1}>{item.company}</Text>
-                  <Text style={[styles.featuredCardPrice, {marginBottom: 10}]}>₹{item.price_ptr || item.price}</Text>
+
+            <View
+              style={{
+                marginHorizontal: 16,
+                borderRadius: 22,
+                borderWidth: 1.5,
+                borderColor: BRAND[500],
+                backgroundColor: BRAND[50],
+                padding: 16,
+                ...SHADOWS.sm,
+              }}
+            >
+              {/* Summary row */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <View style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: BRAND[800], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                  <Ionicons name="receipt-outline" size={22} color="#fff" />
                 </View>
-              ))}
-            </ScrollView>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 12, color: BRAND[700], fontWeight: '700' }}>
+                    {lastOrder.id || 'Last order'} · {lastOrder.date || '—'}
+                  </Text>
+                  <Text style={{ fontSize: 16, fontWeight: '900', color: BRAND[900], letterSpacing: -0.3, marginTop: 2 }}>
+                    {(lastOrder.items?.length || 0)} items · ₹{(lastOrder.total || 0).toLocaleString('en-IN')}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Item chips */}
+              {lastOrder.items?.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 6, marginBottom: 12 }}
+                >
+                  {lastOrder.items.slice(0, 8).map((it: any, i: number) => (
+                    <View
+                      key={i}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center',
+                        backgroundColor: '#fff',
+                        paddingLeft: 4, paddingRight: 10, paddingVertical: 4,
+                        borderRadius: 12, borderWidth: 1, borderColor: BRAND[100],
+                      }}
+                    >
+                      <Image source={{ uri: getProductImage(it) }} style={{ width: 26, height: 26, borderRadius: 6, marginRight: 6, backgroundColor: '#f1f5f9' }} />
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND[900], maxWidth: 130 }} numberOfLines={1}>
+                        {it.name}
+                      </Text>
+                      {it.quantity ? (
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND[700], marginLeft: 6 }}>×{it.quantity}</Text>
+                      ) : null}
+                    </View>
+                  ))}
+                  {lastOrder.items.length > 8 && (
+                    <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: BRAND[100], justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND[700] }}>+{lastOrder.items.length - 8} more</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              )}
+
+              {/* Repeat CTA */}
+              <TouchableOpacity
+                onPress={handleRepeat}
+                activeOpacity={0.9}
+                style={{
+                  backgroundColor: BRAND[800],
+                  paddingVertical: 14,
+                  borderRadius: 16,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  ...SHADOWS.glowGreen,
+                }}
+              >
+                <Ionicons name="repeat" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 }}>Repeat this order</Text>
+              </TouchableOpacity>
+            </View>
           </>
         )}
+
+        {/* Compact account snapshot at bottom (moved from stats row) */}
+        <View style={{ marginHorizontal: 16, marginTop: 24, backgroundColor: '#fff', borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm }}>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
+            Your account
+          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700' }}>Credit left</Text>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: BRAND[800], marginTop: 2 }}>
+                ₹{availableCredit.toLocaleString('en-IN', { notation: 'compact', compactDisplay: 'short' })}
+              </Text>
+              <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '600', marginTop: 1 }}>
+                of ₹{(user?.credit_limit || 0).toLocaleString('en-IN', { notation: 'compact', compactDisplay: 'short' })}
+              </Text>
+            </View>
+            <View style={{ width: 1, backgroundColor: '#f1f5f9', marginHorizontal: 8 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700' }}>Orders</Text>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: '#1A1A1A', marginTop: 2 }}>
+                {orders.length}
+              </Text>
+              <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '600', marginTop: 1 }}>all time</Text>
+            </View>
+            <View style={{ width: 1, backgroundColor: '#f1f5f9', marginHorizontal: 8 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700' }}>Last order</Text>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: '#1A1A1A', marginTop: 2 }}>
+                ₹{lastOrder ? (lastOrder.total || 0).toLocaleString('en-IN', { notation: 'compact', compactDisplay: 'short' }) : '0'}
+              </Text>
+              <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '600', marginTop: 1 }} numberOfLines={1}>
+                {lastOrder?.date || '—'}
+              </Text>
+            </View>
+          </View>
+        </View>
       </ScrollView>
+
+      {/* ── Notifications drawer ─────────────────────────────────────────────── */}
+      <Modal visible={showNotifs} animationType="slide" transparent onRequestClose={() => setShowNotifs(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)' }}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowNotifs(false)} />
+          <View style={{ backgroundColor: '#fff', maxHeight: '80%', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 24 }}>
+            {/* Header */}
+            <View style={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+              <View>
+                <Text style={{ fontSize: 20, fontWeight: '900', color: '#1A1A1A', letterSpacing: -0.5 }}>Notifications</Text>
+                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginTop: 2 }}>
+                  {unreadNotifs > 0 ? `${unreadNotifs} unread` : 'All caught up'}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {unreadNotifs > 0 && (
+                  <TouchableOpacity onPress={markAllRead} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: BRAND[50], borderWidth: 1, borderColor: BRAND[100] }}>
+                    <Text style={{ color: BRAND[800], fontWeight: '800', fontSize: 12 }}>Mark all read</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => setShowNotifs(false)} style={{ padding: 8 }}>
+                  <Ionicons name="close" size={22} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* List */}
+            <ScrollView style={{ maxHeight: 500 }}>
+              {(!notifications || notifications.length === 0) ? (
+                <View style={{ padding: 40, alignItems: 'center' }}>
+                  <Ionicons name="notifications-off-outline" size={48} color="#cbd5e1" style={{ marginBottom: 12 }} />
+                  <Text style={{ color: '#94a3b8', fontSize: 14, fontWeight: '600' }}>No notifications yet</Text>
+                </View>
+              ) : (
+                notifications.map((n: any) => {
+                  const iconName =
+                    n.type === 'invoice_ready' ? 'document-text' :
+                    n.type === 'order_packaged' ? 'cube-outline' :
+                    n.type === 'order_dispatched' ? 'car-outline' :
+                    n.type === 'order_rejected' ? 'close-circle-outline' :
+                    n.type === 'profile_change_approved' ? 'checkmark-circle-outline' :
+                    n.type === 'profile_change_rejected' ? 'close-circle-outline' :
+                    'notifications-outline';
+                  const iconColor = n.type === 'order_rejected' || n.type === 'profile_change_rejected' ? '#dc2626' : BRAND[700];
+                  const dateStr = new Date(n.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+                  return (
+                    <TouchableOpacity
+                      key={n.id}
+                      onPress={async () => {
+                        if (!n.read) {
+                          try {
+                            await fetch(`${useStore.getState().getBaseUrl()}/api/notifications`, {
+                              method: 'PATCH',
+                              headers: useStore.getState().authHeaders(),
+                              body: JSON.stringify({ ids: [n.id] }),
+                            });
+                            useStore.getState().setNotifications(
+                              (useStore.getState().notifications || []).map((x: any) => x.id === n.id ? { ...x, read: true } : x)
+                            );
+                          } catch {}
+                        }
+                        // Deeplink: open the linked order tracking screen if there's one
+                        if (n.meta?.order_id) {
+                          const ord = (useStore.getState().orders || []).find((o: any) => o.id === n.meta.order_id);
+                          if (ord) {
+                            setShowNotifs(false);
+                            setCurrentScreen('Orders');
+                          }
+                        }
+                      }}
+                      style={{ flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f8fafc', backgroundColor: n.read ? '#fff' : BRAND[50] + '80' }}
+                    >
+                      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: n.read ? '#F7FAF8' : BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                        <Ionicons name={iconName as any} size={20} color={iconColor} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={{ fontSize: 14, fontWeight: '800', color: '#1A1A1A', flex: 1 }} numberOfLines={1}>{n.title}</Text>
+                          {!n.read && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: BRAND[600] }} />}
+                        </View>
+                        {n.body && <Text style={{ fontSize: 12, color: '#475569', fontWeight: '500', marginTop: 3, lineHeight: 17 }} numberOfLines={2}>{n.body}</Text>}
+                        <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '600', marginTop: 4 }}>{dateStr}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1307,15 +2017,16 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
   const user = useStore((state) => state.user);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Flipkart-style multi-select filters
+  // Multi-select filters. `__short_expiry__` is a sentinel from the home banner.
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
-    initialCategory && initialCategory !== 'All' ? [initialCategory] : []
+    initialCategory && initialCategory !== 'All' && initialCategory !== '__short_expiry__' ? [initialCategory] : []
   );
   const [selectedSystems, setSelectedSystems] = useState<string[]>([]);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState('All');
   const [sortOption, setSortOption] = useState('name_asc');
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [filterShortExpiry, setFilterShortExpiry] = useState(initialCategory === '__short_expiry__');
 
   const categories = [...new Set(productsList.map(p => p.category).filter(Boolean))].sort() as string[];
   const systems = [...new Set(productsList.map(p => p.body_system).filter(Boolean))].sort() as string[];
@@ -1329,8 +2040,8 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
     Haptics.selectionAsync();
     setSelectedSystems(prev => prev.includes(sys) ? prev.filter(s => s !== sys) : [...prev, sys]);
   };
-  const clearAllFilters = () => { setSelectedCategories([]); setSelectedSystems([]); setSelectedCompany('All'); setSortOption('name_asc'); };
-  const activeFilterCount = selectedCategories.length + selectedSystems.length + (selectedCompany !== 'All' ? 1 : 0);
+  const clearAllFilters = () => { setSelectedCategories([]); setSelectedSystems([]); setSelectedCompany('All'); setSortOption('name_asc'); setFilterShortExpiry(false); };
+  const activeFilterCount = selectedCategories.length + selectedSystems.length + (selectedCompany !== 'All' ? 1 : 0) + (filterShortExpiry ? 1 : 0);
 
   let filteredProducts = productsList.filter(p => {
     const q = searchQuery.toLowerCase();
@@ -1340,7 +2051,8 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
     const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(p.category);
     const matchesSystem = selectedSystems.length === 0 || selectedSystems.includes(p.body_system);
     const matchesCompany = selectedCompany === 'All' || p.company === selectedCompany;
-    return matchesSearch && matchesCategory && matchesSystem && matchesCompany;
+    const matchesShortExp = !filterShortExpiry || !!p.short_expiry || (p.discount_percent && p.discount_percent > 0);
+    return matchesSearch && matchesCategory && matchesSystem && matchesCompany && matchesShortExp;
   });
 
   if (sortOption === 'price_asc') filteredProducts.sort((a,b) => (a.price_ptr || a.price) - (b.price_ptr || b.price));
@@ -1397,9 +2109,32 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
               </TouchableOpacity>
             </View>
 
-            {/* Active filter chips */}
+            {/* Quick filter row — always visible, primary offer surface */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ marginTop: 10, gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => { Haptics.selectionAsync(); setFilterShortExpiry(v => !v); }}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 6,
+                  paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                  backgroundColor: filterShortExpiry ? '#F59E0B' : '#FFF7ED',
+                  borderWidth: 1,
+                  borderColor: filterShortExpiry ? '#F59E0B' : '#FED7AA',
+                }}
+              >
+                <Ionicons name="flame" size={13} color={filterShortExpiry ? '#fff' : '#B45309'} />
+                <Text style={{ fontSize: 13, fontWeight: '800', color: filterShortExpiry ? '#fff' : '#B45309' }}>Short expiry offers</Text>
+              </TouchableOpacity>
+              {/* Placeholder for future quick filters (top-selling, in-stock) */}
+            </ScrollView>
+
+            {/* Active filter chips (only shown once user has picks) */}
             {activeFilterCount > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10, marginBottom: 4 }}>
+                {filterShortExpiry && (
+                  <TouchableOpacity style={[styles.activeChip, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]} onPress={() => setFilterShortExpiry(false)}>
+                    <Text style={[styles.activeChipText, { color: '#B45309' }]}>Short expiry ✕</Text>
+                  </TouchableOpacity>
+                )}
                 {selectedCategories.map(cat => (
                   <TouchableOpacity key={cat} style={styles.activeChip} onPress={() => toggleCategory(cat)}>
                     <Text style={styles.activeChipText}>{cat} ✕</Text>
@@ -1424,45 +2159,64 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
         }
         data={filteredProducts}
         keyExtractor={item => item.id.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.productCard} onPress={() => setSelectedProduct(item)} activeOpacity={0.8}>
-            <Image source={{ uri: getProductImage(item) }} style={styles.productThumb} />
-            <View style={styles.productInfo}>
-              <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-              <Text style={styles.productDesc}>{item.company} • {item.category}</Text>
-              <View style={styles.priceRow}>
-                <Text style={styles.productPrice}>₹{item.price_ptr || item.price}</Text>
-                <View style={[styles.stockBadge, item.stock < 10 ? { backgroundColor: '#fee2e2' } : {}]}>
-                  <Text style={[styles.stockText, item.stock < 10 ? { color: '#dc2626' } : {}]}>
-                    {item.stock > 0 ? `${item.stock} in stock` : 'Out of Stock'}
-                  </Text>
-                </View>
+        renderItem={({ item }) => {
+          const basePrice = item.price_ptr || item.price || 0;
+          const disc = Number(item.discount_percent) || 0;
+          const netPrice = disc > 0 ? Math.round(basePrice * (1 - disc / 100)) : basePrice;
+          const isShort = !!item.short_expiry;
+          return (
+            <TouchableOpacity style={styles.productCard} onPress={() => setSelectedProduct(item)} activeOpacity={0.8}>
+              <View style={{ position: 'relative' }}>
+                <Image source={{ uri: getProductImage(item) }} style={styles.productThumb} />
+                {(isShort || disc > 0) && (
+                  <View style={{ position: 'absolute', top: -6, left: -6, backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 3, ...SHADOWS.sm }}>
+                    <Ionicons name="flame" size={10} color="#fff" />
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 0.3 }}>
+                      {disc > 0 ? `${disc}% OFF` : 'DEAL'}
+                    </Text>
+                  </View>
+                )}
               </View>
-            </View>
-            <View style={styles.cartAction}>
-              {(!cart[item.id] || cart[item.id] === 0) ? (
-                <AnimatedPressable style={styles.addBtn} onPress={() => addToCart(item.id)}>
-                  <Text style={styles.addBtnText}>ADD</Text>
-                </AnimatedPressable>
-              ) : (
-                <View style={styles.qtyControls}>
-                  <TouchableOpacity style={styles.qtyBtn} onPress={() => removeFromCart(item.id)}><Text style={styles.qtyBtnText}>-</Text></TouchableOpacity>
-                  <TextInput
-                    style={styles.qtyInput}
-                    keyboardType="numeric"
-                    selectTextOnFocus
-                    value={cart[item.id].toString()}
-                    onChangeText={(val) => {
-                      if (val === '') setCartQuantity(item.id, 0);
-                      else setCartQuantity(item.id, parseInt(val) || 1);
-                    }}
-                  />
-                  <TouchableOpacity style={styles.qtyBtn} onPress={() => addToCart(item.id)}><Text style={styles.qtyBtnText}>+</Text></TouchableOpacity>
+              <View style={styles.productInfo}>
+                <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
+                <Text style={styles.productDesc}>{item.company} • {item.category}</Text>
+                <View style={styles.priceRow}>
+                  <Text style={styles.productPrice}>₹{netPrice}</Text>
+                  {disc > 0 && (
+                    <Text style={{ fontSize: 13, color: '#94a3b8', fontWeight: '700', textDecorationLine: 'line-through' }}>
+                      ₹{basePrice}
+                    </Text>
+                  )}
+                  <View style={[styles.stockBadge, item.stock < 10 ? { backgroundColor: '#fee2e2' } : {}]}>
+                    <Text style={[styles.stockText, item.stock < 10 ? { color: '#dc2626' } : {}]}>
+                      {item.stock > 0 ? `${item.stock} in stock` : 'Out of Stock'}
+                    </Text>
+                  </View>
                 </View>
-              )}
-            </View>
-          </TouchableOpacity>
-        )}
+                {isShort && item.expiry_date && (
+                  <Text style={{ marginTop: 6, fontSize: 11, color: '#B45309', fontWeight: '700' }}>
+                    Exp: {item.expiry_date}
+                  </Text>
+                )}
+              </View>
+              <View style={styles.cartAction}>
+                {(!cart[item.id] || cart[item.id] === 0) ? (
+                  <AnimatedPressable style={styles.addBtn} onPress={() => addToCart(item.id)}>
+                    <Text style={styles.addBtnText}>ADD</Text>
+                  </AnimatedPressable>
+                ) : (
+                  <QtyControl
+                    value={cart[item.id]}
+                    onAdd={() => addToCart(item.id)}
+                    onSub={() => removeFromCart(item.id)}
+                    onSet={(n) => setCartQuantity(item.id, n)}
+                    compact
+                  />
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        }}
         ListEmptyComponent={
           productsList.length === 0 ? (
             <View style={{ paddingTop: 8 }}>
@@ -1487,50 +2241,90 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
       />
 
       {/* Product Details Modal */}
-      <Modal visible={!!selectedProduct} transparent animationType="slide">
+      <Modal visible={!!selectedProduct} transparent animationType="slide" onRequestClose={() => setSelectedProduct(null)}>
         <View style={styles.modalOverlayBottom}>
-          <View style={[styles.bottomSheet, { maxHeight: '88%' }]}>
+          <View style={[styles.bottomSheet, { maxHeight: '92%', paddingBottom: 24 }]}>
             <View style={styles.dragHandle} />
             {selectedProduct && (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <Image source={{ uri: getProductImage(selectedProduct) }} style={styles.detailImage} />
-                <Text style={styles.modalTitle}>{selectedProduct.name}</Text>
-                <Text style={{ color: '#64748b', fontSize: 16, marginBottom: 12 }}>{selectedProduct.company}</Text>
-                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-                  <View style={styles.systemPillActive}><Text style={styles.systemTextActive}>{selectedProduct.category}</Text></View>
-                  {selectedProduct.body_system ? <View style={styles.systemPill}><Text style={styles.systemText}>{selectedProduct.body_system}</Text></View> : null}
-                </View>
-                <View style={styles.detailInfoBox}>
-                  <Text style={styles.detailInfoLabel}>Composition</Text>
-                  <Text style={styles.detailInfoValue}>{selectedProduct.composition || 'Standard Formulation'}</Text>
-                </View>
-                <View style={styles.detailInfoBox}>
-                  <Text style={styles.detailInfoLabel}>Description & Usage</Text>
-                  <Text style={[styles.detailInfoValue, { color: '#475569', lineHeight: 22 }]}>
-                    {selectedProduct.description || 'No description available for this SKU.'}
+              <>
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+                  <ProductImageCarousel product={selectedProduct} height={240} />
+
+                  <Text style={styles.modalTitle}>{selectedProduct.name}</Text>
+                  <Text style={{ color: '#64748b', fontSize: 15, marginTop: 2, marginBottom: 12, fontWeight: '600' }}>
+                    {selectedProduct.company}
                   </Text>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 8, backgroundColor: '#f8fafc', padding: 16, borderRadius: 16 }}>
-                  <View>
-                    <Text style={styles.detailInfoLabel}>PTR Price</Text>
-                    <Text style={{ fontSize: 26, fontWeight: '900', color: '#0f172a' }}>₹{selectedProduct.price_ptr || selectedProduct.price}</Text>
+
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                    <View style={styles.systemPillActive}><Text style={styles.systemTextActive}>{selectedProduct.category}</Text></View>
+                    {selectedProduct.body_system ? <View style={styles.systemPill}><Text style={styles.systemText}>{selectedProduct.body_system}</Text></View> : null}
+                    {selectedProduct.short_expiry ? (
+                      <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: '#F59E0B', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons name="flame" size={12} color="#B45309" />
+                        <Text style={{ color: '#B45309', fontWeight: '800', fontSize: 12 }}>Short expiry offer</Text>
+                      </View>
+                    ) : null}
                   </View>
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={styles.detailInfoLabel}>MRP</Text>
-                    <Text style={{ fontSize: 18, fontWeight: '700', color: '#94a3b8', textDecorationLine: 'line-through' }}>
-                      ₹{selectedProduct.mrp || Math.round((selectedProduct.price_ptr || selectedProduct.price) * 1.2)}
+
+                  <View style={styles.detailInfoBox}>
+                    <Text style={styles.detailInfoLabel}>Composition</Text>
+                    <Text style={styles.detailInfoValue}>{selectedProduct.composition || 'Standard Formulation'}</Text>
+                  </View>
+                  <View style={styles.detailInfoBox}>
+                    <Text style={styles.detailInfoLabel}>Description & Usage</Text>
+                    <Text style={[styles.detailInfoValue, { color: '#475569', lineHeight: 22 }]}>
+                      {selectedProduct.description || 'No description available for this SKU.'}
                     </Text>
                   </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.detailInfoLabel}>Packing</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#0f172a' }}>{selectedProduct.packing || '1×10'}</Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 8, backgroundColor: '#f8fafc', padding: 16, borderRadius: 16 }}>
+                    <View>
+                      <Text style={styles.detailInfoLabel}>PTR Price</Text>
+                      <Text style={{ fontSize: 26, fontWeight: '900', color: '#0f172a' }}>₹{selectedProduct.price_ptr || selectedProduct.price}</Text>
+                    </View>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={styles.detailInfoLabel}>MRP</Text>
+                      <Text style={{ fontSize: 18, fontWeight: '700', color: '#94a3b8', textDecorationLine: 'line-through' }}>
+                        ₹{selectedProduct.mrp || Math.round((selectedProduct.price_ptr || selectedProduct.price) * 1.2)}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.detailInfoLabel}>Packing</Text>
+                      <Text style={{ fontSize: 16, fontWeight: '700', color: '#0f172a' }}>{selectedProduct.packing || '1×10'}</Text>
+                    </View>
                   </View>
+                </ScrollView>
+
+                {/* Sticky footer: close / add-to-cart with inline qty */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setSelectedProduct(null)}
+                    style={{ paddingVertical: 16, paddingHorizontal: 20, borderRadius: 16, backgroundColor: '#f1f5f9' }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#475569' }}>Close</Text>
+                  </TouchableOpacity>
+                  {(!cart[selectedProduct.id] || cart[selectedProduct.id] === 0) ? (
+                    <AnimatedPressable
+                      style={{ flex: 1, backgroundColor: BRAND[800], paddingVertical: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8, ...SHADOWS.glowGreen }}
+                      onPress={() => { addToCart(selectedProduct.id); }}
+                    >
+                      <Ionicons name="cart-outline" size={18} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 }}>Add to cart</Text>
+                    </AnimatedPressable>
+                  ) : (
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: BRAND[50], paddingHorizontal: 12, paddingVertical: 10, borderRadius: 16, borderWidth: 1.5, borderColor: BRAND[500] }}>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: BRAND[800] }}>In cart</Text>
+                      <QtyControl
+                        value={cart[selectedProduct.id]}
+                        onAdd={() => addToCart(selectedProduct.id)}
+                        onSub={() => removeFromCart(selectedProduct.id)}
+                        onSet={(n) => setCartQuantity(selectedProduct.id, n)}
+                        compact
+                      />
+                    </View>
+                  )}
                 </View>
-              </ScrollView>
+              </>
             )}
-            <AnimatedPressable style={[styles.buttonPrimary, { marginTop: 20 }]} onPress={() => setSelectedProduct(null)}>
-              <Text style={styles.buttonPrimaryText}>Close</Text>
-            </AnimatedPressable>
           </View>
         </View>
       </Modal>
@@ -1722,24 +2516,13 @@ function CartScreen({ setCurrentScreen }) {
                 </TouchableOpacity>
               </View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' }}>
-                  <TouchableOpacity style={{ paddingHorizontal: 14, paddingVertical: 10 }} onPress={() => removeFromCart(item.id)}>
-                    <Text style={{ fontSize: 18, fontWeight: '700', color: BRAND[800] }}>−</Text>
-                  </TouchableOpacity>
-                  <TextInput
-                    style={{ width: 36, textAlign: 'center', fontSize: 15, fontWeight: '800', color: '#1A1A1A', paddingVertical: 8 }}
-                    keyboardType="numeric"
-                    selectTextOnFocus
-                    value={item.quantity.toString()}
-                    onChangeText={(val) => {
-                      if (val === '') setCartQuantity(item.id, 0);
-                      else setCartQuantity(item.id, parseInt(val) || 1);
-                    }}
-                  />
-                  <TouchableOpacity style={{ paddingHorizontal: 14, paddingVertical: 10 }} onPress={() => addToCart(item.id)}>
-                    <Text style={{ fontSize: 18, fontWeight: '700', color: BRAND[800] }}>+</Text>
-                  </TouchableOpacity>
-                </View>
+                <QtyControl
+                  value={item.quantity}
+                  onAdd={() => addToCart(item.id)}
+                  onSub={() => removeFromCart(item.id)}
+                  onSet={(n) => setCartQuantity(item.id, n)}
+                />
+                {/* Tap the number to type qty directly */}
                 <Text style={{ fontSize: 17, fontWeight: '900', color: '#1A1A1A' }}>₹{(item.price * item.quantity).toLocaleString('en-IN')}</Text>
               </View>
             </View>
@@ -1908,20 +2691,27 @@ function ReviewConfirmScreen({ setCurrentScreen }) {
           </View>
         </View>
 
-        {/* Invoice Actions */}
-        <View style={{ width: '90%', marginBottom: 16 }}>
-          <TouchableOpacity 
-            style={{ backgroundColor: BRAND[50], borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: BRAND[100], marginBottom: 10 }}
-            onPress={() => handleInvoiceGenerate(placedOrder, user)}
+        {/* Invoice Actions — view (native PDF preview) + download/share */}
+        <View style={{ width: '90%', marginBottom: 16, gap: 10 }}>
+          <TouchableOpacity
+            style={{ backgroundColor: BRAND[800], borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', ...SHADOWS.glowGreen }}
+            onPress={() => viewServerInvoice(placedOrder, user)}
           >
-            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: BRAND[800], justifyContent: 'center', alignItems: 'center', marginRight: 14 }}>
-              <Ionicons name="document-text" size={20} color="#fff" />
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center', marginRight: 14 }}>
+              <Ionicons name="eye" size={20} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: '800', color: BRAND[800] }}>Download GST Invoice</Text>
-              <Text style={{ fontSize: 12, color: BRAND[600], fontWeight: '500', marginTop: 1 }}>PDF with full GST breakdown · Share via WhatsApp</Text>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: '#fff' }}>View Invoice UPD</Text>
+              <Text style={{ fontSize: 12, color: BRAND[100], fontWeight: '500', marginTop: 1 }}>Draft — awaiting admin approval</Text>
             </View>
-            <Ionicons name="download-outline" size={22} color={BRAND[800]} />
+            <Ionicons name="chevron-forward" size={22} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ backgroundColor: BRAND[50], borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: BRAND[100] }}
+            onPress={() => downloadServerInvoice(placedOrder, user)}
+          >
+            <Ionicons name="download-outline" size={20} color={BRAND[800]} style={{ marginRight: 12 }} />
+            <Text style={{ fontSize: 14, fontWeight: '800', color: BRAND[800], flex: 1 }}>Download PDF / Share on WhatsApp</Text>
           </TouchableOpacity>
         </View>
 
@@ -2131,7 +2921,27 @@ function ReviewConfirmScreen({ setCurrentScreen }) {
   );
 }
 
-// --- Order Tracking Screen (Spec 16) ---
+// --- Order status: 3-stage lifecycle (Invoicing → Packaging → Dispatch) ---
+// Backwards-compat: old statuses map into the 3 stages.
+const ORDER_STAGES = [
+  { key: 'Invoicing', label: 'Invoicing',  icon: 'receipt-outline', desc: 'Invoice being generated' },
+  { key: 'Packaging', label: 'Packaging',  icon: 'cube-outline',    desc: 'Order is being packed' },
+  { key: 'Dispatch',  label: 'Dispatch',   icon: 'car-outline',     desc: 'Out for delivery' },
+] as const;
+
+function mapStatusToStageIdx(status?: string): number {
+  const s = (status || '').toLowerCase();
+  if (['invoicing', 'placed', 'accepted', 'confirmed'].includes(s)) return 0;
+  if (['packaging', 'processing', 'packed'].includes(s)) return 1;
+  if (['dispatch', 'dispatched', 'shipped', 'out for delivery', 'delivered', 'completed'].includes(s)) return 2;
+  return -1;
+}
+function isTerminalRejected(status?: string): boolean {
+  const s = (status || '').toLowerCase();
+  return s === 'rejected' || s === 'cancelled';
+}
+
+// --- Order Tracking Screen ---
 function OrderTrackingScreen({ setCurrentScreen, order }) {
   if (!order) {
     return (
@@ -2141,17 +2951,14 @@ function OrderTrackingScreen({ setCurrentScreen, order }) {
     );
   }
 
-  const TIMELINE_STEPS = [
-    { key: 'Placed', label: 'Order placed', icon: 'receipt-outline', desc: 'Your order has been received' },
-    { key: 'Accepted', label: 'Accepted', icon: 'checkmark-circle-outline', desc: 'Order confirmed by UPKEM team' },
-    { key: 'Processing', label: 'Processing', icon: 'cube-outline', desc: 'Order is being packed' },
-    { key: 'Shipped', label: 'Shipped', icon: 'car-outline', desc: order.courier_name ? `Via ${order.courier_name}` : 'Dispatched for delivery' },
-    { key: 'Delivered', label: 'Delivered', icon: 'home-outline', desc: 'Order delivered successfully' },
-  ];
-
-  const statusOrder = ['Placed', 'Accepted', 'Processing', 'Shipped', 'Delivered'];
-  const currentIdx = statusOrder.indexOf(order.status);
-  const isRejected = order.status === 'Rejected';
+  const currentIdx = mapStatusToStageIdx(order.status);
+  const isRejected = isTerminalRejected(order.status);
+  // Contextual desc override for Dispatch
+  const TIMELINE_STEPS = ORDER_STAGES.map((step) =>
+    step.key === 'Dispatch' && order.courier_name
+      ? { ...step, desc: `Via ${order.courier_name}` }
+      : step
+  );
 
   return (
     <View style={styles.screen}>
@@ -2177,58 +2984,115 @@ function OrderTrackingScreen({ setCurrentScreen, order }) {
             </View>
           </View>
         ) : (
-          <View style={{ backgroundColor: BRAND[50], borderRadius: 16, padding: 16, marginBottom: 24, flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ backgroundColor: BRAND[50], borderRadius: 16, padding: 16, marginBottom: 16, flexDirection: 'row', alignItems: 'center' }}>
             <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: BRAND[800], justifyContent: 'center', alignItems: 'center', marginRight: 14 }}>
               <Ionicons name={TIMELINE_STEPS[currentIdx]?.icon || 'time-outline'} size={20} color="#fff" />
             </View>
             <View>
-              <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND[800] }}>{order.status}</Text>
-              <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '500' }}>{TIMELINE_STEPS[currentIdx]?.desc}</Text>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: BRAND[800] }}>
+                {TIMELINE_STEPS[currentIdx]?.label || order.status || 'Placed'}
+              </Text>
+              <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '500' }}>
+                {TIMELINE_STEPS[currentIdx]?.desc || 'Awaiting update'}
+              </Text>
             </View>
           </View>
         )}
 
-        {/* Timeline */}
+        {/* Invoice card — always visible on tracking. Reflects Draft vs Approved. */}
+        {!isRejected && (
+          <TouchableOpacity
+            onPress={() => viewServerInvoice(order, useStore.getState().user)}
+            style={{
+              backgroundColor: '#fff', borderRadius: 16, padding: 14,
+              marginBottom: 20, borderWidth: 1, borderColor: '#f1f5f9',
+              flexDirection: 'row', alignItems: 'center',
+            }}
+          >
+            <View style={{
+              width: 42, height: 42, borderRadius: 12,
+              backgroundColor: currentIdx > 0 ? BRAND[800] : '#FEF3C7',
+              justifyContent: 'center', alignItems: 'center', marginRight: 14,
+            }}>
+              <Ionicons name="document-text" size={20} color={currentIdx > 0 ? '#fff' : '#92400E'} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A1A' }}>
+                {currentIdx > 0 ? 'Invoice Ready' : 'Invoice Pending Approval'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginTop: 2 }}>
+                {currentIdx > 0
+                  ? 'Tap to view GST invoice · Save as PDF · Share on WhatsApp'
+                  : 'Admin is reviewing — you can view the draft'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={BRAND[600]} />
+          </TouchableOpacity>
+        )}
+
+        {/* 3-stage stepper: Invoicing → Packaging → Dispatch */}
         {!isRejected && (
           <View style={{ marginBottom: 24 }}>
-            <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16 }}>Timeline</Text>
-            {TIMELINE_STEPS.map((step, idx) => {
-              const isCompleted = idx <= currentIdx;
-              const isCurrent = idx === currentIdx;
-              const isLast = idx === TIMELINE_STEPS.length - 1;
-              return (
-                <View key={step.key} style={{ flexDirection: 'row', minHeight: 60 }}>
-                  {/* Dot + Line */}
-                  <View style={{ alignItems: 'center', width: 32 }}>
-                    <View style={{
-                      width: isCurrent ? 28 : 20, height: isCurrent ? 28 : 20, borderRadius: 14,
-                      backgroundColor: isCompleted ? BRAND[800] : '#e2e8f0',
-                      justifyContent: 'center', alignItems: 'center',
-                      borderWidth: isCurrent ? 3 : 0, borderColor: BRAND[100],
-                    }}>
-                      {isCompleted && <Ionicons name="checkmark" size={12} color="#fff" />}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16 }}>Progress</Text>
+
+            {/* Horizontal stepper row */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              {TIMELINE_STEPS.map((step, idx) => {
+                const done = idx < currentIdx;
+                const active = idx === currentIdx;
+                const nextDone = idx < currentIdx;
+                const isLast = idx === TIMELINE_STEPS.length - 1;
+                return (
+                  <React.Fragment key={step.key}>
+                    <View style={{ alignItems: 'center' }}>
+                      <View
+                        style={{
+                          width: active ? 44 : 36, height: active ? 44 : 36, borderRadius: 22,
+                          backgroundColor: done || active ? BRAND[800] : '#E5E7EB',
+                          justifyContent: 'center', alignItems: 'center',
+                          borderWidth: active ? 3 : 0, borderColor: BRAND[100],
+                        }}
+                      >
+                        {done ? (
+                          <Ionicons name="checkmark" size={18} color="#fff" />
+                        ) : (
+                          <Ionicons name={step.icon as any} size={active ? 20 : 16} color={active ? '#fff' : '#94a3b8'} />
+                        )}
+                      </View>
                     </View>
                     {!isLast && (
-                      <View style={{ width: 2, flex: 1, backgroundColor: isCompleted && idx < currentIdx ? BRAND[800] : '#e2e8f0', marginVertical: 2 }} />
+                      <View style={{ flex: 1, height: 3, backgroundColor: nextDone ? BRAND[800] : '#E5E7EB', marginHorizontal: 4, borderRadius: 2 }} />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </View>
+
+            {/* Labels row aligned with the steps */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              {TIMELINE_STEPS.map((step, idx) => {
+                const done = idx < currentIdx;
+                const active = idx === currentIdx;
+                return (
+                  <View key={step.key} style={{ flex: 1, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '900', color: done || active ? BRAND[800] : '#94a3b8' }}>{step.label}</Text>
+                    {active && (
+                      <Text numberOfLines={2} style={{ fontSize: 10, color: '#6B7280', fontWeight: '600', marginTop: 2, textAlign: 'center', paddingHorizontal: 4 }}>
+                        {step.desc}
+                      </Text>
                     )}
                   </View>
-                  {/* Label */}
-                  <View style={{ flex: 1, paddingLeft: 12, paddingBottom: 20 }}>
-                    <Text style={{ fontSize: 15, fontWeight: isCompleted ? '800' : '600', color: isCompleted ? '#1A1A1A' : '#94a3b8' }}>{step.label}</Text>
-                    <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '500', marginTop: 2 }}>{step.desc}</Text>
-                  </View>
-                </View>
-              );
-            })}
+                );
+              })}
+            </View>
           </View>
         )}
 
-        {/* Courier Info */}
-        {order.status === 'Shipped' && order.courier_name && (
+        {/* Delivery — appointed staff for this order */}
+        {currentIdx === 2 && order.courier_name && (
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#f1f5f9' }}>
-            <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Courier details</Text>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Delivery Assigned To</Text>
             <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A1A' }}>{order.courier_name}</Text>
-            {order.tracking_id && <Text style={{ fontSize: 14, fontWeight: '600', color: BRAND[700], marginTop: 4 }}>Tracking: {order.tracking_id}</Text>}
           </View>
         )}
 
@@ -2258,20 +3122,26 @@ function OrderHistoryScreen({ setCurrentScreen, onSelectOrder }) {
   const filters = ['All', 'Active', 'Completed', 'Cancelled'];
 
   const getStatusColor = (status) => {
-    switch(status) {
-      case 'Shipped': return { bg: '#ecfdf5', text: '#059669' };
-      case 'Completed': case 'Delivered': return { bg: '#ecfdf5', text: '#059669' };
-      case 'Rejected': case 'Cancelled': return { bg: '#fee2e2', text: '#dc2626' };
-      case 'Processing': return { bg: '#FFF7ED', text: '#EA580C' };
-      default: return { bg: '#f1f5f9', text: '#475569' };
-    }
+    if (isTerminalRejected(status)) return { bg: '#fee2e2', text: '#dc2626' };
+    const idx = mapStatusToStageIdx(status);
+    if (idx === 0) return { bg: '#EFF6FF', text: '#2563EB' };   // Invoicing
+    if (idx === 1) return { bg: '#FFF7ED', text: '#EA580C' };   // Packaging
+    if (idx === 2) return { bg: '#ecfdf5', text: '#059669' };   // Dispatch
+    return { bg: '#f1f5f9', text: '#475569' };
+  };
+
+  const displayStatus = (status?: string) => {
+    if (isTerminalRejected(status)) return 'Rejected';
+    const idx = mapStatusToStageIdx(status);
+    return ORDER_STAGES[idx]?.label || status || 'Placed';
   };
 
   const filteredOrders = orders.filter(o => {
     if (activeFilter === 'All') return true;
-    if (activeFilter === 'Active') return ['Placed', 'Accepted', 'Processing', 'Shipped'].includes(o.status);
-    if (activeFilter === 'Completed') return ['Completed', 'Delivered'].includes(o.status);
-    if (activeFilter === 'Cancelled') return ['Rejected', 'Cancelled'].includes(o.status);
+    if (isTerminalRejected(o.status)) return activeFilter === 'Cancelled';
+    const idx = mapStatusToStageIdx(o.status);
+    if (activeFilter === 'Active')    return idx === 0 || idx === 1;
+    if (activeFilter === 'Completed') return idx === 2;
     return true;
   });
 
@@ -2317,7 +3187,7 @@ function OrderHistoryScreen({ setCurrentScreen, onSelectOrder }) {
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <Text style={{ fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>{item.id}</Text>
                 <View style={{ backgroundColor: sc.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '800', color: sc.text, textTransform: 'uppercase' }}>{item.status}</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: sc.text, textTransform: 'uppercase' }}>{displayStatus(item.status)}</Text>
                 </View>
               </View>
               <Text style={{ fontSize: 13, color: '#94a3b8', fontWeight: '500', marginBottom: 12 }}>
@@ -2412,38 +3282,109 @@ function ProfileScreen({ setCurrentScreen }) {
   const creditColor = creditUtilization > 90 ? '#ef4444' : creditUtilization > 60 ? '#f59e0b' : BRAND[600];
 
   const pendingDues = user.credit_balance || 0;
-  const [showAddressModal, setShowAddressModal] = useState(false);
-  const [addressInput, setAddressInput] = useState(user.address || '');
-  const [savingAddress, setSavingAddress] = useState(false);
 
-  const handleSaveAddress = async () => {
-    setSavingAddress(true);
-    try {
-      const url = useStore.getState().getApiUrl();
-      await fetch(url, {
-        method: 'POST',
-        headers: useStore.getState().authHeaders(),
-        body: JSON.stringify({ action: 'update_address', address: addressInput }),
-      });
-      setUser({ ...user, address: addressInput });
-      setShowAddressModal(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {
-      Alert.alert('Error', 'Failed to save address.');
-    }
-    setSavingAddress(false);
+  // Generic field editor
+  const [editField, setEditField] = useState<null | { key: string; label: string; multiline?: boolean; keyboardType?: any; placeholder?: string }>(null);
+  const [editValue, setEditValue] = useState('');
+  const [savingField, setSavingField] = useState(false);
+  const [showCityPicker, setShowCityPicker] = useState(false);
+
+  const FIELD_META: Record<string, { label: string; multiline?: boolean; keyboardType?: any; placeholder?: string }> = {
+    address:             { label: 'Delivery address', multiline: true,  placeholder: 'Building, street, area, PIN…' },
+    email:               { label: 'Email',            keyboardType: 'email-address', placeholder: 'you@firm.com' },
+    gst_number:          { label: 'GST number',       placeholder: '15-char GSTIN' },
+    drug_license:        { label: 'Drug licence',     placeholder: 'e.g. TN-02-20B-XXXXX' },
+    registration_number: { label: 'Registration number', placeholder: 'Council / firm registration' },
   };
 
-  // Build info rows for business details
-  const businessDetails = [
-    { label: 'Drug License No.', value: user.drug_license, icon: 'document-text-outline' },
-    { label: 'GST Number', value: user.gst_number, icon: 'receipt-outline' },
-    { label: 'Registration No.', value: user.registration_number, icon: 'shield-checkmark-outline' },
-    { label: 'Email', value: user.email, icon: 'mail-outline' },
-    { label: 'User Type', value: user.user_type, icon: 'people-outline' },
-    { label: 'District', value: user.city, icon: 'map-outline' },
-    { label: 'Zone / State', value: user.zone, icon: 'globe-outline' },
-  ].filter(d => d.value);
+  // Identity/verification fields — cannot be edited directly, need admin approval
+  const LOCKED_FIELDS = new Set(['store_name', 'gst_number', 'drug_license', 'registration_number', 'user_type']);
+
+  // Pending change requests (fetched from server) — used to badge locked fields
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+
+  const loadPendingRequests = async () => {
+    try {
+      const url = `${useStore.getState().getBaseUrl()}/api/profile-change-requests?status=Pending`;
+      const res = await fetch(url, { headers: useStore.getState().authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setPendingRequests(data.requests || []);
+      }
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => { loadPendingRequests(); }, []);
+
+  // Fields currently in a pending change request
+  const pendingFieldKeys = new Set<string>();
+  for (const r of pendingRequests) {
+    if (r.status === 'Pending' && r.changes) {
+      Object.keys(r.changes).forEach((k) => pendingFieldKeys.add(k));
+    }
+  }
+
+  const openEditField = (key: string) => {
+    const meta = FIELD_META[key];
+    if (!meta) return;
+    setEditValue(user[key] || '');
+    setEditField({ key, ...meta });
+  };
+
+  const saveEditField = async () => {
+    if (!editField) return;
+    setSavingField(true);
+    const isLocked = LOCKED_FIELDS.has(editField.key);
+    try {
+      if (isLocked) {
+        // Route through admin approval
+        const url = `${useStore.getState().getBaseUrl()}/api/profile-change-requests`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: useStore.getState().authHeaders(),
+          body: JSON.stringify({ changes: { [editField.key]: editValue } }),
+        });
+        if (res.ok) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setEditField(null);
+          Alert.alert('Request Sent', 'Your change request has been submitted for admin approval. You\'ll get a notification once it\'s reviewed.');
+          loadPendingRequests();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          Alert.alert('Could not submit', data.error || 'Please try again.');
+        }
+      } else {
+        // Direct update via /api/data
+        const url = useStore.getState().getApiUrl();
+        const body: any = { action: 'update_profile', field: editField.key, value: editValue };
+        if (editField.key === 'address') { body.action = 'update_address'; body.address = editValue; }
+        await fetch(url, {
+          method: 'POST',
+          headers: useStore.getState().authHeaders(),
+          body: JSON.stringify(body),
+        });
+        setUser({ ...user, [editField.key]: editValue });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setEditField(null);
+      }
+    } catch {
+      Alert.alert('Network error', 'Please try again.');
+    }
+    setSavingField(false);
+  };
+
+  const missingFields = getMissingProfileFields(user);
+  const requiredCount = getRequiredProfileFields(user?.user_type).length;
+  const filledCount = requiredCount - missingFields.length;
+
+  // Build info rows for business details (show ALL required fields, missing ones as "Tap to add")
+  const businessDetails = getRequiredProfileFields(user?.user_type)
+    .filter(f => f.key !== 'address' && f.key !== 'city') // shown in dedicated sections
+    .map(f => ({ label: f.label, value: user[f.key], icon: f.icon, editable: !!FIELD_META[f.key], key: f.key }))
+    .concat([
+      { label: 'Business type', value: user.user_type, icon: 'people-outline', editable: false, key: 'user_type' },
+      { label: 'Zone / State',  value: user.zone,      icon: 'globe-outline',  editable: false, key: 'zone' },
+    ]);
 
   return (
     <View style={styles.screen}>
@@ -2488,38 +3429,114 @@ function ProfileScreen({ setCurrentScreen }) {
           </View>
         </View>
 
-        {/* Business & Compliance Details */}
-        {businessDetails.length > 0 && (
-          <>
-            <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Business & Compliance</Text>
-            <View style={{ backgroundColor: '#fff', borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: '#f1f5f9' }}>
-              {businessDetails.map((item, idx) => (
-                <View key={item.label} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: idx < businessDetails.length - 1 ? 1 : 0, borderBottomColor: '#f1f5f9' }}>
-                  <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
-                    <Ionicons name={item.icon} size={17} color={BRAND[700]} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>{item.label}</Text>
-                    <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A', marginTop: 2 }}>{item.value}</Text>
-                  </View>
-                </View>
-              ))}
+        {/* Complete your profile — action list of missing fields */}
+        {missingFields.length > 0 && (
+          <View style={{ backgroundColor: '#EFF6FF', borderRadius: 16, marginBottom: 24, padding: 16, borderWidth: 1, borderColor: '#BFDBFE' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                <Ionicons name="person-circle-outline" size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '900', color: '#1E3A8A' }}>Complete your profile</Text>
+                <Text style={{ fontSize: 11, color: '#1D4ED8', fontWeight: '600', marginTop: 2 }}>
+                  {filledCount} of {requiredCount} required · {missingFields.length} left
+                </Text>
+              </View>
             </View>
-          </>
+            <View style={{ height: 4, backgroundColor: '#DBEAFE', borderRadius: 2, marginBottom: 12, overflow: 'hidden' }}>
+              <View style={{ width: `${(filledCount / Math.max(requiredCount, 1)) * 100}%`, height: 4, backgroundColor: '#2563EB', borderRadius: 2 }} />
+            </View>
+            {missingFields.map((f, idx) => (
+              <TouchableOpacity
+                key={f.key}
+                onPress={() => {
+                  if (f.key === 'city') { setShowCityPicker(true); return; }
+                  openEditField(f.key);
+                }}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12,
+                  backgroundColor: '#fff', marginTop: idx === 0 ? 0 : 8,
+                  borderWidth: 1, borderColor: '#DBEAFE',
+                }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name={f.icon as any} size={16} color="#2563EB" style={{ marginRight: 10 }} />
+                <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#1E3A8A' }}>{f.label}</Text>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#2563EB', marginRight: 4 }}>Add</Text>
+                <Ionicons name="add-circle" size={16} color="#2563EB" />
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
 
-        {/* Delivery Address */}
-        <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Delivery Address</Text>
-        <TouchableOpacity onPress={() => { setAddressInput(user.address || ''); setShowAddressModal(true); }} style={{ backgroundColor: '#fff', borderRadius: 16, marginBottom: 24, padding: 16, borderWidth: 1, borderColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
-            <Ionicons name="location-outline" size={17} color={BRAND[700]} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#1A1A1A' }}>{user.address || 'No address set'}</Text>
-            {!user.address && <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '500', marginTop: 2 }}>Tap to add your delivery address</Text>}
-          </View>
-          <Ionicons name="create-outline" size={18} color={BRAND[600]} />
-        </TouchableOpacity>
+        {/* Business & Compliance Details — always show all required fields, empty ones tappable */}
+        <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Business & Compliance</Text>
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: '#f1f5f9' }}>
+          {businessDetails.map((item, idx) => {
+            const isSet = !!item.value;
+            const Wrap: any = item.editable ? TouchableOpacity : View;
+            return (
+              <Wrap
+                key={item.label}
+                {...(item.editable ? { onPress: () => openEditField(item.key), activeOpacity: 0.85 } : {})}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingVertical: 14, paddingHorizontal: 16,
+                  borderBottomWidth: idx < businessDetails.length - 1 ? 1 : 0, borderBottomColor: '#f1f5f9',
+                }}
+              >
+                <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                  <Ionicons name={item.icon as any} size={17} color={BRAND[700]} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>{item.label}</Text>
+                    {LOCKED_FIELDS.has(item.key) && <Ionicons name="lock-closed" size={9} color="#94a3b8" />}
+                    {pendingFieldKeys.has(item.key) && (
+                      <View style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA', borderWidth: 1, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
+                        <Text style={{ fontSize: 9, fontWeight: '900', color: '#C2410C', letterSpacing: 0.5 }}>PENDING</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: isSet ? '#1A1A1A' : '#94a3b8', marginTop: 2 }}>
+                    {isSet ? item.value : 'Tap to add'}
+                  </Text>
+                </View>
+                {item.editable && <Ionicons name={isSet ? 'create-outline' : 'add-circle-outline'} size={18} color={BRAND[600]} />}
+              </Wrap>
+            );
+          })}
+        </View>
+
+        {/* Delivery Address & District */}
+        <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Delivery Location</Text>
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: '#f1f5f9' }}>
+          <TouchableOpacity onPress={() => openEditField('address')} activeOpacity={0.85} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+            <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+              <Ionicons name="location-outline" size={17} color={BRAND[700]} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Full address</Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: user.address ? '#1A1A1A' : '#94a3b8', marginTop: 2 }}>
+                {user.address || 'Tap to add'}
+              </Text>
+            </View>
+            <Ionicons name={user.address ? 'create-outline' : 'add-circle-outline'} size={18} color={BRAND[600]} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowCityPicker(true)} activeOpacity={0.85} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 }}>
+            <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+              <Ionicons name="map-outline" size={17} color={BRAND[700]} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>District</Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: user.city ? '#1A1A1A' : '#94a3b8', marginTop: 2 }}>
+                {user.city || 'Tap to select'}
+              </Text>
+            </View>
+            <Ionicons name={user.city ? 'create-outline' : 'add-circle-outline'} size={18} color={BRAND[600]} />
+          </TouchableOpacity>
+        </View>
 
         {/* Activity Section */}
         <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Activity</Text>
@@ -2569,7 +3586,7 @@ function ProfileScreen({ setCurrentScreen }) {
                 <TouchableOpacity
                   key={order.id}
                   style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: idx < Math.min(orders.length, 5) - 1 ? 1 : 0, borderBottomColor: '#f1f5f9' }}
-                  onPress={() => handleInvoiceGenerate(order, user)}
+                  onPress={() => viewServerInvoice(order, user)}
                 >
                   <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
                     <Ionicons name="document-text-outline" size={17} color={BRAND[700]} />
@@ -2578,7 +3595,7 @@ function ProfileScreen({ setCurrentScreen }) {
                     <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A1A1A' }}>{order.id}</Text>
                     <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '500' }}>{order.date} · ₹{order.total?.toLocaleString('en-IN')}</Text>
                   </View>
-                  <Ionicons name="download-outline" size={18} color={BRAND[600]} />
+                  <Ionicons name="eye-outline" size={18} color={BRAND[600]} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -2621,31 +3638,849 @@ function ProfileScreen({ setCurrentScreen }) {
         </View>
       </ScrollView>
 
-      {/* Address Modal */}
-      <Modal visible={showAddressModal} transparent animationType="slide">
-        <View style={styles.modalOverlayBottom}>
+      {/* Generic field editor modal */}
+      <Modal visible={!!editField} transparent animationType="slide" onRequestClose={() => setEditField(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlayBottom}>
           <View style={styles.bottomSheet}>
             <View style={styles.dragHandle} />
-            <Text style={styles.modalTitle}>Delivery Address</Text>
-            <Text style={{ color: '#64748b', fontSize: 14, marginBottom: 20 }}>This address will be used for all deliveries.</Text>
+            <Text style={styles.modalTitle}>
+              {editField && LOCKED_FIELDS.has(editField.key) ? `Request change: ${editField.label}` : editField?.label}
+            </Text>
+            {editField && LOCKED_FIELDS.has(editField.key) ? (
+              <View style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA', borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 16, flexDirection: 'row' }}>
+                <Ionicons name="shield-checkmark-outline" size={18} color="#C2410C" style={{ marginRight: 10, marginTop: 1 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#9A3412', fontSize: 12, fontWeight: '800' }}>Admin approval required</Text>
+                  <Text style={{ color: '#9A3412', fontSize: 12, fontWeight: '500', marginTop: 2, lineHeight: 16 }}>
+                    Identity fields (GST, licence, firm name) can't be changed directly. Your request goes to admin for review — you'll be notified once approved.
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={{ color: '#64748b', fontSize: 14, marginBottom: 20 }}>
+                This will update your profile.
+              </Text>
+            )}
             <TextInput
-              style={[styles.inputFieldConfig, { height: 100, textAlignVertical: 'top', marginBottom: 20 }]}
-              multiline
-              placeholder="Enter your full delivery address..."
-              value={addressInput}
-              onChangeText={setAddressInput}
+              style={[styles.inputFieldConfig, editField?.multiline ? { height: 100, textAlignVertical: 'top' } : {}, { marginBottom: 20 }]}
+              multiline={editField?.multiline}
+              placeholder={editField?.placeholder || ''}
+              value={editValue}
+              onChangeText={setEditValue}
+              keyboardType={editField?.keyboardType || 'default'}
+              autoCapitalize={editField?.key === 'email' ? 'none' : 'sentences'}
             />
             <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity style={styles.btnCancel} onPress={() => setShowAddressModal(false)}>
+              <TouchableOpacity style={styles.btnCancel} onPress={() => setEditField(null)}>
                 <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
               </TouchableOpacity>
-              <AnimatedPressable style={styles.btnSave} onPress={handleSaveAddress} disabled={savingAddress}>
-                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{savingAddress ? 'Saving...' : 'Save address'}</Text>
+              <AnimatedPressable style={styles.btnSave} onPress={saveEditField} disabled={savingField}>
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
+                  {savingField ? 'Saving…' : (editField && LOCKED_FIELDS.has(editField.key) ? 'Submit for approval' : 'Save')}
+                </Text>
               </AnimatedPressable>
             </View>
           </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* District picker */}
+      <Modal visible={showCityPicker} transparent animationType="slide" onRequestClose={() => setShowCityPicker(false)}>
+        <View style={styles.modalOverlayBottom}>
+          <View style={[styles.bottomSheet, { maxHeight: '70%' }]}>
+            <View style={styles.dragHandle} />
+            <Text style={styles.modalTitle}>Select District</Text>
+            <Text style={{ color: BRAND[700], fontSize: 12, marginBottom: 16, fontWeight: '800', letterSpacing: 1 }}>TAMIL NADU</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {TN_DISTRICTS.map(city => (
+                <TouchableOpacity
+                  key={city}
+                  style={{
+                    paddingVertical: 14, paddingHorizontal: 16,
+                    borderRadius: 12, marginBottom: 4,
+                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                    backgroundColor: user.city === city ? BRAND[100] : 'transparent',
+                  }}
+                  onPress={async () => {
+                    Haptics.selectionAsync();
+                    setUser({ ...user, city, zone: user.zone || 'Tamil Nadu' });
+                    setShowCityPicker(false);
+                    try {
+                      await fetch(useStore.getState().getApiUrl(), {
+                        method: 'POST',
+                        headers: useStore.getState().authHeaders(),
+                        body: JSON.stringify({ action: 'update_profile', field: 'city', value: city }),
+                      });
+                    } catch { /* local update kept */ }
+                  }}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: user.city === city ? '900' : '600', color: user.city === city ? BRAND[800] : '#1A1A1A' }}>{city}</Text>
+                  {user.city === city && <Ionicons name="checkmark-circle" size={18} color={BRAND[700]} />}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity onPress={() => setShowCityPicker(false)} style={{ marginTop: 12, paddingVertical: 14, alignItems: 'center', borderRadius: 12, backgroundColor: '#f1f5f9' }}>
+              <Text style={{ fontWeight: '800', color: '#475569' }}>Close</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
+    </View>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ADMIN SCREENS
+// Admin uses the same auth flow — if the returned user has `is_admin`, they
+// land on AdminHome. All admin actions use the existing /api/data endpoints
+// with admin-only actions (update_status, add_product, update_product,
+// raw_override for approvals).
+// ═════════════════════════════════════════════════════════════════════════════
+
+function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onExit }) {
+  const usersList = useStore((s) => s.usersList) || [];
+  const products = useStore((s) => s.products) || [];
+  // NOTE: orders in the store are filtered to the current user by the polling
+  // loop. Admins get the full list via a separate refresh. See fetchAPI logic.
+  const orders = useStore((s) => s.orders) || [];
+  const pendingUsers = usersList.filter((u: any) => !u.is_approved);
+  const admin = useStore((s) => s.user);
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+        {/* Header */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 20 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View>
+              <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' }}>Admin Portal</Text>
+              <Text style={{ fontSize: 24, fontWeight: '900', color: '#1A1A1A', letterSpacing: -0.5, marginTop: 2 }}>{admin?.store_name || 'UPKEM Admin'}</Text>
+            </View>
+            <TouchableOpacity onPress={onExit} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, backgroundColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="log-out-outline" size={14} color="#475569" />
+              <Text style={{ fontSize: 12, fontWeight: '800', color: '#475569' }}>Sign out</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Snapshot cards */}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 20 }}>
+          {[
+            { label: 'Pending', value: pendingUsers.length, icon: 'person-add', color: '#F59E0B' },
+            { label: 'Products', value: products.length, icon: 'cube', color: BRAND[700] },
+            { label: 'Orders', value: orders.length, icon: 'receipt', color: '#2563EB' },
+          ].map((s) => (
+            <View key={s.label} style={{ flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm }}>
+              <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: s.color + '20', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
+                <Ionicons name={s.icon as any} size={16} color={s.color} />
+              </View>
+              <Text style={{ fontSize: 22, fontWeight: '900', color: '#1A1A1A', letterSpacing: -0.5 }}>{s.value}</Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#94a3b8', marginTop: 2 }}>{s.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Action tiles */}
+        <View style={{ paddingHorizontal: 16, gap: 12 }}>
+          <AdminTile
+            title="Approvals"
+            subtitle={pendingUsers.length ? `${pendingUsers.length} pending` : 'No pending requests'}
+            icon="person-add-outline"
+            color="#F59E0B"
+            urgent={pendingUsers.length > 0}
+            onPress={onOpenApprovals}
+          />
+          <AdminTile
+            title="Orders"
+            subtitle="Update status: Invoicing → Packaging → Dispatch"
+            icon="receipt-outline"
+            color="#2563EB"
+            onPress={onOpenOrders}
+          />
+          <AdminTile
+            title="Products"
+            subtitle="Add, edit, upload photos"
+            icon="cube-outline"
+            color={BRAND[700]}
+            onPress={onOpenProducts}
+          />
+          <AdminTile
+            title="Pricing & Discounts"
+            subtitle="Upload price sheet · per-customer discounts"
+            icon="pricetags-outline"
+            color="#7C3AED"
+            onPress={onOpenPricing}
+          />
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function AdminTile({ title, subtitle, icon, color, onPress, urgent = false }: any) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.9}
+      style={{
+        backgroundColor: '#fff', borderRadius: 20, padding: 16, borderWidth: 1,
+        borderColor: urgent ? color : '#f1f5f9',
+        flexDirection: 'row', alignItems: 'center', ...SHADOWS.sm,
+      }}
+    >
+      <View style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: color + '18', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+        <Ionicons name={icon} size={22} color={color} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 15, fontWeight: '900', color: '#1A1A1A' }}>{title}</Text>
+          {urgent && <View style={{ backgroundColor: color, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}><Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>NEW</Text></View>}
+        </View>
+        <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginTop: 2 }}>{subtitle}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+    </TouchableOpacity>
+  );
+}
+
+function AdminBackHeader({ title, subtitle, onBack, right }: any) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
+      <TouchableOpacity onPress={onBack} style={{ padding: 4, marginRight: 8 }}>
+        <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
+      </TouchableOpacity>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 20, fontWeight: '900', color: '#1A1A1A', letterSpacing: -0.5 }}>{title}</Text>
+        {subtitle && <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>{subtitle}</Text>}
+      </View>
+      {right}
+    </View>
+  );
+}
+
+// --- Admin Approvals ---
+function AdminApprovalsScreen({ onBack, onRefresh }) {
+  const usersList = useStore((s) => s.usersList) || [];
+  const pending = usersList.filter((u: any) => !u.is_approved);
+  const [busyId, setBusyId] = useState<any>(null);
+
+  const setApproval = async (u: any, approve: boolean) => {
+    setBusyId(u.id || u.phone);
+    Haptics.selectionAsync();
+    try {
+      const url = useStore.getState().getApiUrl();
+      // Use raw_override to flip is_approved. Backend accepts a db.users bulk.
+      const nextUsers = usersList.map((row: any) =>
+        (row.id === u.id || row.phone === u.phone) ? { ...row, is_approved: approve } : row
+      );
+      await fetch(url, {
+        method: 'POST',
+        headers: useStore.getState().authHeaders(),
+        body: JSON.stringify({ action: 'raw_override', db: { users: nextUsers } }),
+      });
+      useStore.getState().setUsersList(nextUsers);
+      showToast(approve ? 'User approved' : 'User rejected', approve ? 'success' : 'info');
+      if (onRefresh) onRefresh();
+    } catch {
+      Alert.alert('Error', 'Could not update approval. Try again.');
+    }
+    setBusyId(null);
+  };
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader title="Approvals" subtitle={`${pending.length} pending`} onBack={onBack} />
+      <FlatList
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        data={pending}
+        keyExtractor={(u: any) => String(u.id || u.phone)}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', marginTop: 60 }}>
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+              <Ionicons name="checkmark-done" size={30} color={BRAND[700]} />
+            </View>
+            <Text style={{ color: '#1A1A1A', fontSize: 16, fontWeight: '800' }}>All caught up</Text>
+            <Text style={{ color: '#64748b', fontSize: 13, fontWeight: '500', marginTop: 4 }}>No pending registration requests</Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const busy = busyId === (item.id || item.phone);
+          return (
+            <View style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                  <Text style={{ color: BRAND[800], fontSize: 16, fontWeight: '900' }}>{item.store_name?.[0]?.toUpperCase() || '?'}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '900', color: '#1A1A1A' }}>{item.store_name || 'Unnamed'}</Text>
+                  <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>+91 {item.phone}</Text>
+                </View>
+                <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 }}>
+                  <Text style={{ color: '#B45309', fontSize: 10, fontWeight: '900' }}>PENDING</Text>
+                </View>
+              </View>
+              <View style={{ backgroundColor: '#f8fafc', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                {[
+                  ['Type',           item.user_type],
+                  ['Drug licence',   item.drug_license],
+                  ['GST',            item.gst_number],
+                  ['Reg. number',    item.registration_number],
+                  ['City',           item.city],
+                  ['Address',        item.address],
+                  ['Email',          item.email],
+                ].map(([label, value]) => (
+                  <View key={label as string} style={{ flexDirection: 'row', marginBottom: 4 }}>
+                    <Text style={{ width: 100, fontSize: 11, color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
+                    <Text style={{ flex: 1, fontSize: 12, color: value ? '#1A1A1A' : '#94a3b8', fontWeight: '700' }}>{value || '—'}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  disabled={busy}
+                  onPress={() => setApproval(item, false)}
+                  style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', alignItems: 'center' }}
+                >
+                  <Text style={{ color: '#B91C1C', fontWeight: '900', fontSize: 13 }}>Reject</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  disabled={busy}
+                  onPress={() => setApproval(item, true)}
+                  style={{ flex: 2, paddingVertical: 12, borderRadius: 12, backgroundColor: BRAND[800], alignItems: 'center', ...SHADOWS.glowGreen }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13 }}>{busy ? 'Saving…' : 'Approve'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        }}
+      />
+    </View>
+  );
+}
+
+// --- Admin Orders (list + status update) ---
+function AdminOrdersScreen({ onBack, onOpenOrder }) {
+  const orders = useStore((s) => s.orders) || [];
+  const [filter, setFilter] = useState<'all' | 0 | 1 | 2 | 'rejected'>('all');
+  const [q, setQ] = useState('');
+
+  const filtered = orders.filter((o: any) => {
+    if (q && !(String(o.id || '').toLowerCase().includes(q.toLowerCase()) || (o.store_name || '').toLowerCase().includes(q.toLowerCase()))) return false;
+    if (filter === 'all') return true;
+    if (filter === 'rejected') return isTerminalRejected(o.status);
+    return mapStatusToStageIdx(o.status) === filter;
+  });
+
+  const chip = (label: string, val: any) => (
+    <TouchableOpacity
+      key={label}
+      onPress={() => { Haptics.selectionAsync(); setFilter(val); }}
+      style={{
+        paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
+        backgroundColor: filter === val ? BRAND[800] : '#fff',
+        borderWidth: 1, borderColor: filter === val ? BRAND[800] : '#e2e8f0',
+      }}
+    >
+      <Text style={{ fontSize: 12, fontWeight: '800', color: filter === val ? '#fff' : '#475569' }}>{label}</Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader title="Orders" subtitle={`${orders.length} total`} onBack={onBack} />
+      <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+        <View style={{ backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }}>
+          <Ionicons name="search-outline" size={16} color="#94a3b8" />
+          <TextInput
+            placeholder="Search order # or store"
+            placeholderTextColor="#94a3b8"
+            value={q}
+            onChangeText={setQ}
+            style={{ flex: 1, padding: 12, fontSize: 14, color: '#1A1A1A', fontWeight: '600' }}
+          />
+        </View>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, marginBottom: 8 }}>
+        {chip('All', 'all')}
+        {chip('Invoicing', 0)}
+        {chip('Packaging', 1)}
+        {chip('Dispatch', 2)}
+        {chip('Rejected', 'rejected')}
+      </ScrollView>
+      <FlatList
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        data={filtered}
+        keyExtractor={(o: any) => String(o.id)}
+        ListEmptyComponent={<View style={{ alignItems: 'center', marginTop: 60 }}><Text style={{ color: '#64748b', fontWeight: '600' }}>No orders match this filter.</Text></View>}
+        renderItem={({ item }) => {
+          const idx = mapStatusToStageIdx(item.status);
+          const rejected = isTerminalRejected(item.status);
+          const stageColors = ['#EFF6FF', '#FFF7ED', '#ecfdf5'];
+          const stageTextColors = ['#2563EB', '#EA580C', '#059669'];
+          const bg = rejected ? '#fee2e2' : (stageColors[idx] || '#f1f5f9');
+          const fg = rejected ? '#dc2626' : (stageTextColors[idx] || '#475569');
+          const label = rejected ? 'Rejected' : (ORDER_STAGES[idx]?.label || item.status || '—');
+          return (
+            <TouchableOpacity
+              onPress={() => onOpenOrder(item)}
+              activeOpacity={0.85}
+              style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, alignItems: 'center' }}>
+                <Text style={{ fontSize: 15, fontWeight: '900', color: '#1A1A1A' }}>{item.id}</Text>
+                <View style={{ backgroundColor: bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '900', color: fg, textTransform: 'uppercase' }}>{label}</Text>
+                </View>
+              </View>
+              <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }} numberOfLines={1}>
+                {item.store_name || item.store || item.user_phone || '—'} · {item.date} · {item.items?.length || 0} items
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '700' }}>Total</Text>
+                <Text style={{ fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>₹{(item.total || 0).toLocaleString('en-IN')}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+      />
+    </View>
+  );
+}
+
+function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
+  if (!order) return <View style={styles.centeredContainer}><Text>Order missing</Text></View>;
+  const [busy, setBusy] = useState(false);
+  const currentIdx = mapStatusToStageIdx(order.status);
+  const rejected = isTerminalRejected(order.status);
+
+  const setStage = async (newStatus: string) => {
+    setBusy(true);
+    Haptics.selectionAsync();
+    try {
+      const url = useStore.getState().getApiUrl();
+      await fetch(url, {
+        method: 'POST',
+        headers: useStore.getState().authHeaders(),
+        body: JSON.stringify({ collection: 'orders', action: 'update_status', item: { id: order.id, status: newStatus } }),
+      });
+      // Local update
+      const orders = useStore.getState().orders.map((o: any) => o.id === order.id ? { ...o, status: newStatus } : o);
+      useStore.getState().setOrders(orders);
+      onOrderUpdated && onOrderUpdated({ ...order, status: newStatus });
+      showToast(`Moved to ${newStatus}`, 'success');
+    } catch {
+      Alert.alert('Error', 'Failed to update status.');
+    }
+    setBusy(false);
+  };
+
+  const rejectOrder = () => {
+    Alert.alert('Reject order', 'This will mark the order as rejected. Continue?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Reject', style: 'destructive', onPress: () => setStage('Rejected') },
+    ]);
+  };
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader title={String(order.id)} subtitle={`${order.date || ''} · ₹${(order.total || 0).toLocaleString('en-IN')}`} onBack={onBack} />
+
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        {/* Customer */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9' }}>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Customer</Text>
+          <Text style={{ fontSize: 15, fontWeight: '900', color: '#1A1A1A', marginTop: 4 }}>{order.store_name || order.store || '—'}</Text>
+          <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginTop: 2 }}>{order.user_phone || order.phone || '—'}</Text>
+          {order.address && <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginTop: 4 }}>{order.address}</Text>}
+        </View>
+
+        {/* Status controls */}
+        <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Set status</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+          {ORDER_STAGES.map((stg, i) => {
+            const active = currentIdx === i && !rejected;
+            const done = currentIdx > i && !rejected;
+            return (
+              <TouchableOpacity
+                key={stg.key}
+                disabled={busy || active}
+                onPress={() => setStage(stg.key)}
+                style={{
+                  flex: 1, paddingVertical: 12, borderRadius: 14, alignItems: 'center',
+                  backgroundColor: active ? BRAND[800] : done ? BRAND[100] : '#fff',
+                  borderWidth: 1, borderColor: active ? BRAND[800] : done ? BRAND[500] : '#e2e8f0',
+                }}
+              >
+                <Ionicons name={stg.icon as any} size={16} color={active ? '#fff' : BRAND[800]} />
+                <Text style={{ fontSize: 11, fontWeight: '900', color: active ? '#fff' : BRAND[800], marginTop: 4 }}>{stg.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '600', marginBottom: 16 }}>
+          Current: <Text style={{ color: '#1A1A1A', fontWeight: '900' }}>{rejected ? 'Rejected' : (ORDER_STAGES[currentIdx]?.label || order.status || '—')}</Text>
+        </Text>
+
+        {!rejected && (
+          <TouchableOpacity onPress={rejectOrder} style={{ paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FECACA', backgroundColor: '#FEF2F2', alignItems: 'center', marginBottom: 20 }}>
+            <Text style={{ color: '#B91C1C', fontWeight: '900', fontSize: 13 }}>Reject order</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Items */}
+        <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Items</Text>
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#f1f5f9' }}>
+          {(order.items || []).map((it: any, idx: number) => (
+            <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: idx < order.items.length - 1 ? 1 : 0, borderBottomColor: '#f1f5f9' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: '#1A1A1A' }}>{it.name}</Text>
+                <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '600' }}>x{it.quantity} · ₹{it.price}</Text>
+              </View>
+              <Text style={{ fontSize: 14, fontWeight: '900', color: '#1A1A1A' }}>₹{((it.price || 0) * (it.quantity || 0)).toLocaleString('en-IN')}</Text>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+// --- Admin Products list + edit form (multi-image URL entry) ---
+function AdminProductsScreen({ onBack, onEditProduct, onAddProduct }) {
+  const products = useStore((s) => s.products) || [];
+  const [q, setQ] = useState('');
+  const filtered = q ? products.filter((p: any) => (p.name + ' ' + (p.company || '') + ' ' + (p.category || '')).toLowerCase().includes(q.toLowerCase())) : products;
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader
+        title="Products"
+        subtitle={`${products.length} SKUs`}
+        onBack={onBack}
+        right={
+          <TouchableOpacity onPress={onAddProduct} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: BRAND[800] }}>
+            <Ionicons name="add" size={14} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>Add</Text>
+          </TouchableOpacity>
+        }
+      />
+      <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+        <View style={{ backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }}>
+          <Ionicons name="search-outline" size={16} color="#94a3b8" />
+          <TextInput placeholder="Search SKUs" placeholderTextColor="#94a3b8" value={q} onChangeText={setQ}
+            style={{ flex: 1, padding: 12, fontSize: 14, color: '#1A1A1A', fontWeight: '600' }}
+          />
+        </View>
+      </View>
+      <FlatList
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        data={filtered}
+        keyExtractor={(p: any) => String(p.id)}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            onPress={() => onEditProduct(item)}
+            activeOpacity={0.85}
+            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#f1f5f9' }}
+          >
+            <Image source={{ uri: getProductImages(item)[0] }} style={{ width: 52, height: 52, borderRadius: 12, backgroundColor: '#f1f5f9', marginRight: 12 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontWeight: '800', color: '#1A1A1A' }} numberOfLines={1}>{item.name}</Text>
+              <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '600' }} numberOfLines={1}>{item.company} · {item.category}</Text>
+              <Text style={{ fontSize: 12, color: BRAND[700], fontWeight: '900', marginTop: 2 }}>₹{item.price_ptr || item.price}</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{ fontSize: 11, color: item.stock < 10 ? '#dc2626' : '#64748b', fontWeight: '800' }}>{item.stock || 0} in stock</Text>
+              {item.short_expiry ? (
+                <View style={{ marginTop: 4, backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                  <Text style={{ color: '#B45309', fontSize: 9, fontWeight: '900' }}>SHORT EXP</Text>
+                </View>
+              ) : null}
+            </View>
+          </TouchableOpacity>
+        )}
+        ListEmptyComponent={<View style={{ alignItems: 'center', marginTop: 60 }}><Text style={{ color: '#64748b' }}>No products match your search.</Text></View>}
+      />
+    </View>
+  );
+}
+
+function AdminProductEditScreen({ product, onBack, onSaved }) {
+  const editing = !!product?.id;
+  const [form, setForm] = useState<any>({
+    id: product?.id,
+    name: product?.name || '',
+    company: product?.company || '',
+    category: product?.category || 'General',
+    packing: product?.packing || '1×10',
+    price_ptr: String(product?.price_ptr ?? product?.price ?? ''),
+    mrp: String(product?.mrp ?? ''),
+    stock: String(product?.stock ?? 0),
+    composition: product?.composition || '',
+    description: product?.description || '',
+    short_expiry: !!product?.short_expiry,
+    discount_percent: String(product?.discount_percent ?? ''),
+    expiry_date: product?.expiry_date || '',
+    images: Array.isArray(product?.images) && product.images.length > 0 ? [...product.images] : (product?.image ? [product.image] : []),
+  });
+  const [busy, setBusy] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+
+  const addImage = () => {
+    const clean = urlInput.trim();
+    if (!clean) return;
+    setForm({ ...form, images: [...form.images, clean] });
+    setUrlInput('');
+  };
+  const removeImage = (i: number) => {
+    const next = form.images.slice();
+    next.splice(i, 1);
+    setForm({ ...form, images: next });
+  };
+
+  const save = async () => {
+    if (!form.name || !form.price_ptr) return Alert.alert('Missing', 'Name and PTR price are required.');
+    setBusy(true);
+    try {
+      const url = useStore.getState().getApiUrl();
+      const payload = {
+        ...form,
+        price_ptr: parseFloat(form.price_ptr) || 0,
+        price: parseFloat(form.price_ptr) || 0,
+        mrp: form.mrp ? parseFloat(form.mrp) : undefined,
+        stock: parseInt(form.stock, 10) || 0,
+        discount_percent: form.discount_percent ? parseInt(form.discount_percent, 10) : 0,
+      };
+      const action = editing ? 'update_product' : 'add_product';
+      const collection = 'products';
+      await fetch(url, {
+        method: 'POST',
+        headers: useStore.getState().authHeaders(),
+        body: JSON.stringify({ collection, action, item: payload }),
+      });
+      // Optimistic local update
+      const products = useStore.getState().products || [];
+      let next;
+      if (editing) {
+        next = products.map((p: any) => p.id === form.id ? { ...p, ...payload } : p);
+      } else {
+        const newId = Math.max(0, ...products.map((p: any) => Number(p.id) || 0)) + 1;
+        next = [{ ...payload, id: newId }, ...products];
+      }
+      useStore.getState().setProducts(next);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(editing ? 'Product updated' : 'Product added');
+      onSaved && onSaved();
+    } catch {
+      Alert.alert('Error', 'Failed to save. Please try again.');
+    }
+    setBusy(false);
+  };
+
+  const del = () => {
+    if (!editing) return;
+    Alert.alert('Delete product', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          const url = useStore.getState().getApiUrl();
+          await fetch(url, {
+            method: 'POST',
+            headers: useStore.getState().authHeaders(),
+            body: JSON.stringify({ collection: 'products', action: 'delete_product', item: { id: form.id } }),
+          });
+          const products = (useStore.getState().products || []).filter((p: any) => p.id !== form.id);
+          useStore.getState().setProducts(products);
+          showToast('Deleted', 'info');
+          onSaved && onSaved();
+        } catch {
+          Alert.alert('Error', 'Delete failed.');
+        }
+      }},
+    ]);
+  };
+
+  const inputStyle = { borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#fff', padding: 12, borderRadius: 12, fontSize: 14, fontWeight: '600', color: '#1A1A1A', marginBottom: 10 };
+  const labelStyle = { fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 4 };
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#F7FAF8' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader title={editing ? 'Edit product' : 'Add product'} onBack={onBack} />
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+        {/* Images section */}
+        <Text style={labelStyle}>Photos</Text>
+        <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9' }}>
+          {form.images.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 10 }}>
+              {form.images.map((uri: string, i: number) => (
+                <View key={i} style={{ position: 'relative' }}>
+                  <Image source={{ uri }} style={{ width: 90, height: 90, borderRadius: 12, backgroundColor: '#f1f5f9' }} />
+                  <TouchableOpacity onPress={() => removeImage(i)} style={{ position: 'absolute', top: -6, right: -6, backgroundColor: '#dc2626', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' }}>
+                    <Ionicons name="close" size={14} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={{ padding: 16, alignItems: 'center' }}>
+              <Ionicons name="images-outline" size={24} color="#94a3b8" />
+              <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '700', marginTop: 6 }}>No photos yet</Text>
+            </View>
+          )}
+          {/* URL input (photo picker & upload comes in Phase 4) */}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TextInput
+              value={urlInput}
+              onChangeText={setUrlInput}
+              placeholder="Paste image URL"
+              placeholderTextColor="#94a3b8"
+              autoCapitalize="none"
+              style={{ flex: 1, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc', padding: 10, borderRadius: 10, fontSize: 13, fontWeight: '600', color: '#1A1A1A' }}
+            />
+            <TouchableOpacity onPress={addImage} style={{ backgroundColor: BRAND[800], paddingHorizontal: 14, borderRadius: 10, justifyContent: 'center' }}>
+              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>Add</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={{ marginTop: 8, fontSize: 10, color: '#94a3b8', fontWeight: '600' }}>Gallery upload arrives in Phase 4 with the new storage backend.</Text>
+        </View>
+
+        <Text style={labelStyle}>Name</Text>
+        <TextInput value={form.name} onChangeText={(t) => setForm({ ...form, name: t })} style={inputStyle} placeholder="Product name" placeholderTextColor="#94a3b8" />
+
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={labelStyle}>Company</Text>
+            <TextInput value={form.company} onChangeText={(t) => setForm({ ...form, company: t })} style={inputStyle} placeholder="Mfr" placeholderTextColor="#94a3b8" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={labelStyle}>Category</Text>
+            <TextInput value={form.category} onChangeText={(t) => setForm({ ...form, category: t })} style={inputStyle} placeholder="e.g. Antibiotics" placeholderTextColor="#94a3b8" />
+          </View>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={labelStyle}>PTR price ₹</Text>
+            <TextInput value={form.price_ptr} onChangeText={(t) => setForm({ ...form, price_ptr: t.replace(/[^0-9.]/g, '') })} keyboardType="decimal-pad" style={inputStyle} placeholder="0" placeholderTextColor="#94a3b8" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={labelStyle}>MRP ₹</Text>
+            <TextInput value={form.mrp} onChangeText={(t) => setForm({ ...form, mrp: t.replace(/[^0-9.]/g, '') })} keyboardType="decimal-pad" style={inputStyle} placeholder="0" placeholderTextColor="#94a3b8" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={labelStyle}>Stock</Text>
+            <TextInput value={form.stock} onChangeText={(t) => setForm({ ...form, stock: t.replace(/[^0-9]/g, '') })} keyboardType="number-pad" style={inputStyle} placeholder="0" placeholderTextColor="#94a3b8" />
+          </View>
+        </View>
+
+        <Text style={labelStyle}>Packing</Text>
+        <TextInput value={form.packing} onChangeText={(t) => setForm({ ...form, packing: t })} style={inputStyle} placeholder="e.g. 1×10" placeholderTextColor="#94a3b8" />
+
+        <Text style={labelStyle}>Composition</Text>
+        <TextInput value={form.composition} onChangeText={(t) => setForm({ ...form, composition: t })} style={inputStyle} placeholder="Active ingredients" placeholderTextColor="#94a3b8" />
+
+        <Text style={labelStyle}>Description</Text>
+        <TextInput value={form.description} onChangeText={(t) => setForm({ ...form, description: t })} style={[inputStyle, { height: 90, textAlignVertical: 'top' }]} multiline placeholder="Usage & notes" placeholderTextColor="#94a3b8" />
+
+        {/* Short expiry + discount */}
+        <View style={{ backgroundColor: '#FFF7ED', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#FED7AA', marginBottom: 12 }}>
+          <TouchableOpacity onPress={() => setForm({ ...form, short_expiry: !form.short_expiry })} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: form.short_expiry ? '#B45309' : '#FED7AA', backgroundColor: form.short_expiry ? '#F59E0B' : 'transparent', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+              {form.short_expiry && <Ionicons name="checkmark" size={14} color="#fff" />}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '900', color: '#B45309' }}>Short expiry offer</Text>
+              <Text style={{ fontSize: 11, color: '#B45309', fontWeight: '600' }}>Shown in the "Short expiry" filter and homepage banner</Text>
+            </View>
+          </TouchableOpacity>
+          {form.short_expiry && (
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={labelStyle}>Discount %</Text>
+                <TextInput value={form.discount_percent} onChangeText={(t) => setForm({ ...form, discount_percent: t.replace(/[^0-9]/g, '').slice(0, 2) })} keyboardType="number-pad" style={inputStyle} placeholder="0" placeholderTextColor="#94a3b8" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={labelStyle}>Expiry date</Text>
+                <TextInput value={form.expiry_date} onChangeText={(t) => setForm({ ...form, expiry_date: t })} style={inputStyle} placeholder="MM/YYYY" placeholderTextColor="#94a3b8" />
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Save / delete */}
+        <TouchableOpacity onPress={save} disabled={busy} style={{ backgroundColor: BRAND[800], paddingVertical: 16, borderRadius: 14, alignItems: 'center', marginTop: 6, ...SHADOWS.glowGreen }}>
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900' }}>{busy ? 'Saving…' : (editing ? 'Save changes' : 'Add product')}</Text>
+        </TouchableOpacity>
+        {editing && (
+          <TouchableOpacity onPress={del} style={{ paddingVertical: 14, alignItems: 'center', marginTop: 10 }}>
+            <Text style={{ color: '#dc2626', fontWeight: '800' }}>Delete product</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function AdminPricingScreen({ onBack }) {
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader title="Pricing & Discounts" onBack={onBack} />
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        {/* Pricing sheet upload */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#7C3AED20', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+              <Ionicons name="cloud-upload-outline" size={20} color="#7C3AED" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '900', color: '#1A1A1A' }}>Pricing sheet</Text>
+              <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>Bulk-update PTR & MRP from XLSX</Text>
+            </View>
+          </View>
+          <TouchableOpacity disabled style={{ paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0', borderStyle: 'dashed' }}>
+            <Ionicons name="document-outline" size={20} color="#94a3b8" />
+            <Text style={{ fontSize: 13, fontWeight: '800', color: '#64748b', marginTop: 6 }}>Choose file · Coming in Phase 4</Text>
+            <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '600', marginTop: 2 }}>Backend upload wires up with the storage rebuild</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Per-customer discounts */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+              <Ionicons name="pricetag-outline" size={20} color={BRAND[800]} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '900', color: '#1A1A1A' }}>Per-customer discounts</Text>
+              <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>Grant a flat % or category discount to specific firms</Text>
+            </View>
+          </View>
+          <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 8 }}>
+            Existing coupon/scheme UI is already available on the customer side. This admin editor is queued for Phase 4 alongside the storage rebuild.
+          </Text>
+          <View style={{ backgroundColor: '#F1F5F9', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748b', letterSpacing: 0.5 }}>NEXT UP</Text>
+            <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600', marginTop: 4 }}>• Search customer · assign % discount</Text>
+            <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>• Category-level pricing rules</Text>
+            <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>• Time-bound offers (expiry auto-clears)</Text>
+          </View>
+        </View>
+
+        {/* Short expiry helper — link to products with the flag */}
+        <View style={{ backgroundColor: '#FFF7ED', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#FED7AA' }}>
+          <Text style={{ fontSize: 13, fontWeight: '900', color: '#B45309' }}>Short-expiry tip</Text>
+          <Text style={{ fontSize: 12, color: '#9A3412', fontWeight: '600', marginTop: 4, lineHeight: 18 }}>
+            Mark a product as “Short expiry offer” on the Product edit screen and set a discount %. It will surface in the Short expiry filter and homepage deals section automatically.
+          </Text>
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -2656,6 +4491,7 @@ export default function App() {
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [catalogInitialCategory, setCatalogInitialCategory] = useState('All');
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [adminEditingProduct, setAdminEditingProduct] = useState<any>(null);
 
   // Restore session from AsyncStorage on cold start
   useEffect(() => {
@@ -2665,8 +4501,9 @@ export default function App() {
         const userStr = await AsyncStorage.getItem('@upkem_user');
         if (sessionId && userStr) {
           useStore.getState().setSessionId(sessionId);
-          useStore.getState().setUser(JSON.parse(userStr));
-          setCurrentScreen('Home');
+          const u = JSON.parse(userStr);
+          useStore.getState().setUser(u);
+          setCurrentScreen((u?.is_admin || u?.role === 'admin') ? 'AdminHome' : 'Home');
         } else {
           setCurrentScreen('Login');
         }
@@ -2674,6 +4511,37 @@ export default function App() {
         setCurrentScreen('Login');
       }
     })();
+  }, []);
+
+  // Route freshly-logged-in admins into AdminHome once user is set
+  useEffect(() => {
+    const unsub = useStore.subscribe((state, prev) => {
+      if (state.user && state.user !== prev?.user && (state.user.is_admin || state.user.role === 'admin') && currentScreen === 'Home') {
+        setCurrentScreen('AdminHome');
+      }
+    });
+    return () => { try { unsub && unsub(); } catch {} };
+  }, [currentScreen]);
+
+  // Deeplink handler — when a push notification is tapped, open the order it
+  // references (order_id in the notification payload from /api/invoices/.../approve).
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data: any = response?.notification?.request?.content?.data || {};
+      if (data.orderId) {
+        // Find the matching order from cached list, then jump to tracking.
+        const orders = useStore.getState().ordersList || [];
+        const order = orders.find((o: any) => o.id === data.orderId);
+        if (order) {
+          setSelectedOrder(order);
+          setCurrentScreen('Tracking');
+        } else {
+          // Fall back to orders list; user can then tap through.
+          setCurrentScreen('Orders');
+        }
+      }
+    });
+    return () => sub.remove();
   }, []);
 
   const fetchAPI = async () => {
@@ -2692,10 +4560,22 @@ export default function App() {
       useStore.getState().setUsersList(db.users || []);
       useStore.getState().setSchemes(db.schemes || []);
       setIsOfflineMode(false);
+
+      // Fetch notifications for the logged-in user (fire-and-forget)
+      try {
+        const nUrl = `${useStore.getState().getBaseUrl()}/api/notifications`;
+        const nRes = await fetch(nUrl, { headers: useStore.getState().authHeaders() });
+        if (nRes.ok) {
+          const nData = await nRes.json();
+          useStore.getState().setNotifications(nData.notifications || []);
+        }
+      } catch { /* ignore */ }
       
       const currUser = useStore.getState().user;
       if (currUser) {
-        const userOrders = db.orders.filter(o => o.phone === currUser.phone || o.store === currUser.store_name || o.user_phone === currUser.phone || o.store_name === currUser.store_name);
+        const userOrders = (currUser.is_admin || currUser.role === 'admin')
+          ? (db.orders || [])
+          : (db.orders || []).filter(o => o.phone === currUser.phone || o.store === currUser.store_name || o.user_phone === currUser.phone || o.store_name === currUser.store_name);
         useStore.getState().setOrders(userOrders);
         const liveUser = db.users.find(u => u.phone === currUser.phone);
         if (liveUser && JSON.stringify(liveUser) !== JSON.stringify(currUser)) {
@@ -2741,6 +4621,77 @@ export default function App() {
     if (currentScreen === 'Login') return <LoginScreen setCurrentScreen={setCurrentScreen} />;
     if (currentScreen === 'Signup') return <SignupScreen setCurrentScreen={setCurrentScreen} />;
     if (currentScreen === 'PendingApproval') return <PendingApprovalScreen setCurrentScreen={setCurrentScreen} />;
+
+    // Admin surfaces — separate render tree (no bottom tab bar)
+    const adminSignOut = async () => {
+      Alert.alert('Sign out', 'Sign out of the admin portal?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign out', style: 'destructive', onPress: async () => {
+          await AsyncStorage.multiRemove(['@upkem_session_id', '@upkem_user', '@upkem_cached_db']);
+          useStore.getState().setUser(null);
+          useStore.getState().clearCart();
+          useStore.getState().setSessionId(null);
+          setCurrentScreen('Login');
+        }},
+      ]);
+    };
+    if (currentScreen === 'AdminHome') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminHomeScreen
+          setCurrentScreen={setCurrentScreen}
+          onOpenApprovals={() => setCurrentScreen('AdminApprovals')}
+          onOpenOrders={() => setCurrentScreen('AdminOrders')}
+          onOpenProducts={() => setCurrentScreen('AdminProducts')}
+          onOpenPricing={() => setCurrentScreen('AdminPricing')}
+          onExit={adminSignOut}
+        />
+      </View>
+    );
+    if (currentScreen === 'AdminApprovals') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminApprovalsScreen onBack={() => setCurrentScreen('AdminHome')} onRefresh={fetchAPI} />
+      </View>
+    );
+    if (currentScreen === 'AdminOrders') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminOrdersScreen
+          onBack={() => setCurrentScreen('AdminHome')}
+          onOpenOrder={(o: any) => { setSelectedOrder(o); setCurrentScreen('AdminOrderDetail'); }}
+        />
+      </View>
+    );
+    if (currentScreen === 'AdminOrderDetail') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminOrderDetailScreen
+          order={selectedOrder}
+          onBack={() => setCurrentScreen('AdminOrders')}
+          onOrderUpdated={(o: any) => setSelectedOrder(o)}
+        />
+      </View>
+    );
+    if (currentScreen === 'AdminProducts') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminProductsScreen
+          onBack={() => setCurrentScreen('AdminHome')}
+          onEditProduct={(p: any) => { setAdminEditingProduct(p); setCurrentScreen('AdminProductEdit'); }}
+          onAddProduct={() => { setAdminEditingProduct(null); setCurrentScreen('AdminProductEdit'); }}
+        />
+      </View>
+    );
+    if (currentScreen === 'AdminProductEdit') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminProductEditScreen
+          product={adminEditingProduct}
+          onBack={() => setCurrentScreen('AdminProducts')}
+          onSaved={() => setCurrentScreen('AdminProducts')}
+        />
+      </View>
+    );
+    if (currentScreen === 'AdminPricing') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminPricingScreen onBack={() => setCurrentScreen('AdminHome')} />
+      </View>
+    );
     return (
       <View style={{ flex: 1, backgroundColor: '#F7FAF8' }}>
         <View style={{ flex: 1, paddingTop: Constants.statusBarHeight || 48 }}>
