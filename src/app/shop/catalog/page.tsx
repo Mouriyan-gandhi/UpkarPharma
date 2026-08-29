@@ -62,11 +62,20 @@ export default function CatalogPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [detailId, setDetailId] = useState<number | null>(null);
 
-  // Load categories once
+  // Load categories once. Cached in sessionStorage so tab-navigation
+  // doesn't refetch — categories almost never change during a session.
   useEffect(() => {
+    const cached = typeof window !== 'undefined' ? sessionStorage.getItem('shop:categories') : null;
+    if (cached) {
+      try { setCategories(JSON.parse(cached)); } catch { /* ignore */ }
+    }
     fetch("/api/shop/categories")
       .then((r) => r.json())
-      .then((d) => setCategories(d.categories || []))
+      .then((d) => {
+        const cats = d.categories || [];
+        setCategories(cats);
+        try { sessionStorage.setItem('shop:categories', JSON.stringify(cats)); } catch { /* ignore quota */ }
+      })
       .catch(() => { });
   }, []);
 
@@ -85,21 +94,28 @@ export default function CatalogPage() {
   // Reset to page 1 when filters change
   useEffect(() => { setPage(1); }, [debounced, category, shortExpiry]);
 
-  // Fetch products
+  // Fetch products. Ignore stale responses when the user has already
+  // typed a new query — cuts perceived latency and flickering.
   const load = useCallback(async () => {
     setLoading(true);
+    const controller = new AbortController();
     try {
       const params = new URLSearchParams({ page: String(page), perPage: String(PER_PAGE) });
       if (debounced) params.set("q", debounced);
       if (category) params.set("category", category);
       if (shortExpiry) params.set("short_expiry", "1");
-      const res = await fetch(`/api/shop/products?${params.toString()}`);
+      const res = await fetch(`/api/shop/products?${params.toString()}`, { signal: controller.signal });
       const data = await res.json();
       setProducts(data.products || []);
-      setTotal(data.total || 0);
+      // API only returns `total` on page 1 now. Keep the previous value on
+      // subsequent pages so the header count doesn't flicker to 0.
+      if (typeof data.total === 'number') setTotal(data.total);
+    } catch (err: unknown) {
+      if ((err as { name?: string })?.name !== 'AbortError') throw err;
     } finally {
       setLoading(false);
     }
+    return () => controller.abort();
   }, [debounced, category, shortExpiry, page]);
 
   useEffect(() => { load(); }, [load]);

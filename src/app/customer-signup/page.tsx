@@ -4,7 +4,8 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, Building2, Store, Stethoscope, HeartPulse, ChevronRight, CheckCircle2, ShieldCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 
 const BUSINESS_TYPES = [
@@ -86,9 +87,15 @@ export default function CustomerSignupPage() {
               <li className="flex gap-2"><span className="text-brand-700 font-black">3.</span> Sign in with your phone + password to start ordering</li>
             </ol>
           </div>
-          <Button asChild className="mt-6 h-11 px-6 bg-brand-800 hover:bg-brand-900 text-white font-bold">
-            <Link href="/customer-login">Back to Sign In</Link>
-          </Button>
+          <Link
+            href="/customer-login"
+            className={cn(
+              buttonVariants({ variant: "default" }),
+              "mt-6 h-11 px-6 bg-brand-800 hover:bg-brand-900 text-white font-bold"
+            )}
+          >
+            Back to Sign In
+          </Link>
         </div>
       </div>
     );

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Minus, Plus, Trash2, Pill, ShoppingCart, ArrowRight, AlertCircle, Loader2, Tag, Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { useCart } from "../_lib/cart";
 
@@ -124,9 +125,12 @@ export default function CartPage() {
         <ShoppingCart className="w-14 h-14 mx-auto mb-4 text-slate-300" />
         <h2 className="text-xl font-black text-slate-900">Your cart is empty</h2>
         <p className="text-slate-500 mt-2">Browse the catalog to add products.</p>
-        <Button asChild className="mt-6 bg-brand-800 hover:bg-brand-900">
-          <Link href="/shop/catalog">Browse Catalog</Link>
-        </Button>
+        <Link
+          href="/shop/catalog"
+          className={cn(buttonVariants({ variant: "default" }), "mt-6 bg-brand-800 hover:bg-brand-900 text-white")}
+        >
+          Browse Catalog
+        </Link>
       </div>
     );
   }
