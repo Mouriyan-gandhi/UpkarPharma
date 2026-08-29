@@ -13,6 +13,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import Database from 'better-sqlite3';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -76,6 +77,7 @@ async function migrateUsers() {
   console.log(`  ${existingByPhone.size} auth user(s) already exist`);
 
   const phoneToUid = new Map();
+  const printedPasswords = [];
   let created = 0, skipped = 0;
   for (const r of rows) {
     const phone = toE164(r.phone);
@@ -83,10 +85,13 @@ async function migrateUsers() {
     if (uid) {
       skipped++;
     } else {
+      // Fresh random password per migrated user — printed once below. Operator
+      // is expected to reset/rotate as needed; there is no hardcoded default.
+      const tempPassword = crypto.randomBytes(9).toString('base64url');
       const { data, error } = await supabase.auth.admin.createUser({
         phone,
         phone_confirm: true,
-        password: r.role === 'admin' ? '123456' : undefined,   // preserve dev admin login
+        password: tempPassword,
         user_metadata: { store_name: r.store_name, migrated_from: 'sqlite' },
       });
       if (error) {
@@ -94,6 +99,7 @@ async function migrateUsers() {
         continue;
       }
       uid = data.user.id;
+      printedPasswords.push({ phone, role: r.role, store: r.store_name, password: tempPassword });
       created++;
     }
     phoneToUid.set(r.phone, uid);
@@ -123,6 +129,12 @@ async function migrateUsers() {
     if (upErr) console.error(`  ❌ upsert public.users for ${phone}:`, upErr.message);
   }
   console.log(`  Users: ${created} created, ${skipped} already existed, ${phoneToUid.size} total mapped.`);
+  if (printedPasswords.length > 0) {
+    console.log('\n  ⚠️  One-time passwords for newly-created users (save now — not stored):');
+    for (const p of printedPasswords) {
+      console.log(`     ${p.phone} (${p.role}, ${p.store}): ${p.password}`);
+    }
+  }
   return phoneToUid;
 }
 
