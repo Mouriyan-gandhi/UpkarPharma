@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 function toE164(phone: string): string {
   const d = String(phone).replace(/\D/g, '');
@@ -12,6 +13,16 @@ function toE164(phone: string): string {
 // dashboard — MSG91 / Twilio / test-mode).
 export async function POST(request: Request) {
   try {
+    // OTP endpoints tend to be the most expensive to abuse (real SMS spend).
+    // Tighter budget than login: 5 requests per IP per minute.
+    const gate = checkRateLimit(request, 'auth-otp', { max: 5, windowMs: 60_000 });
+    if (!gate.ok) {
+      return NextResponse.json(
+        { error: 'Too many OTP requests. Try again in a minute.' },
+        { status: 429 },
+      );
+    }
+
     const { phone } = await request.json();
     if (!phone) return NextResponse.json({ error: 'Phone required' }, { status: 400 });
 

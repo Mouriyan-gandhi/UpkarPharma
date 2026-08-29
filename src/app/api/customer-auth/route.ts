@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 function toE164(phone: string): string {
   const d = String(phone).replace(/\D/g, '');
@@ -14,6 +15,14 @@ function toE164(phone: string): string {
 // (admins can preview the customer web app).
 export async function POST(request: Request) {
   try {
+    const gate = checkRateLimit(request, 'customer-login', { max: 10, windowMs: 60_000 });
+    if (!gate.ok) {
+      return NextResponse.json(
+        { error: 'Too many attempts. Try again in a minute.' },
+        { status: 429 },
+      );
+    }
+
     const { phone, password } = await request.json();
     if (!phone || !password) {
       return NextResponse.json({ error: 'Missing credentials' }, { status: 400 });

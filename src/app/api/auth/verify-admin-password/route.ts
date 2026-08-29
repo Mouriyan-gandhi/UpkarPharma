@@ -1,10 +1,19 @@
 import { NextResponse } from 'next/server';
 import { getAdmin } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // Confirm the currently-logged-in admin's password before a sensitive action.
 // Uses a throwaway sign-in against Supabase Auth so we never touch bcrypt hashes.
 export async function POST(request: Request) {
+  const gate = checkRateLimit(request, 'verify-admin-password', { max: 10, windowMs: 60_000 });
+  if (!gate.ok) {
+    return NextResponse.json(
+      { error: 'Too many attempts. Try again in a minute.' },
+      { status: 429 },
+    );
+  }
+
   const admin = await getAdmin();
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

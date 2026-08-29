@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 function toE164(phone: string): string {
   const d = String(phone).replace(/\D/g, '');
@@ -14,6 +15,17 @@ function toE164(phone: string): string {
 // the matching public.users row. We return the session tokens to the mobile app.
 export async function POST(request: Request) {
   try {
+    // OTP verify is a brute-force target for the 6-digit code. 10/min is
+    // generous enough for humans mistyping, tight enough that guessing
+    // 100k codes takes ~7 hours per IP instead of seconds.
+    const gate = checkRateLimit(request, 'auth-verify', { max: 10, windowMs: 60_000 });
+    if (!gate.ok) {
+      return NextResponse.json(
+        { error: 'Too many verification attempts. Try again in a minute.' },
+        { status: 429 },
+      );
+    }
+
     const body = await request.json();
     const { phone, otp, device_info = 'MobileApp' } = body;
 

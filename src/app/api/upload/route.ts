@@ -55,6 +55,14 @@ function autoCategorize(name: string): string {
   return 'General';
 }
 
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;   // 10 MB — big enough for a full product catalog Excel
+const ALLOWED_MIME = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',   // .xlsx
+  'application/vnd.ms-excel',                                             // .xls
+  'text/csv',                                                             // .csv (rare, but xlsx lib handles it)
+  'application/octet-stream',                                             // some browsers report this — allow but still enforce size
+]);
+
 export async function POST(request: Request) {
   try {
     if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -63,6 +71,19 @@ export async function POST(request: Request) {
     const file = formData.get('file') as File;
     const type = formData.get('type') as string;
     if (!file || !type) return NextResponse.json({ error: 'File and type are required' }, { status: 400 });
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { error: `File too large. Max ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB.` },
+        { status: 413 },
+      );
+    }
+    if (file.type && !ALLOWED_MIME.has(file.type)) {
+      return NextResponse.json(
+        { error: `Unsupported file type "${file.type}". Upload an Excel or CSV file.` },
+        { status: 415 },
+      );
+    }
 
     const arrayBuffer = await file.arrayBuffer();
     const workbook = XLSX.read(Buffer.from(arrayBuffer), { type: 'buffer' });

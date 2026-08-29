@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { checkRateLimit } from '@/lib/rate-limit';
 import crypto from 'node:crypto';
 
 function toE164(phone: string): string {
@@ -21,6 +22,17 @@ function toE164(phone: string): string {
 // mobile app already does through /api/auth/otp → /api/auth/verify).
 export async function POST(request: Request) {
   try {
+    // Signup creates an auth user + sends welcome — cheap to abuse for spam
+    // account creation. 5/min is tight; legitimate users don't sign up twice
+    // in a minute.
+    const gate = checkRateLimit(request, 'auth-signup', { max: 5, windowMs: 60_000 });
+    if (!gate.ok) {
+      return NextResponse.json(
+        { error: 'Too many signup attempts. Try again in a minute.' },
+        { status: 429 },
+      );
+    }
+
     const data = await request.json();
     const {
       phone,
