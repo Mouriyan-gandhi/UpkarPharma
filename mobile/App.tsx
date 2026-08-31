@@ -3738,7 +3738,7 @@ function ProfileScreen({ setCurrentScreen }) {
 // raw_override for approvals).
 // ═════════════════════════════════════════════════════════════════════════════
 
-function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onOpenAnalytics, onExit }) {
+function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onOpenAnalytics, onOpenNotifications, onExit }) {
   const usersList = useStore((s) => s.usersList) || [];
   const products = useStore((s) => s.products) || [];
   // NOTE: orders in the store are filtered to the current user by the polling
@@ -3826,6 +3826,13 @@ function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOp
             icon="stats-chart-outline"
             color="#EA580C"
             onPress={onOpenAnalytics}
+          />
+          <AdminTile
+            title="Notifications"
+            subtitle="Broadcast push to partners"
+            icon="megaphone-outline"
+            color="#DB2777"
+            onPress={onOpenNotifications}
           />
           <AdminTile
             title="Pricing & Discounts"
@@ -5103,6 +5110,162 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
   );
 }
 
+// --- Admin Notifications (broadcast) ---
+function AdminNotificationsScreen({ onBack }: any) {
+  const usersList = useStore((s) => s.usersList) || [];
+  const partners = usersList.filter((u: any) => u.role !== 'admin' && u.is_approved && !u.is_blocked);
+  const [target, setTarget] = useState<'all' | 'user'>('all');
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [q, setQ] = useState('');
+
+  const selectedUser = partners.find((u: any) => u.id === selectedUserId);
+
+  const send = async () => {
+    if (!title.trim() || !msg.trim()) {
+      Alert.alert('Missing info', 'Both title and message are required.');
+      return;
+    }
+    if (target === 'user' && !selectedUserId) {
+      Alert.alert('Pick a partner', 'Choose which partner to notify.');
+      return;
+    }
+    Alert.alert(
+      `Send to ${target === 'all' ? partners.length + ' partners' : selectedUser?.store_name}?`,
+      'This will send an in-app + push notification immediately.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Send', onPress: async () => {
+          setBusy(true);
+          try {
+            const url = `${useStore.getState().getBaseUrl()}/api/notifications`;
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: useStore.getState().authHeaders(),
+              body: JSON.stringify({
+                target,
+                user_id: target === 'user' ? selectedUserId : undefined,
+                title: title.trim(),
+                body: msg.trim(),
+                type: 'admin_broadcast',
+              }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+            showToast(`Delivered to ${data.delivered || 0} partner${data.delivered === 1 ? '' : 's'}`, 'success');
+            setTitle(''); setMsg('');
+          } catch (e: any) {
+            Alert.alert('Error', e.message);
+          }
+          setBusy(false);
+        }},
+      ]
+    );
+  };
+
+  const filteredPartners = q
+    ? partners.filter((u: any) => (u.store_name || '').toLowerCase().includes(q.toLowerCase()) || (u.phone || '').includes(q))
+    : partners;
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader title="Notifications" subtitle="Broadcast to partners" onBack={onBack} />
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        {/* Target */}
+        <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Send to</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+          {([
+            { k: 'all',  label: `All partners (${partners.length})`, icon: 'megaphone-outline' },
+            { k: 'user', label: 'One partner', icon: 'person-outline' },
+          ] as const).map((opt) => {
+            const active = target === opt.k;
+            return (
+              <TouchableOpacity key={opt.k} onPress={() => setTarget(opt.k)} style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: active ? BRAND[800] : '#fff', borderWidth: 1, borderColor: active ? BRAND[800] : '#e2e8f0', alignItems: 'center', gap: 4 }}>
+                <Ionicons name={opt.icon as any} size={18} color={active ? '#fff' : BRAND[800]} />
+                <Text style={{ fontSize: 12, fontWeight: '900', color: active ? '#fff' : '#475569' }}>{opt.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {target === 'user' && (
+          <TouchableOpacity onPress={() => setShowPicker(true)} style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 14, marginBottom: 12, flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Partner</Text>
+              <Text style={{ fontSize: 14, fontWeight: '800', color: selectedUser ? '#0f172a' : '#94a3b8', marginTop: 2 }}>
+                {selectedUser ? `${selectedUser.store_name} (${selectedUser.phone})` : 'Tap to select…'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+          </TouchableOpacity>
+        )}
+
+        {/* Title */}
+        <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Title</Text>
+        <TextInput value={title} onChangeText={setTitle} placeholder="New Derma launch discount" placeholderTextColor="#94a3b8" maxLength={80} style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 12 }} />
+
+        {/* Body */}
+        <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Message</Text>
+        <TextInput value={msg} onChangeText={setMsg} placeholder="Use code DERMA10 for 10% off your first order on Derma products." placeholderTextColor="#94a3b8" multiline maxLength={280} style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, fontSize: 14, fontWeight: '600', color: '#0f172a', minHeight: 100, marginBottom: 4 }} />
+        <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700', marginBottom: 16, textAlign: 'right' }}>{msg.length} / 280</Text>
+
+        <TouchableOpacity disabled={busy} onPress={send} style={{ backgroundColor: BRAND[800], paddingVertical: 14, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+          {busy && <ActivityIndicator color="#fff" size="small" />}
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>{busy ? 'Sending…' : `Send notification`}</Text>
+        </TouchableOpacity>
+
+        <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 12, marginTop: 20 }}>
+          <Text style={{ fontSize: 11, fontWeight: '900', color: '#B45309', letterSpacing: 0.5 }}>⚡ HEADS UP</Text>
+          <Text style={{ fontSize: 12, color: '#78350F', fontWeight: '700', marginTop: 4 }}>
+            Broadcasts hit every approved, non-blocked partner. Push delivery depends on the partner having opened the app at least once to register their Expo token.
+          </Text>
+        </View>
+      </ScrollView>
+
+      {/* Partner picker */}
+      {showPicker && (
+        <Modal visible transparent animationType="slide" onRequestClose={() => setShowPicker(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
+            <View style={{ backgroundColor: '#F7FAF8', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '80%' }}>
+              <View style={{ padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ flex: 1, fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>Select partner</Text>
+                <TouchableOpacity onPress={() => setShowPicker(false)}><Ionicons name="close" size={22} color="#475569" /></TouchableOpacity>
+              </View>
+              <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+                <View style={{ backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10 }}>
+                  <Ionicons name="search" size={16} color="#94a3b8" />
+                  <TextInput value={q} onChangeText={setQ} placeholder="Search…" placeholderTextColor="#94a3b8" style={{ flex: 1, padding: 10, fontSize: 14, fontWeight: '600', color: '#0f172a' }} />
+                </View>
+              </View>
+              <FlatList
+                data={filteredPartners}
+                keyExtractor={(u: any) => String(u.id || u.phone)}
+                contentContainerStyle={{ padding: 16 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    onPress={() => { setSelectedUserId(item.id); setShowPicker(false); setQ(''); }}
+                    style={{ backgroundColor: '#fff', padding: 14, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center' }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '900', color: '#0f172a' }}>{item.store_name}</Text>
+                      <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '700' }}>+91 {item.phone}</Text>
+                    </View>
+                    {item.expo_push_token ? <Ionicons name="notifications" size={14} color={BRAND[700]} /> : <Ionicons name="notifications-off-outline" size={14} color="#94a3b8" />}
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
+    </View>
+  );
+}
+
 // --- Admin Analytics ---
 // Derives everything from the store (orders + products + usersList) so no
 // extra API is needed. Charts are hand-rolled with Views to avoid pulling
@@ -5717,6 +5880,7 @@ export default function App() {
           onOpenUsers={() => setCurrentScreen('AdminUsers')}
           onOpenSchemes={() => setCurrentScreen('AdminSchemes')}
           onOpenAnalytics={() => setCurrentScreen('AdminAnalytics')}
+          onOpenNotifications={() => setCurrentScreen('AdminNotifications')}
           onExit={adminSignOut}
         />
       </View>
@@ -5775,6 +5939,11 @@ export default function App() {
     if (currentScreen === 'AdminAnalytics') return (
       <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
         <AdminAnalyticsScreen onBack={() => setCurrentScreen('AdminHome')} />
+      </View>
+    );
+    if (currentScreen === 'AdminNotifications') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminNotificationsScreen onBack={() => setCurrentScreen('AdminHome')} />
       </View>
     );
     if (currentScreen === 'AdminPricing') return (
