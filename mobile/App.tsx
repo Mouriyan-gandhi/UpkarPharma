@@ -4421,26 +4421,54 @@ function AdminOrdersScreen({ onBack, onOpenOrder }) {
 function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
   if (!order) return <View style={styles.centeredContainer}><Text>Order missing</Text></View>;
   const [busy, setBusy] = useState(false);
+  const [invoice, setInvoice] = useState<any>(null);
+  const [invItems, setInvItems] = useState<any[]>([]);
+  const [invLoading, setInvLoading] = useState(false);
+  const [showLines, setShowLines] = useState(false);
+  const [showDispatch, setShowDispatch] = useState(false);
   const currentIdx = mapStatusToStageIdx(order.status);
   const rejected = isTerminalRejected(order.status);
 
-  const setStage = async (newStatus: string) => {
+  // Fetch invoice + items (batch_no / expiry_date live here, not on the order)
+  const loadInvoice = async () => {
+    setInvLoading(true);
+    try {
+      const url = `${useStore.getState().getBaseUrl()}/api/invoices/${encodeURIComponent(order.id)}`;
+      const res = await fetch(url, { headers: useStore.getState().authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setInvoice(data.invoice || null);
+        setInvItems(data.items || []);
+      } else {
+        setInvoice(null);
+        setInvItems([]);
+      }
+    } catch {
+      // Non-fatal — legacy orders may have no invoice row
+      setInvoice(null);
+    }
+    setInvLoading(false);
+  };
+  useEffect(() => { loadInvoice(); }, [order.id]);
+
+  const setStage = async (newStatus: string, extra: any = {}) => {
     setBusy(true);
     Haptics.selectionAsync();
     try {
       const url = useStore.getState().getApiUrl();
-      await fetch(url, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: useStore.getState().authHeaders(),
-        body: JSON.stringify({ collection: 'orders', action: 'update_status', item: { id: order.id, status: newStatus } }),
+        body: JSON.stringify({ collection: 'orders', action: 'update_status', item: { id: order.id, status: newStatus, ...extra } }),
       });
-      // Local update
-      const orders = useStore.getState().orders.map((o: any) => o.id === order.id ? { ...o, status: newStatus } : o);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      const orders = useStore.getState().orders.map((o: any) => o.id === order.id ? { ...o, status: newStatus, ...extra } : o);
       useStore.getState().setOrders(orders);
-      onOrderUpdated && onOrderUpdated({ ...order, status: newStatus });
+      onOrderUpdated && onOrderUpdated({ ...order, status: newStatus, ...extra });
       showToast(`Moved to ${newStatus}`, 'success');
-    } catch {
-      Alert.alert('Error', 'Failed to update status.');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to update status.');
     }
     setBusy(false);
   };
@@ -4450,6 +4478,37 @@ function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Reject', style: 'destructive', onPress: () => setStage('Rejected') },
     ]);
+  };
+
+  const approveInvoice = async () => {
+    Alert.alert('Approve invoice?', 'Customer will be notified and the order moves to Packaging.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Approve', onPress: async () => {
+        setBusy(true);
+        try {
+          const url = `${useStore.getState().getBaseUrl()}/api/invoices/${encodeURIComponent(order.id)}/approve`;
+          const res = await fetch(url, { method: 'POST', headers: useStore.getState().authHeaders() });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Failed');
+          showToast('Invoice approved', 'success');
+          loadInvoice();
+          const orders = useStore.getState().orders.map((o: any) => o.id === order.id ? { ...o, status: 'Packaging' } : o);
+          useStore.getState().setOrders(orders);
+          onOrderUpdated && onOrderUpdated({ ...order, status: 'Packaging' });
+        } catch (e: any) {
+          Alert.alert('Error', e.message);
+        }
+        setBusy(false);
+      }},
+    ]);
+  };
+
+  const stageWithCourier = (newStatus: string) => {
+    if (newStatus === 'Dispatch') {
+      setShowDispatch(true);
+    } else {
+      setStage(newStatus);
+    }
   };
 
   return (
@@ -4466,6 +4525,43 @@ function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
           {order.address && <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginTop: 4 }}>{order.address}</Text>}
         </View>
 
+        {/* Invoice card */}
+        {invLoading ? (
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9', alignItems: 'center' }}>
+            <ActivityIndicator color={BRAND[700]} />
+          </View>
+        ) : invoice ? (
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: invoice.status === 'Draft' ? '#FDE68A' : BRAND[200] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Invoice</Text>
+                <Text style={{ fontSize: 15, fontWeight: '900', color: '#1A1A1A', marginTop: 2 }}>{invoice.invoice_no}</Text>
+              </View>
+              <View style={{ backgroundColor: invoice.status === 'Draft' ? '#FEF3C7' : BRAND[100], paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+                <Text style={{ fontSize: 10, fontWeight: '900', color: invoice.status === 'Draft' ? '#B45309' : BRAND[800] }}>{invoice.status?.toUpperCase()}</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+              <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '700' }}>Net</Text>
+              <Text style={{ fontSize: 13, color: '#0f172a', fontWeight: '900' }}>₹{Number(invoice.net_amount || 0).toLocaleString('en-IN')}</Text>
+            </View>
+            {invoice.status === 'Draft' ? (
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                <TouchableOpacity disabled={busy} onPress={() => setShowLines(true)} style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#f1f5f9', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '900', color: '#475569' }}>Edit batch / expiry</Text>
+                </TouchableOpacity>
+                <TouchableOpacity disabled={busy} onPress={approveInvoice} style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: BRAND[800], alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '900', color: '#fff' }}>{busy ? 'Working…' : 'Approve invoice'}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '600', marginTop: 6 }}>
+                Approved {invoice.approved_at ? new Date(invoice.approved_at).toLocaleString() : ''}
+              </Text>
+            )}
+          </View>
+        ) : null}
+
         {/* Status controls */}
         <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Set status</Text>
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
@@ -4476,7 +4572,7 @@ function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
               <TouchableOpacity
                 key={stg.key}
                 disabled={busy || active}
-                onPress={() => setStage(stg.key)}
+                onPress={() => stageWithCourier(stg.key)}
                 style={{
                   flex: 1, paddingVertical: 12, borderRadius: 14, alignItems: 'center',
                   backgroundColor: active ? BRAND[800] : done ? BRAND[100] : '#fff',
@@ -4489,6 +4585,13 @@ function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
             );
           })}
         </View>
+        {(order.courier_name || order.tracking_id) && (
+          <View style={{ backgroundColor: BRAND[50], borderRadius: 10, padding: 10, marginBottom: 8 }}>
+            <Text style={{ fontSize: 11, color: '#0f172a', fontWeight: '800' }}>
+              📦 {order.courier_name || 'Courier'} · <Text style={{ fontWeight: '900' }}>{order.tracking_id || '—'}</Text>
+            </Text>
+          </View>
+        )}
         <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '600', marginBottom: 16 }}>
           Current: <Text style={{ color: '#1A1A1A', fontWeight: '900' }}>{rejected ? 'Rejected' : (ORDER_STAGES[currentIdx]?.label || order.status || '—')}</Text>
         </Text>
@@ -4513,7 +4616,151 @@ function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
           ))}
         </View>
       </ScrollView>
+
+      {/* Invoice lines edit modal — batch_no + expiry_date per line */}
+      {showLines && invoice && (
+        <AdminInvoiceLinesModal
+          orderId={order.id}
+          items={invItems}
+          onClose={() => setShowLines(false)}
+          onSaved={() => { setShowLines(false); loadInvoice(); }}
+        />
+      )}
+
+      {/* Dispatch modal — capture courier + tracking id before advancing */}
+      {showDispatch && (
+        <AdminDispatchModal
+          existing={{ courier_name: order.courier_name || '', tracking_id: order.tracking_id || '' }}
+          onClose={() => setShowDispatch(false)}
+          onConfirm={async (payload) => {
+            setShowDispatch(false);
+            await setStage('Dispatch', payload);
+          }}
+        />
+      )}
     </View>
+  );
+}
+
+function AdminInvoiceLinesModal({ orderId, items, onClose, onSaved }: any) {
+  const [rows, setRows] = useState(() => items.map((it: any) => ({
+    id: it.id,
+    product_name: it.product_name,
+    quantity: it.quantity,
+    batch_no: it.batch_no || '',
+    expiry_date: it.expiry_date || '',
+  })));
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const url = `${useStore.getState().getBaseUrl()}/api/invoices/${encodeURIComponent(orderId)}/lines`;
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: useStore.getState().authHeaders(),
+        body: JSON.stringify({ lines: rows.map((r: any) => ({ id: r.id, batch_no: r.batch_no || null, expiry_date: r.expiry_date || null })) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      showToast('Batch / expiry saved', 'success');
+      onSaved();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#F7FAF8', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' }}>
+          <View style={{ padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>Edit invoice lines</Text>
+            <TouchableOpacity onPress={onClose} style={{ padding: 6 }}>
+              <Ionicons name="close" size={22} color="#475569" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+            <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 12 }}>
+              Set batch number + expiry per SKU. Only editable while invoice is Draft.
+            </Text>
+            {rows.map((row: any, i: number) => (
+              <View key={row.id} style={{ backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#f1f5f9' }}>
+                <Text style={{ fontSize: 13, fontWeight: '900', color: '#0f172a' }}>{row.product_name}</Text>
+                <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700', marginBottom: 8 }}>Qty: {row.quantity}</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Batch #</Text>
+                    <TextInput
+                      value={row.batch_no}
+                      onChangeText={(v) => { const next = [...rows]; next[i] = { ...next[i], batch_no: v }; setRows(next); }}
+                      placeholder="B12345"
+                      placeholderTextColor="#94a3b8"
+                      style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, fontWeight: '700', color: '#0f172a' }}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Expiry (YYYY-MM-DD)</Text>
+                    <TextInput
+                      value={row.expiry_date}
+                      onChangeText={(v) => { const next = [...rows]; next[i] = { ...next[i], expiry_date: v }; setRows(next); }}
+                      placeholder="2027-06-30"
+                      placeholderTextColor="#94a3b8"
+                      style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13, fontWeight: '700', color: '#0f172a' }}
+                    />
+                  </View>
+                </View>
+              </View>
+            ))}
+            <TouchableOpacity disabled={busy} onPress={save} style={{ backgroundColor: BRAND[800], paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 4 }}>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>{busy ? 'Saving…' : 'Save all lines'}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function AdminDispatchModal({ existing, onClose, onConfirm }: any) {
+  const [courier, setCourier] = useState(existing.courier_name || '');
+  const [tracking, setTracking] = useState(existing.tracking_id || '');
+  const [busy, setBusy] = useState(false);
+
+  const confirm = async () => {
+    if (!courier.trim() || !tracking.trim()) {
+      Alert.alert('Missing info', 'Courier name and tracking ID are both required.');
+      return;
+    }
+    setBusy(true);
+    await onConfirm({ courier_name: courier.trim(), tracking_id: tracking.trim() });
+    setBusy(false);
+  };
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#F7FAF8', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>Dispatch order</Text>
+            <TouchableOpacity onPress={onClose} style={{ padding: 6 }}>
+              <Ionicons name="close" size={22} color="#475569" />
+            </TouchableOpacity>
+          </View>
+          <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 16 }}>
+            Enter courier + tracking so the customer gets a proper push notification.
+          </Text>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Courier</Text>
+          <TextInput value={courier} onChangeText={setCourier} placeholder="Bluedart / DTDC / Delhivery…" placeholderTextColor="#94a3b8" style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', marginBottom: 12 }} />
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Tracking ID</Text>
+          <TextInput value={tracking} onChangeText={setTracking} placeholder="AWB / Docket #" placeholderTextColor="#94a3b8" autoCapitalize="characters" style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', marginBottom: 20 }} />
+          <TouchableOpacity disabled={busy} onPress={confirm} style={{ backgroundColor: BRAND[800], paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>{busy ? 'Dispatching…' : 'Confirm dispatch'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
