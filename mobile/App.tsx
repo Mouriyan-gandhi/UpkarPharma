@@ -16,6 +16,7 @@ import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 
@@ -4765,10 +4766,58 @@ function AdminDispatchModal({ existing, onClose, onConfirm }: any) {
 }
 
 // --- Admin Products list + edit form (multi-image URL entry) ---
-function AdminProductsScreen({ onBack, onEditProduct, onAddProduct }) {
+function AdminProductsScreen({ onBack, onEditProduct, onAddProduct, onRefresh }) {
   const products = useStore((s) => s.products) || [];
   const [q, setQ] = useState('');
+  const [uploading, setUploading] = useState(false);
   const filtered = q ? products.filter((p: any) => (p.name + ' ' + (p.company || '') + ' ' + (p.category || '')).toLowerCase().includes(q.toLowerCase())) : products;
+
+  // Pick an Excel/CSV and POST it as multipart/form-data to /api/upload.
+  // The server-side route already handles: MIME + size caps (10 MB / xls/xlsx/csv),
+  // admin auth, column autodetection, batched inserts, and dedupe by name.
+  const bulkUpload = async () => {
+    try {
+      const pick = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel',
+          'text/csv',
+        ],
+        copyToCacheDirectory: true,
+      });
+      if (pick.canceled || !pick.assets?.[0]) return;
+      const file = pick.assets[0];
+      if (file.size && file.size > 10 * 1024 * 1024) {
+        Alert.alert('File too large', 'Max 10 MB. Split the sheet or filter it first.');
+        return;
+      }
+      setUploading(true);
+
+      // React Native FormData: pass { uri, name, type } for the file field.
+      const form = new FormData();
+      form.append('type', 'products');
+      form.append('file', ({ uri: file.uri, name: file.name || 'products.xlsx', type: file.mimeType || 'application/octet-stream' }) as any);
+
+      const url = `${useStore.getState().getBaseUrl()}/api/upload`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          // Don't set Content-Type manually — RN sets the multipart boundary.
+          ...Object.fromEntries(
+            Object.entries(useStore.getState().authHeaders()).filter(([k]) => k.toLowerCase() !== 'content-type')
+          ),
+        } as any,
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      Alert.alert('Uploaded', `${data.added || 0} SKU${data.added === 1 ? '' : 's'} added / updated.`);
+      if (onRefresh) onRefresh();
+    } catch (e: any) {
+      Alert.alert('Upload failed', e.message || 'Try again');
+    }
+    setUploading(false);
+  };
 
   return (
     <View style={styles.screen}>
@@ -4778,10 +4827,16 @@ function AdminProductsScreen({ onBack, onEditProduct, onAddProduct }) {
         subtitle={`${products.length} SKUs`}
         onBack={onBack}
         right={
-          <TouchableOpacity onPress={onAddProduct} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: BRAND[800] }}>
-            <Ionicons name="add" size={14} color="#fff" />
-            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>Add</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <TouchableOpacity disabled={uploading} onPress={bulkUpload} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 12, backgroundColor: uploading ? '#94a3b8' : '#0EA5E9' }}>
+              <Ionicons name={uploading ? 'sync' : 'cloud-upload-outline'} size={14} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>{uploading ? 'Uploading…' : 'Bulk'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onAddProduct} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: BRAND[800] }}>
+              <Ionicons name="add" size={14} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>Add</Text>
+            </TouchableOpacity>
+          </View>
         }
       />
       <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
@@ -5551,6 +5606,7 @@ export default function App() {
           onBack={() => setCurrentScreen('AdminHome')}
           onEditProduct={(p: any) => { setAdminEditingProduct(p); setCurrentScreen('AdminProductEdit'); }}
           onAddProduct={() => { setAdminEditingProduct(null); setCurrentScreen('AdminProductEdit'); }}
+          onRefresh={fetchAPI}
         />
       </View>
     );
