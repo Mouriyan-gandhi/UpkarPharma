@@ -29,6 +29,10 @@ module.exports = () => {
       ...base.extra,
       apiBaseUrl,
       isProduction,
+      // Catalog mode: 'derma' (default) locks the customer catalog to
+      // category=Derma and hides Category+Company filter sections. Set
+      // CATALOG_MODE=all to restore the multi-category browsing UI.
+      catalogMode: process.env.CATALOG_MODE || 'derma',
       firebaseApiKey: process.env.FIREBASE_API_KEY || '',
       firebaseAuthDomain: process.env.FIREBASE_AUTH_DOMAIN || '',
       firebaseProjectId: process.env.FIREBASE_PROJECT_ID || '',

@@ -48,6 +48,14 @@ const API_BASE_URL: string | null =
     : null;
 const MIN_ORDER_VALUE = 2500;
 
+// Feature flag: launch as a Derma-only catalog. When true, the mobile
+// catalog auto-filters to category='Derma' and hides the Category + Company
+// filter sections in the filter drawer, exposing only Body System (sub-cat).
+// Flip via env: expo start with CATALOG_MODE=all to restore multi-cat.
+const CATALOG_MODE = Constants.expoConfig?.extra?.catalogMode ?? 'derma';
+const DERMA_ONLY = CATALOG_MODE === 'derma';
+const LOCKED_CATEGORY = 'Derma';
+
 // UPKEM / UPKAR PHARMA company details for invoice
 const COMPANY = {
   name: 'UPKAR PHARMA DISTRIBUTORS',
@@ -2049,11 +2057,14 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
     const matchesSearch = !q || p.name.toLowerCase().includes(q) ||
       (p.company || '').toLowerCase().includes(q) ||
       (p.composition || '').toLowerCase().includes(q);
+    // In DERMA_ONLY mode, hard-lock category to Derma before any user filters
+    // apply. Everything else keeps working — but the user cannot bypass this.
+    const matchesLockedCategory = !DERMA_ONLY || p.category === LOCKED_CATEGORY;
     const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(p.category);
     const matchesSystem = selectedSystems.length === 0 || selectedSystems.includes(p.body_system);
     const matchesCompany = selectedCompany === 'All' || p.company === selectedCompany;
     const matchesShortExp = !filterShortExpiry || !!p.short_expiry || (p.discount_percent && p.discount_percent > 0);
-    return matchesSearch && matchesCategory && matchesSystem && matchesCompany && matchesShortExp;
+    return matchesLockedCategory && matchesSearch && matchesCategory && matchesSystem && matchesCompany && matchesShortExp;
   });
 
   if (sortOption === 'price_asc') filteredProducts.sort((a,b) => (a.price_ptr || a.price) - (b.price_ptr || b.price));
@@ -2355,48 +2366,56 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
                 </TouchableOpacity>
               ))}
 
-              {/* Company (multi-select with checkmarks) */}
-              <Text style={styles.filterSectionTitle}>Company</Text>
-              <View style={styles.filterChipsWrap}>
-                {companies.filter(c => c !== 'All').map(c => {
-                  const isSelected = selectedCompany === c;
-                  return (
-                    <TouchableOpacity
-                      key={c}
-                      style={[styles.filterChip, isSelected && styles.filterChipActive]}
-                      onPress={() => { Haptics.selectionAsync(); setSelectedCompany(isSelected ? 'All' : c); }}
-                    >
-                      <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
-                        {isSelected ? '✓ ' : ''}{c}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              {/* Company (multi-select with checkmarks) — hidden in Derma-only launch */}
+              {!DERMA_ONLY && (
+                <>
+                  <Text style={styles.filterSectionTitle}>Company</Text>
+                  <View style={styles.filterChipsWrap}>
+                    {companies.filter(c => c !== 'All').map(c => {
+                      const isSelected = selectedCompany === c;
+                      return (
+                        <TouchableOpacity
+                          key={c}
+                          style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                          onPress={() => { Haptics.selectionAsync(); setSelectedCompany(isSelected ? 'All' : c); }}
+                        >
+                          <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>
+                            {isSelected ? '✓ ' : ''}{c}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
 
-              {/* Category (with Ionicons) */}
-              <Text style={styles.filterSectionTitle}>Category</Text>
-              <View style={styles.filterChipsWrap}>
-                {categories.map(cat => {
-                  const catConfig = HOME_CATEGORIES.find(hc => hc.name === cat);
-                  const isSelected = selectedCategories.includes(cat);
-                  return (
-                    <TouchableOpacity
-                      key={cat}
-                      style={[styles.filterChip, isSelected && styles.filterChipActive, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}
-                      onPress={() => toggleCategory(cat)}
-                    >
-                      {catConfig && <Ionicons name={catConfig.icon} size={14} color={isSelected ? BRAND[800] : '#64748b'} />}
-                      <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>{cat}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              {/* Category — hidden in Derma-only launch (locked server-side) */}
+              {!DERMA_ONLY && (
+                <>
+                  <Text style={styles.filterSectionTitle}>Category</Text>
+                  <View style={styles.filterChipsWrap}>
+                    {categories.map(cat => {
+                      const catConfig = HOME_CATEGORIES.find(hc => hc.name === cat);
+                      const isSelected = selectedCategories.includes(cat);
+                      return (
+                        <TouchableOpacity
+                          key={cat}
+                          style={[styles.filterChip, isSelected && styles.filterChipActive, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}
+                          onPress={() => toggleCategory(cat)}
+                        >
+                          {catConfig && <Ionicons name={catConfig.icon} size={14} color={isSelected ? BRAND[800] : '#64748b'} />}
+                          <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>{cat}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
 
-              {/* Body System */}
+              {/* Body System / Sub-category — always visible; the primary filter in Derma mode */}
               {systems.length > 0 && (
                 <>
-                  <Text style={styles.filterSectionTitle}>Body System / Target</Text>
+                  <Text style={styles.filterSectionTitle}>{DERMA_ONLY ? 'Sub-category' : 'Body System / Target'}</Text>
                   <View style={styles.filterChipsWrap}>
                     {systems.map(sys => (
                       <TouchableOpacity

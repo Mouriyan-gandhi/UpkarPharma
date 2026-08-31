@@ -7,7 +7,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 // select the full row (description, composition, drug_name, hsn, gst_percent,
 // expiry_date, images).
 const GRID_COLUMNS =
-  'id, name, code, company, category, packing, price, price_ptr, mrp, stock, image_url, short_expiry, discount_percent';
+  'id, name, code, company, category, body_system, packing, price, price_ptr, mrp, stock, image_url, short_expiry, discount_percent';
 const DETAIL_COLUMNS = '*';
 
 // GET /api/shop/products
@@ -24,6 +24,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const q = url.searchParams.get('q')?.trim() || '';
   const category = url.searchParams.get('category') || '';
+  const subCategory = url.searchParams.get('sub_category') || '';
   const shortExpiry = url.searchParams.get('short_expiry') === '1';
   const ids = url.searchParams.get('ids');
   const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
 
   if (q) query = query.or(`name.ilike.%${q}%,drug_name.ilike.%${q}%,company.ilike.%${q}%`);
   if (category) query = query.eq('category', category);
+  if (subCategory) query = query.eq('body_system', subCategory);
   if (shortExpiry) query = query.eq('short_expiry', true);
 
   const from = (page - 1) * perPage;

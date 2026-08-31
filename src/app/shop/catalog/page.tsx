@@ -34,6 +34,13 @@ type Product = {
 const PER_PAGE = 48;
 const MIN_ORDER = 2500;
 
+// Feature flag: launch as a Derma-only catalog. When true, we hard-lock
+// category to 'Derma' server-side, hide the category dropdown, and expose
+// sub-categories (body_system) as the primary filter instead. Flip
+// NEXT_PUBLIC_CATALOG_MODE back to 'all' post-pilot to restore multi-cat.
+const DERMA_ONLY = (process.env.NEXT_PUBLIC_CATALOG_MODE || 'derma') === 'derma';
+const LOCKED_CATEGORY = 'Derma';
+
 function firstImage(p: Product): string | null {
   if (p.images && p.images.length > 0) return p.images[0];
   return p.image_url || null;
@@ -58,23 +65,37 @@ export default function CatalogPage() {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [category, setCategory] = useState("");
+  const [subCategory, setSubCategory] = useState("");
   const [shortExpiry, setShortExpiry] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
+  const [subCategories, setSubCategories] = useState<string[]>([]);
   const [detailId, setDetailId] = useState<number | null>(null);
 
   // Load categories once. Cached in sessionStorage so tab-navigation
   // doesn't refetch — categories almost never change during a session.
+  // In DERMA_ONLY mode we ask the API with ?category=Derma so we also
+  // receive the sub_categories list in the same round-trip.
   useEffect(() => {
-    const cached = typeof window !== 'undefined' ? sessionStorage.getItem('shop:categories') : null;
+    const cacheKey = DERMA_ONLY ? `shop:cats:${LOCKED_CATEGORY}` : 'shop:categories';
+    const cached = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null;
     if (cached) {
-      try { setCategories(JSON.parse(cached)); } catch { /* ignore */ }
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed.categories) setCategories(parsed.categories);
+        if (parsed.sub_categories) setSubCategories(parsed.sub_categories);
+      } catch { /* ignore */ }
     }
-    fetch("/api/shop/categories")
+    const url = DERMA_ONLY
+      ? `/api/shop/categories?category=${encodeURIComponent(LOCKED_CATEGORY)}`
+      : "/api/shop/categories";
+    fetch(url)
       .then((r) => r.json())
       .then((d) => {
         const cats = d.categories || [];
+        const subs = d.sub_categories || [];
         setCategories(cats);
-        try { sessionStorage.setItem('shop:categories', JSON.stringify(cats)); } catch { /* ignore quota */ }
+        setSubCategories(subs);
+        try { sessionStorage.setItem(cacheKey, JSON.stringify({ categories: cats, sub_categories: subs })); } catch { /* ignore quota */ }
       })
       .catch(() => { });
   }, []);
@@ -92,7 +113,7 @@ export default function CatalogPage() {
   }, [query]);
 
   // Reset to page 1 when filters change
-  useEffect(() => { setPage(1); }, [debounced, category, shortExpiry]);
+  useEffect(() => { setPage(1); }, [debounced, category, subCategory, shortExpiry]);
 
   // Fetch products. Ignore stale responses when the user has already
   // typed a new query — cuts perceived latency and flickering.
@@ -102,7 +123,14 @@ export default function CatalogPage() {
     try {
       const params = new URLSearchParams({ page: String(page), perPage: String(PER_PAGE) });
       if (debounced) params.set("q", debounced);
-      if (category) params.set("category", category);
+      // In DERMA_ONLY mode we hard-lock category=Derma server-side and
+      // expose sub-category as the primary user-driven filter instead.
+      if (DERMA_ONLY) {
+        params.set("category", LOCKED_CATEGORY);
+        if (subCategory) params.set("sub_category", subCategory);
+      } else {
+        if (category) params.set("category", category);
+      }
       if (shortExpiry) params.set("short_expiry", "1");
       const res = await fetch(`/api/shop/products?${params.toString()}`, { signal: controller.signal });
       const data = await res.json();
@@ -116,7 +144,7 @@ export default function CatalogPage() {
       setLoading(false);
     }
     return () => controller.abort();
-  }, [debounced, category, shortExpiry, page]);
+  }, [debounced, category, subCategory, shortExpiry, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -136,14 +164,26 @@ export default function CatalogPage() {
               className="pl-10 h-11 border-slate-200"
             />
           </div>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="h-11 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium focus:ring-2 focus:ring-brand-700 focus:outline-none"
-          >
-            <option value="">All categories ({categories.length})</option>
-            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          {DERMA_ONLY ? (
+            <select
+              value={subCategory}
+              onChange={(e) => setSubCategory(e.target.value)}
+              className="h-11 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium focus:ring-2 focus:ring-brand-700 focus:outline-none"
+              disabled={subCategories.length === 0}
+            >
+              <option value="">All {LOCKED_CATEGORY.toLowerCase()} ({subCategories.length})</option>
+              {subCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          ) : (
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="h-11 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium focus:ring-2 focus:ring-brand-700 focus:outline-none"
+            >
+              <option value="">All categories ({categories.length})</option>
+              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
           <button
             onClick={() => setShortExpiry((s) => !s)}
             className={`h-11 px-4 rounded-md border font-bold text-sm flex items-center gap-2 transition-colors ${
@@ -156,10 +196,10 @@ export default function CatalogPage() {
         </div>
         <div className="mt-3 flex items-center justify-between">
           <p className="text-xs font-semibold text-slate-500">
-            {loading ? "Loading…" : `${total.toLocaleString("en-IN")} products`}
-            {(debounced || category || shortExpiry) && (
+            {loading ? "Loading…" : `${total.toLocaleString("en-IN")} ${DERMA_ONLY ? LOCKED_CATEGORY.toLowerCase() + ' products' : 'products'}`}
+            {(debounced || category || subCategory || shortExpiry) && (
               <button
-                onClick={() => { setQuery(""); setCategory(""); setShortExpiry(false); }}
+                onClick={() => { setQuery(""); setCategory(""); setSubCategory(""); setShortExpiry(false); }}
                 className="ml-2 text-brand-700 hover:underline font-bold"
               >
                 Clear filters
