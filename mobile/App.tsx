@@ -3737,7 +3737,7 @@ function ProfileScreen({ setCurrentScreen }) {
 // raw_override for approvals).
 // ═════════════════════════════════════════════════════════════════════════════
 
-function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onExit }) {
+function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onExit }) {
   const usersList = useStore((s) => s.usersList) || [];
   const products = useStore((s) => s.products) || [];
   // NOTE: orders in the store are filtered to the current user by the polling
@@ -3804,6 +3804,13 @@ function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOp
             icon="cube-outline"
             color={BRAND[700]}
             onPress={onOpenProducts}
+          />
+          <AdminTile
+            title="Partners"
+            subtitle="Credit · block · edit profile"
+            icon="people-outline"
+            color="#0EA5E9"
+            onPress={onOpenUsers}
           />
           <AdminTile
             title="Pricing & Discounts"
@@ -3958,6 +3965,359 @@ function AdminApprovalsScreen({ onBack, onRefresh }) {
         }}
       />
     </View>
+  );
+}
+
+// --- Admin Users (full CRUD for pharmacy partners) ---
+// Approve pending, edit credit balance + limit, edit profile fields,
+// block/unblock with reason. All actions hit /api/data POST with the
+// admin-only action verbs (update_credit, update_user_profile, block_user,
+// unblock_user) that the backend already exposes.
+function AdminUsersScreen({ onBack, onRefresh }) {
+  const usersList = useStore((s) => s.usersList) || [];
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'active' | 'blocked'>('all');
+  const [selected, setSelected] = useState<any>(null);
+
+  const filtered = usersList
+    .filter((u: any) => u.role !== 'admin')
+    .filter((u: any) => {
+      if (filter === 'pending') return !u.is_approved;
+      if (filter === 'active')  return u.is_approved && !u.is_blocked;
+      if (filter === 'blocked') return u.is_blocked;
+      return true;
+    })
+    .filter((u: any) => {
+      if (!q.trim()) return true;
+      const s = q.toLowerCase();
+      return (u.store_name || '').toLowerCase().includes(s)
+          || (u.phone || '').includes(s)
+          || (u.gst_number || '').toLowerCase().includes(s);
+    });
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader title="Partners" subtitle={`${filtered.length} of ${usersList.filter((u: any) => u.role !== 'admin').length}`} onBack={onBack} />
+      <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+        <View style={{ backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 44, marginBottom: 10 }}>
+          <Ionicons name="search" size={16} color="#94a3b8" />
+          <TextInput
+            value={q}
+            onChangeText={setQ}
+            placeholder="Search store, phone, GST…"
+            placeholderTextColor="#94a3b8"
+            style={{ flex: 1, marginLeft: 8, fontSize: 14, color: '#0f172a', fontWeight: '600' }}
+          />
+          {q ? <TouchableOpacity onPress={() => setQ('')}><Ionicons name="close-circle" size={16} color="#94a3b8" /></TouchableOpacity> : null}
+        </View>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {(['all', 'pending', 'active', 'blocked'] as const).map((f) => {
+            const active = filter === f;
+            return (
+              <TouchableOpacity
+                key={f}
+                onPress={() => setFilter(f)}
+                style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: active ? BRAND[800] : '#f1f5f9' }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '900', color: active ? '#fff' : '#475569', textTransform: 'capitalize' }}>{f}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+      <FlatList
+        contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 40 }}
+        data={filtered}
+        keyExtractor={(u: any) => String(u.id || u.phone)}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', marginTop: 60 }}>
+            <Ionicons name="people-outline" size={36} color="#cbd5e1" />
+            <Text style={{ color: '#94a3b8', fontSize: 13, fontWeight: '700', marginTop: 10 }}>No partners match</Text>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            onPress={() => setSelected(item)}
+            activeOpacity={0.85}
+            style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: item.is_blocked ? '#FECACA' : '#f1f5f9', ...SHADOWS.sm }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: item.is_blocked ? '#FEF2F2' : BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+                <Text style={{ color: item.is_blocked ? '#B91C1C' : BRAND[800], fontSize: 14, fontWeight: '900' }}>{item.store_name?.[0]?.toUpperCase() || '?'}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '900', color: '#1A1A1A' }} numberOfLines={1}>{item.store_name || 'Unnamed'}</Text>
+                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>+91 {item.phone} · {item.user_type || 'Retailer'}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                {!item.is_approved && (
+                  <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                    <Text style={{ color: '#B45309', fontSize: 10, fontWeight: '900' }}>PENDING</Text>
+                  </View>
+                )}
+                {item.is_blocked && (
+                  <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                    <Text style={{ color: '#B91C1C', fontSize: 10, fontWeight: '900' }}>BLOCKED</Text>
+                  </View>
+                )}
+                {item.is_approved && !item.is_blocked && (
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: BRAND[700] }}>₹{Number(item.credit_balance || 0).toLocaleString('en-IN')}</Text>
+                )}
+                <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '700', marginTop: 2 }}>Limit ₹{Number(item.credit_limit || 0).toLocaleString('en-IN')}</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        )}
+      />
+      {selected && (
+        <AdminUserDetailModal
+          user={selected}
+          onClose={() => setSelected(null)}
+          onSaved={() => { setSelected(null); if (onRefresh) onRefresh(); }}
+        />
+      )}
+    </View>
+  );
+}
+
+// --- User detail sheet (edit credit, profile, block/unblock, approve) ---
+function AdminUserDetailModal({ user, onClose, onSaved }: any) {
+  const [tab, setTab] = useState<'overview' | 'credit' | 'profile' | 'danger'>('overview');
+  const [busy, setBusy] = useState(false);
+  const [creditLimit, setCreditLimit] = useState(String(user.credit_limit ?? 0));
+  const [creditBalance, setCreditBalance] = useState(String(user.credit_balance ?? 0));
+  const [profile, setProfile] = useState({
+    store_name: user.store_name || '',
+    drug_license: user.drug_license || '',
+    gst_number: user.gst_number || '',
+    registration_number: user.registration_number || '',
+    address: user.address || '',
+    email: user.email || '',
+    user_type: user.user_type || 'Retailer',
+    zone: user.zone || '',
+    city: user.city || '',
+  });
+  const [blockReason, setBlockReason] = useState(user.blocked_reason || '');
+
+  const post = async (body: any) => {
+    setBusy(true);
+    try {
+      const res = await fetch(useStore.getState().getApiUrl(), {
+        method: 'POST',
+        headers: useStore.getState().authHeaders(),
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      return data;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveCredit = async () => {
+    try {
+      await post({
+        action: 'update_credit',
+        phone: user.phone,
+        credit_limit: Number(creditLimit) || 0,
+        credit_balance: Number(creditBalance) || 0,
+      });
+      showToast('Credit updated', 'success');
+      onSaved();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+  };
+
+  const saveProfile = async () => {
+    try {
+      await post({ action: 'update_user_profile', phone: user.phone, ...profile });
+      showToast('Profile updated', 'success');
+      onSaved();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+  };
+
+  const approve = async () => {
+    try {
+      const usersList = useStore.getState().usersList || [];
+      const next = usersList.map((u: any) => u.phone === user.phone ? { ...u, is_approved: true } : u);
+      await post({ action: 'raw_override', db: { users: next } });
+      useStore.getState().setUsersList(next);
+      showToast('Approved', 'success');
+      onSaved();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+  };
+
+  const doBlock = async () => {
+    Alert.alert('Block partner?', `This will revoke ${user.store_name}'s active sessions immediately.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Block', style: 'destructive', onPress: async () => {
+        try {
+          await post({ action: 'block_user', phone: user.phone, reason: blockReason || null });
+          showToast('User blocked', 'info');
+          onSaved();
+        } catch (e: any) {
+          Alert.alert('Error', e.message);
+        }
+      }},
+    ]);
+  };
+
+  const doUnblock = async () => {
+    try {
+      await post({ action: 'unblock_user', phone: user.phone });
+      showToast('User unblocked', 'success');
+      onSaved();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+  };
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#F7FAF8', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%', paddingBottom: 24 }}>
+          {/* Header */}
+          <View style={{ padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+              <Text style={{ color: BRAND[800], fontSize: 16, fontWeight: '900' }}>{user.store_name?.[0]?.toUpperCase() || '?'}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: '900', color: '#1A1A1A' }} numberOfLines={1}>{user.store_name}</Text>
+              <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>+91 {user.phone}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={{ padding: 6 }}>
+              <Ionicons name="close" size={22} color="#475569" />
+            </TouchableOpacity>
+          </View>
+          {/* Tabs */}
+          <View style={{ flexDirection: 'row', paddingHorizontal: 12, paddingTop: 12, gap: 4 }}>
+            {(['overview', 'credit', 'profile', 'danger'] as const).map((t) => {
+              const active = tab === t;
+              return (
+                <TouchableOpacity
+                  key={t}
+                  onPress={() => setTab(t)}
+                  style={{ flex: 1, paddingVertical: 8, borderRadius: 8, backgroundColor: active ? (t === 'danger' ? '#FEE2E2' : BRAND[100]) : 'transparent' }}
+                >
+                  <Text style={{ textAlign: 'center', fontSize: 12, fontWeight: '900', color: active ? (t === 'danger' ? '#B91C1C' : BRAND[800]) : '#64748b', textTransform: 'capitalize' }}>{t}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16 }}>
+            {tab === 'overview' && (
+              <View>
+                {!user.is_approved && (
+                  <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 12, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Ionicons name="warning" size={20} color="#B45309" />
+                    <Text style={{ flex: 1, fontSize: 12, color: '#78350F', fontWeight: '700' }}>This partner is awaiting approval.</Text>
+                    <TouchableOpacity disabled={busy} onPress={approve} style={{ backgroundColor: BRAND[800], paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}>
+                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '900' }}>{busy ? '…' : 'Approve'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {user.is_blocked && (
+                  <View style={{ backgroundColor: '#FEE2E2', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '900', color: '#B91C1C' }}>BLOCKED</Text>
+                    {user.blocked_reason ? <Text style={{ fontSize: 12, color: '#7F1D1D', fontWeight: '600', marginTop: 4 }}>{user.blocked_reason}</Text> : null}
+                  </View>
+                )}
+                <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#f1f5f9' }}>
+                  {[
+                    ['Type', user.user_type],
+                    ['Drug licence', user.drug_license],
+                    ['GST', user.gst_number],
+                    ['Reg. number', user.registration_number],
+                    ['City', user.city],
+                    ['Zone', user.zone],
+                    ['Address', user.address],
+                    ['Email', user.email],
+                    ['Credit balance', `₹${Number(user.credit_balance || 0).toLocaleString('en-IN')}`],
+                    ['Credit limit', `₹${Number(user.credit_limit || 0).toLocaleString('en-IN')}`],
+                  ].map(([k, v]) => (
+                    <View key={k as string} style={{ flexDirection: 'row', paddingVertical: 6 }}>
+                      <Text style={{ width: 110, fontSize: 11, color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>{k}</Text>
+                      <Text style={{ flex: 1, fontSize: 13, color: v ? '#0f172a' : '#94a3b8', fontWeight: '700' }}>{v || '—'}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+            {tab === 'credit' && (
+              <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#f1f5f9' }}>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Credit limit</Text>
+                <TextInput value={creditLimit} onChangeText={setCreditLimit} keyboardType="numeric" placeholder="0" style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 14 }} />
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Credit balance (available)</Text>
+                <TextInput value={creditBalance} onChangeText={setCreditBalance} keyboardType="numeric" placeholder="0" style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 14 }} />
+                <TouchableOpacity disabled={busy} onPress={saveCredit} style={{ backgroundColor: BRAND[800], paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>{busy ? 'Saving…' : 'Save credit'}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {tab === 'profile' && (
+              <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#f1f5f9' }}>
+                {([
+                  ['store_name', 'Store name'],
+                  ['user_type', 'Business type'],
+                  ['drug_license', 'Drug licence'],
+                  ['gst_number', 'GST number'],
+                  ['registration_number', 'Registration number'],
+                  ['email', 'Email'],
+                  ['city', 'City'],
+                  ['zone', 'Zone'],
+                  ['address', 'Address'],
+                ] as const).map(([k, label]) => (
+                  <View key={k} style={{ marginBottom: 12 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{label}</Text>
+                    <TextInput
+                      value={(profile as any)[k]}
+                      onChangeText={(v) => setProfile({ ...profile, [k]: v })}
+                      placeholder={label}
+                      placeholderTextColor="#94a3b8"
+                      multiline={k === 'address'}
+                      style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', minHeight: k === 'address' ? 64 : undefined }}
+                    />
+                  </View>
+                ))}
+                <TouchableOpacity disabled={busy} onPress={saveProfile} style={{ backgroundColor: BRAND[800], paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 4 }}>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>{busy ? 'Saving…' : 'Save profile'}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {tab === 'danger' && (
+              <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#FECACA' }}>
+                {user.is_blocked ? (
+                  <>
+                    <Text style={{ fontSize: 14, fontWeight: '900', color: '#0f172a', marginBottom: 4 }}>Unblock partner</Text>
+                    <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 12 }}>They'll be able to log in and place orders again.</Text>
+                    <TouchableOpacity disabled={busy} onPress={doUnblock} style={{ backgroundColor: BRAND[800], paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>{busy ? 'Working…' : 'Unblock'}</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <Text style={{ fontSize: 14, fontWeight: '900', color: '#B91C1C', marginBottom: 4 }}>Block partner</Text>
+                    <Text style={{ fontSize: 12, color: '#7F1D1D', fontWeight: '600', marginBottom: 12 }}>Existing orders are preserved. Their sessions are revoked immediately and they can't log in.</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Reason (internal)</Text>
+                    <TextInput value={blockReason} onChangeText={setBlockReason} multiline placeholder="e.g. Unpaid invoices > 60 days" placeholderTextColor="#94a3b8" style={{ borderWidth: 1, borderColor: '#FECACA', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', minHeight: 60, marginBottom: 12 }} />
+                    <TouchableOpacity disabled={busy} onPress={doBlock} style={{ backgroundColor: '#B91C1C', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>{busy ? 'Working…' : 'Block partner'}</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -4643,6 +5003,7 @@ export default function App() {
           onOpenOrders={() => setCurrentScreen('AdminOrders')}
           onOpenProducts={() => setCurrentScreen('AdminProducts')}
           onOpenPricing={() => setCurrentScreen('AdminPricing')}
+          onOpenUsers={() => setCurrentScreen('AdminUsers')}
           onExit={adminSignOut}
         />
       </View>
@@ -4685,6 +5046,11 @@ export default function App() {
           onBack={() => setCurrentScreen('AdminProducts')}
           onSaved={() => setCurrentScreen('AdminProducts')}
         />
+      </View>
+    );
+    if (currentScreen === 'AdminUsers') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminUsersScreen onBack={() => setCurrentScreen('AdminHome')} onRefresh={fetchAPI} />
       </View>
     );
     if (currentScreen === 'AdminPricing') return (
