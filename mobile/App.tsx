@@ -3737,7 +3737,7 @@ function ProfileScreen({ setCurrentScreen }) {
 // raw_override for approvals).
 // ═════════════════════════════════════════════════════════════════════════════
 
-function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onExit }) {
+function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onExit }) {
   const usersList = useStore((s) => s.usersList) || [];
   const products = useStore((s) => s.products) || [];
   // NOTE: orders in the store are filtered to the current user by the polling
@@ -3811,6 +3811,13 @@ function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOp
             icon="people-outline"
             color="#0EA5E9"
             onPress={onOpenUsers}
+          />
+          <AdminTile
+            title="Schemes"
+            subtitle="B2B coupons · % off · flat off"
+            icon="pricetag-outline"
+            color="#059669"
+            onPress={onOpenSchemes}
           />
           <AdminTile
             title="Pricing & Discounts"
@@ -4787,6 +4794,266 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
   );
 }
 
+// --- Admin Schemes (B2B coupons) ---
+function AdminSchemesScreen({ onBack }: any) {
+  const [schemes, setSchemes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<any | null>(null);   // null = closed, object = edit, {} = new
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(useStore.getState().getSchemesUrl(), {
+        headers: useStore.getState().authHeaders(),
+      });
+      const data = await res.json();
+      setSchemes(data.schemes || []);
+    } catch {
+      Alert.alert('Error', 'Could not load schemes');
+    }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const toggle = async (s: any) => {
+    Haptics.selectionAsync();
+    try {
+      await fetch(useStore.getState().getSchemesUrl(), {
+        method: 'PUT',
+        headers: useStore.getState().authHeaders(),
+        body: JSON.stringify({ id: s.id, action: 'toggle' }),
+      });
+      load();
+    } catch {
+      Alert.alert('Error', 'Could not toggle scheme');
+    }
+  };
+
+  const remove = async (s: any) => {
+    Alert.alert('Delete scheme?', `${s.title} (${s.code}) will be removed. Existing orders that used it are preserved.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await fetch(`${useStore.getState().getSchemesUrl()}?id=${s.id}`, {
+            method: 'DELETE',
+            headers: useStore.getState().authHeaders(),
+          });
+          showToast('Scheme deleted', 'info');
+          load();
+        } catch {
+          Alert.alert('Error', 'Could not delete');
+        }
+      }},
+    ]);
+  };
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader
+        title="Schemes"
+        subtitle={`${schemes.length} total`}
+        onBack={onBack}
+        right={
+          <TouchableOpacity onPress={() => setEditing({})} style={{ backgroundColor: BRAND[800], paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Ionicons name="add" size={14} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '900' }}>New</Text>
+          </TouchableOpacity>
+        }
+      />
+      <FlatList
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        data={schemes}
+        keyExtractor={(s: any) => String(s.id)}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', marginTop: 60 }}>
+            <Ionicons name="pricetag-outline" size={36} color="#cbd5e1" />
+            <Text style={{ color: '#94a3b8', fontSize: 13, fontWeight: '700', marginTop: 10 }}>No schemes yet</Text>
+            <TouchableOpacity onPress={() => setEditing({})} style={{ marginTop: 16, backgroundColor: BRAND[800], paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 }}>
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '900' }}>Create first scheme</Text>
+            </TouchableOpacity>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const today = new Date().toISOString().split('T')[0];
+          const expired = item.end_date && item.end_date < today;
+          const notYet  = item.start_date && item.start_date > today;
+          const running = item.is_active && !expired && !notYet;
+          return (
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: running ? BRAND[200] : '#f1f5f9', ...SHADOWS.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <Text style={{ fontSize: 14, fontWeight: '900', color: '#1A1A1A' }}>{item.title || 'Untitled'}</Text>
+                    <View style={{ backgroundColor: '#f1f5f9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '900', color: '#475569', letterSpacing: 0.5 }}>{item.code}</Text>
+                    </View>
+                    {running && <View style={{ backgroundColor: BRAND[100], paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}><Text style={{ fontSize: 10, fontWeight: '900', color: BRAND[800] }}>LIVE</Text></View>}
+                    {!item.is_active && <View style={{ backgroundColor: '#f1f5f9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}><Text style={{ fontSize: 10, fontWeight: '900', color: '#94a3b8' }}>OFF</Text></View>}
+                    {expired && <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}><Text style={{ fontSize: 10, fontWeight: '900', color: '#B91C1C' }}>EXPIRED</Text></View>}
+                    {notYet && <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}><Text style={{ fontSize: 10, fontWeight: '900', color: '#B45309' }}>UPCOMING</Text></View>}
+                  </View>
+                  <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginTop: 4 }} numberOfLines={2}>{item.description || '—'}</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                    <Text style={{ fontSize: 12, color: BRAND[700], fontWeight: '900' }}>
+                      {item.scheme_type === 'Flat' ? `₹${item.flat_discount} off` : `${item.discount_percent || 0}% off`}
+                      {item.max_discount ? ` · max ₹${item.max_discount}` : ''}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700' }}>· Min ₹{item.min_order_value || 0}</Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700', marginTop: 2 }}>
+                    {item.start_date} → {item.end_date} · per user {item.per_user_limit || 0}
+                  </Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                <TouchableOpacity onPress={() => toggle(item)} style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: item.is_active ? '#f1f5f9' : BRAND[100], alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '900', color: item.is_active ? '#475569' : BRAND[800] }}>{item.is_active ? 'Deactivate' : 'Activate'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setEditing(item)} style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#f1f5f9', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '900', color: '#475569' }}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => remove(item)} style={{ paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#FEF2F2', alignItems: 'center' }}>
+                  <Ionicons name="trash-outline" size={16} color="#B91C1C" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        }}
+      />
+      {editing !== null && (
+        <AdminSchemeEditModal
+          scheme={editing.id ? editing : null}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
+    </View>
+  );
+}
+
+function AdminSchemeEditModal({ scheme, onClose, onSaved }: any) {
+  const isNew = !scheme;
+  const [form, setForm] = useState({
+    title: scheme?.title || '',
+    description: scheme?.description || '',
+    code: scheme?.code || '',
+    scheme_type: scheme?.scheme_type || 'Discount',
+    discount_percent: String(scheme?.discount_percent ?? ''),
+    flat_discount: String(scheme?.flat_discount ?? ''),
+    max_discount: String(scheme?.max_discount ?? ''),
+    min_order_value: String(scheme?.min_order_value ?? '0'),
+    per_user_limit: String(scheme?.per_user_limit ?? '1'),
+    start_date: scheme?.start_date || new Date().toISOString().split('T')[0],
+    end_date: scheme?.end_date || new Date(Date.now() + 30 * 86_400_000).toISOString().split('T')[0],
+  });
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    if (!form.title.trim() || !form.code.trim()) {
+      Alert.alert('Missing info', 'Title and code are required');
+      return;
+    }
+    setBusy(true);
+    try {
+      const payload: any = {
+        title: form.title.trim(),
+        description: form.description.trim() || null,
+        code: form.code.trim().toUpperCase(),
+        scheme_type: form.scheme_type,
+        min_order_value: Number(form.min_order_value) || 0,
+        per_user_limit: Number(form.per_user_limit) || 0,
+        start_date: form.start_date,
+        end_date: form.end_date,
+      };
+      if (form.scheme_type === 'Discount') {
+        payload.discount_percent = Number(form.discount_percent) || 0;
+        payload.max_discount = Number(form.max_discount) || null;
+        payload.flat_discount = null;
+      } else {
+        payload.flat_discount = Number(form.flat_discount) || 0;
+        payload.discount_percent = null;
+        payload.max_discount = null;
+      }
+      const res = await fetch(useStore.getState().getSchemesUrl(), {
+        method: isNew ? 'POST' : 'PUT',
+        headers: useStore.getState().authHeaders(),
+        body: JSON.stringify(isNew ? payload : { id: scheme.id, ...payload }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      showToast(isNew ? 'Scheme created' : 'Scheme updated', 'success');
+      onSaved();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+    setBusy(false);
+  };
+
+  const F = ({ label, ...rest }: any) => (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{label}</Text>
+      <TextInput
+        placeholderTextColor="#94a3b8"
+        style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a' }}
+        {...rest}
+      />
+    </View>
+  );
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#F7FAF8', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' }}>
+          <View style={{ padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>{isNew ? 'New scheme' : 'Edit scheme'}</Text>
+            <TouchableOpacity onPress={onClose} style={{ padding: 6 }}>
+              <Ionicons name="close" size={22} color="#475569" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+            <F label="Title" value={form.title} onChangeText={(v: string) => setForm({ ...form, title: v })} placeholder="First-order Derma discount" />
+            <F label="Description (optional)" value={form.description} onChangeText={(v: string) => setForm({ ...form, description: v })} placeholder="What the customer sees" multiline />
+            <F label="Code (uppercase)" value={form.code} onChangeText={(v: string) => setForm({ ...form, code: v.toUpperCase() })} placeholder="DERMA10" autoCapitalize="characters" />
+
+            {/* Type toggle */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Type</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              {(['Discount', 'Flat'] as const).map((t) => {
+                const active = form.scheme_type === t;
+                return (
+                  <TouchableOpacity key={t} onPress={() => setForm({ ...form, scheme_type: t })} style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: active ? BRAND[800] : '#fff', borderWidth: 1, borderColor: active ? BRAND[800] : '#e2e8f0', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 13, fontWeight: '900', color: active ? '#fff' : '#475569' }}>{t === 'Discount' ? '% Off' : '₹ Flat off'}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {form.scheme_type === 'Discount' ? (
+              <>
+                <F label="Discount %" value={form.discount_percent} onChangeText={(v: string) => setForm({ ...form, discount_percent: v })} keyboardType="numeric" placeholder="10" />
+                <F label="Max discount ₹ (optional cap)" value={form.max_discount} onChangeText={(v: string) => setForm({ ...form, max_discount: v })} keyboardType="numeric" placeholder="500" />
+              </>
+            ) : (
+              <F label="Flat ₹ off" value={form.flat_discount} onChangeText={(v: string) => setForm({ ...form, flat_discount: v })} keyboardType="numeric" placeholder="200" />
+            )}
+
+            <F label="Min order ₹" value={form.min_order_value} onChangeText={(v: string) => setForm({ ...form, min_order_value: v })} keyboardType="numeric" placeholder="2500" />
+            <F label="Per-user usage limit (0 = unlimited)" value={form.per_user_limit} onChangeText={(v: string) => setForm({ ...form, per_user_limit: v })} keyboardType="numeric" placeholder="1" />
+            <F label="Start date (YYYY-MM-DD)" value={form.start_date} onChangeText={(v: string) => setForm({ ...form, start_date: v })} placeholder="2026-09-01" />
+            <F label="End date (YYYY-MM-DD)" value={form.end_date} onChangeText={(v: string) => setForm({ ...form, end_date: v })} placeholder="2026-12-31" />
+
+            <TouchableOpacity disabled={busy} onPress={save} style={{ backgroundColor: BRAND[800], paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 }}>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>{busy ? 'Saving…' : (isNew ? 'Create scheme' : 'Save changes')}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function AdminPricingScreen({ onBack }) {
   return (
     <View style={styles.screen}>
@@ -5004,6 +5271,7 @@ export default function App() {
           onOpenProducts={() => setCurrentScreen('AdminProducts')}
           onOpenPricing={() => setCurrentScreen('AdminPricing')}
           onOpenUsers={() => setCurrentScreen('AdminUsers')}
+          onOpenSchemes={() => setCurrentScreen('AdminSchemes')}
           onExit={adminSignOut}
         />
       </View>
@@ -5051,6 +5319,11 @@ export default function App() {
     if (currentScreen === 'AdminUsers') return (
       <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
         <AdminUsersScreen onBack={() => setCurrentScreen('AdminHome')} onRefresh={fetchAPI} />
+      </View>
+    );
+    if (currentScreen === 'AdminSchemes') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminSchemesScreen onBack={() => setCurrentScreen('AdminHome')} />
       </View>
     );
     if (currentScreen === 'AdminPricing') return (
