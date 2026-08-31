@@ -3738,7 +3738,7 @@ function ProfileScreen({ setCurrentScreen }) {
 // raw_override for approvals).
 // ═════════════════════════════════════════════════════════════════════════════
 
-function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onOpenAnalytics, onOpenNotifications, onExit }) {
+function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onOpenAnalytics, onOpenNotifications, onOpenChangeRequests, onExit }) {
   const usersList = useStore((s) => s.usersList) || [];
   const products = useStore((s) => s.products) || [];
   // NOTE: orders in the store are filtered to the current user by the polling
@@ -3833,6 +3833,13 @@ function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOp
             icon="megaphone-outline"
             color="#DB2777"
             onPress={onOpenNotifications}
+          />
+          <AdminTile
+            title="Change requests"
+            subtitle="Approve partner profile edits"
+            icon="create-outline"
+            color="#7C3AED"
+            onPress={onOpenChangeRequests}
           />
           <AdminTile
             title="Pricing & Discounts"
@@ -5110,6 +5117,168 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
   );
 }
 
+// --- Admin Profile Change Requests (approve / reject) ---
+function AdminChangeRequestsScreen({ onBack }: any) {
+  const [requests, setRequests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<any>(null);
+  const [statusFilter, setStatusFilter] = useState<'Pending' | 'Approved' | 'Rejected' | 'all'>('Pending');
+  const usersList = useStore((s) => s.usersList) || [];
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const qs = statusFilter === 'all' ? '' : `?status=${statusFilter}`;
+      const url = `${useStore.getState().getBaseUrl()}/api/profile-change-requests${qs}`;
+      const res = await fetch(url, { headers: useStore.getState().authHeaders() });
+      const data = await res.json();
+      setRequests(data.requests || []);
+    } catch {
+      Alert.alert('Error', 'Could not load requests');
+    }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, [statusFilter]);
+
+  const patch = async (id: any, action: 'approve' | 'reject', note?: string) => {
+    setBusyId(id);
+    try {
+      const url = `${useStore.getState().getBaseUrl()}/api/profile-change-requests`;
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: useStore.getState().authHeaders(),
+        body: JSON.stringify({ id, action, note: note || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      showToast(`Request ${action}d`, action === 'approve' ? 'success' : 'info');
+      load();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+    setBusyId(null);
+  };
+
+  const findUser = (uid: string) => usersList.find((u: any) => u.id === uid);
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader
+        title="Change requests"
+        subtitle={`${requests.length} ${statusFilter.toLowerCase()}`}
+        onBack={onBack}
+      />
+      <View style={{ paddingHorizontal: 16, paddingBottom: 8, flexDirection: 'row', gap: 6 }}>
+        {(['Pending', 'Approved', 'Rejected', 'all'] as const).map((s) => {
+          const active = statusFilter === s;
+          return (
+            <TouchableOpacity key={s} onPress={() => setStatusFilter(s)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: active ? BRAND[800] : '#f1f5f9' }}>
+              <Text style={{ fontSize: 12, fontWeight: '900', color: active ? '#fff' : '#475569' }}>{s === 'all' ? 'All' : s}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <FlatList
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        data={requests}
+        keyExtractor={(r: any) => String(r.id)}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', marginTop: 60 }}>
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+              <Ionicons name="checkmark-done" size={30} color={BRAND[700]} />
+            </View>
+            <Text style={{ color: '#0f172a', fontSize: 15, fontWeight: '900' }}>Nothing to review</Text>
+            <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '700', marginTop: 4 }}>Partners haven't asked for any changes.</Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const user = findUser(item.user_id);
+          const busy = busyId === item.id;
+          const isPending = item.status === 'Pending';
+          const changes = item.changes || {};
+          return (
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+                  <Text style={{ color: BRAND[800], fontSize: 14, fontWeight: '900' }}>{user?.store_name?.[0]?.toUpperCase() || '?'}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '900', color: '#0f172a' }} numberOfLines={1}>{user?.store_name || 'Unknown partner'}</Text>
+                  <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '700' }}>+91 {user?.phone || '—'} · {new Date(item.requested_at).toLocaleDateString()}</Text>
+                </View>
+                <View style={{
+                  paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+                  backgroundColor: item.status === 'Approved' ? BRAND[100] : item.status === 'Rejected' ? '#FEE2E2' : '#FEF3C7',
+                }}>
+                  <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 0.5,
+                    color: item.status === 'Approved' ? BRAND[800] : item.status === 'Rejected' ? '#B91C1C' : '#B45309',
+                  }}>{item.status?.toUpperCase()}</Text>
+                </View>
+              </View>
+
+              {/* Diff */}
+              <View style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                {Object.keys(changes).length === 0 ? (
+                  <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '700' }}>No fields</Text>
+                ) : Object.entries(changes).map(([k, v]) => {
+                  const current = (user as any)?.[k] || '—';
+                  return (
+                    <View key={k} style={{ marginBottom: 6 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>{k.replace(/_/g, ' ')}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: 6 }}>
+                        <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '700', textDecorationLine: 'line-through' }} numberOfLines={1}>{current}</Text>
+                        <Ionicons name="arrow-forward" size={12} color="#94a3b8" />
+                        <Text style={{ fontSize: 12, color: BRAND[800], fontWeight: '900', flex: 1 }} numberOfLines={2}>{String(v)}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {item.reason ? (
+                <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600', fontStyle: 'italic', marginBottom: 12 }}>
+                  Partner's note: {item.reason}
+                </Text>
+              ) : null}
+
+              {item.admin_note ? (
+                <View style={{ backgroundColor: '#F1F5F9', borderRadius: 8, padding: 8, marginBottom: 12 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>Admin note</Text>
+                  <Text style={{ fontSize: 12, color: '#475569', fontWeight: '700' }}>{item.admin_note}</Text>
+                </View>
+              ) : null}
+
+              {isPending && (
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    disabled={busy}
+                    onPress={() => Alert.prompt
+                      ? Alert.prompt('Reject reason', 'Optional note visible to the partner', (note) => patch(item.id, 'reject', note || undefined))
+                      : patch(item.id, 'reject')
+                    }
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', alignItems: 'center' }}
+                  >
+                    <Text style={{ color: '#B91C1C', fontWeight: '900', fontSize: 12 }}>{busy ? '…' : 'Reject'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    disabled={busy}
+                    onPress={() => patch(item.id, 'approve')}
+                    style={{ flex: 2, paddingVertical: 12, borderRadius: 10, backgroundColor: BRAND[800], alignItems: 'center' }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>{busy ? 'Working…' : 'Approve'}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          );
+        }}
+      />
+    </View>
+  );
+}
+
 // --- Admin Notifications (broadcast) ---
 function AdminNotificationsScreen({ onBack }: any) {
   const usersList = useStore((s) => s.usersList) || [];
@@ -5881,6 +6050,7 @@ export default function App() {
           onOpenSchemes={() => setCurrentScreen('AdminSchemes')}
           onOpenAnalytics={() => setCurrentScreen('AdminAnalytics')}
           onOpenNotifications={() => setCurrentScreen('AdminNotifications')}
+          onOpenChangeRequests={() => setCurrentScreen('AdminChangeRequests')}
           onExit={adminSignOut}
         />
       </View>
@@ -5944,6 +6114,11 @@ export default function App() {
     if (currentScreen === 'AdminNotifications') return (
       <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
         <AdminNotificationsScreen onBack={() => setCurrentScreen('AdminHome')} />
+      </View>
+    );
+    if (currentScreen === 'AdminChangeRequests') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminChangeRequestsScreen onBack={() => setCurrentScreen('AdminHome')} />
       </View>
     );
     if (currentScreen === 'AdminPricing') return (
