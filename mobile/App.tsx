@@ -3738,7 +3738,7 @@ function ProfileScreen({ setCurrentScreen }) {
 // raw_override for approvals).
 // ═════════════════════════════════════════════════════════════════════════════
 
-function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onExit }) {
+function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onOpenAnalytics, onExit }) {
   const usersList = useStore((s) => s.usersList) || [];
   const products = useStore((s) => s.products) || [];
   // NOTE: orders in the store are filtered to the current user by the polling
@@ -3819,6 +3819,13 @@ function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOp
             icon="pricetag-outline"
             color="#059669"
             onPress={onOpenSchemes}
+          />
+          <AdminTile
+            title="Analytics"
+            subtitle="Revenue · pipeline · top SKUs"
+            icon="stats-chart-outline"
+            color="#EA580C"
+            onPress={onOpenAnalytics}
           />
           <AdminTile
             title="Pricing & Discounts"
@@ -5096,6 +5103,141 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
   );
 }
 
+// --- Admin Analytics ---
+// Derives everything from the store (orders + products + usersList) so no
+// extra API is needed. Charts are hand-rolled with Views to avoid pulling
+// in a native charting library that'd break Expo Go.
+function AdminAnalyticsScreen({ onBack }: any) {
+  const orders = useStore((s) => s.orders) || [];
+  const products = useStore((s) => s.products) || [];
+  const usersList = useStore((s) => s.usersList) || [];
+  const schemes = useStore((s) => s.schemes) || [];
+
+  const partners = usersList.filter((u: any) => u.role !== 'admin');
+  const pendingApprovals = partners.filter((u: any) => !u.is_approved).length;
+  const activePartners = partners.filter((u: any) => u.is_approved && !u.is_blocked).length;
+
+  const nonRejected = orders.filter((o: any) => !/reject/i.test(o.status || ''));
+  const totalRevenue = nonRejected.reduce((s: number, o: any) => s + (Number(o.total) || 0), 0);
+  const dispatched = orders.filter((o: any) => /dispatch/i.test(o.status || '')).length;
+  const rejected = orders.filter((o: any) => /reject/i.test(o.status || '')).length;
+  const aov = nonRejected.length ? Math.round(totalRevenue / nonRejected.length) : 0;
+  const fulfillmentPct = orders.length ? Math.round((dispatched / orders.length) * 100) : 0;
+  const rejectionPct = orders.length ? Math.round((rejected / orders.length) * 100) : 0;
+
+  // Last-7-day revenue buckets
+  const now = new Date();
+  const buckets = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date(now); d.setDate(now.getDate() - (6 - i));
+    const key = d.toLocaleDateString('en-GB'); // matches order.date format
+    return { key, label: d.toLocaleDateString(undefined, { weekday: 'short' }), revenue: 0, count: 0 };
+  });
+  for (const o of nonRejected) {
+    const b = buckets.find((b) => b.key === o.date);
+    if (b) { b.revenue += Number(o.total) || 0; b.count += 1; }
+  }
+  const maxBucket = Math.max(1, ...buckets.map((b) => b.revenue));
+
+  // Top products by quantity
+  const skuMap = new Map<string, { name: string; qty: number }>();
+  for (const o of nonRejected) {
+    for (const it of (o.items || [])) {
+      const key = String(it.id ?? it.name);
+      const cur = skuMap.get(key) || { name: it.name, qty: 0 };
+      cur.qty += Number(it.quantity) || 0;
+      skuMap.set(key, cur);
+    }
+  }
+  const topProducts = Array.from(skuMap.values()).sort((a, b) => b.qty - a.qty).slice(0, 5);
+
+  const KPI = ({ label, value, sub, color }: any) => (
+    <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm }}>
+      <Text style={{ fontSize: 10, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
+      <Text style={{ fontSize: 20, fontWeight: '900', color: color || '#1A1A1A', marginTop: 4, letterSpacing: -0.5 }}>{value}</Text>
+      <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '700', marginTop: 2 }}>{sub}</Text>
+    </View>
+  );
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader title="Analytics" subtitle="Business overview" onBack={onBack} />
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        {/* KPI row 1 */}
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+          <KPI label="Revenue" value={`₹${(totalRevenue / 1000).toFixed(1)}k`} sub="Non-rejected orders" color={BRAND[800]} />
+          <KPI label="Orders" value={orders.length} sub={`${nonRejected.length} verified`} />
+        </View>
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+          <KPI label="Partners" value={activePartners} sub={`${pendingApprovals} pending`} color="#0EA5E9" />
+          <KPI label="AOV" value={`₹${aov.toLocaleString('en-IN')}`} sub="Avg order value" />
+        </View>
+
+        {/* Revenue trend */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 16 }}>
+          <Text style={{ fontSize: 13, fontWeight: '900', color: '#1A1A1A' }}>Last 7 days</Text>
+          <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700', marginBottom: 12 }}>Revenue per day, non-rejected only</Text>
+          {buckets.map((b) => {
+            const pct = (b.revenue / maxBucket) * 100;
+            return (
+              <View key={b.key} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={{ width: 36, fontSize: 11, fontWeight: '800', color: '#64748b' }}>{b.label}</Text>
+                <View style={{ flex: 1, height: 8, backgroundColor: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                  <View style={{ width: `${pct}%`, height: '100%', backgroundColor: BRAND[700], borderRadius: 4 }} />
+                </View>
+                <Text style={{ width: 70, textAlign: 'right', fontSize: 11, fontWeight: '900', color: '#0f172a' }}>
+                  {b.revenue > 0 ? `₹${(b.revenue / 1000).toFixed(1)}k` : '—'}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Order pipeline */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 16 }}>
+          <Text style={{ fontSize: 13, fontWeight: '900', color: '#1A1A1A', marginBottom: 10 }}>Order pipeline</Text>
+          {[
+            { label: 'Invoicing', count: orders.filter((o: any) => /invoic/i.test(o.status || '')).length, color: '#F59E0B' },
+            { label: 'Packaging', count: orders.filter((o: any) => /pack/i.test(o.status || '')).length, color: '#0EA5E9' },
+            { label: 'Dispatched', count: dispatched, color: BRAND[700] },
+            { label: 'Rejected', count: rejected, color: '#EF4444' },
+          ].map((row) => (
+            <View key={row.label} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: row.color, marginRight: 10 }} />
+              <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#0f172a' }}>{row.label}</Text>
+              <Text style={{ fontSize: 13, fontWeight: '900', color: '#1A1A1A' }}>{row.count}</Text>
+            </View>
+          ))}
+          <View style={{ marginTop: 10, backgroundColor: BRAND[50], borderRadius: 10, padding: 10 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#475569' }}>Fulfilment {fulfillmentPct}% · Rejection {rejectionPct}%</Text>
+          </View>
+        </View>
+
+        {/* Top products */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 16 }}>
+          <Text style={{ fontSize: 13, fontWeight: '900', color: '#1A1A1A' }}>Top 5 SKUs by quantity</Text>
+          <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700', marginBottom: 10 }}>Across all verified orders</Text>
+          {topProducts.length === 0 ? (
+            <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '700', textAlign: 'center', paddingVertical: 20 }}>No sales yet</Text>
+          ) : topProducts.map((p, i) => (
+            <View key={p.name + i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}>
+              <Text style={{ width: 26, fontSize: 11, fontWeight: '900', color: '#94a3b8' }}>#{i + 1}</Text>
+              <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#0f172a' }} numberOfLines={1}>{p.name}</Text>
+              <Text style={{ fontSize: 13, fontWeight: '900', color: BRAND[700] }}>{p.qty}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Catalog + schemes summary */}
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+          <KPI label="Catalog" value={products.length.toLocaleString('en-IN')} sub="Total SKUs" />
+          <KPI label="Schemes" value={schemes.filter((s: any) => s.is_active).length} sub={`${schemes.length} total`} color="#059669" />
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 // --- Admin Schemes (B2B coupons) ---
 function AdminSchemesScreen({ onBack }: any) {
   const [schemes, setSchemes] = useState<any[]>([]);
@@ -5574,6 +5716,7 @@ export default function App() {
           onOpenPricing={() => setCurrentScreen('AdminPricing')}
           onOpenUsers={() => setCurrentScreen('AdminUsers')}
           onOpenSchemes={() => setCurrentScreen('AdminSchemes')}
+          onOpenAnalytics={() => setCurrentScreen('AdminAnalytics')}
           onExit={adminSignOut}
         />
       </View>
@@ -5627,6 +5770,11 @@ export default function App() {
     if (currentScreen === 'AdminSchemes') return (
       <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
         <AdminSchemesScreen onBack={() => setCurrentScreen('AdminHome')} />
+      </View>
+    );
+    if (currentScreen === 'AdminAnalytics') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminAnalyticsScreen onBack={() => setCurrentScreen('AdminHome')} />
       </View>
     );
     if (currentScreen === 'AdminPricing') return (
