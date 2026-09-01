@@ -25,7 +25,13 @@
     ],
     "tagline": "What's age your skin?",
     "sub_category_raw": "Fairness / Anti-Aging",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/002.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p002_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p002_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p002_i02.png"
+    ]
   },
   {
     "page": 3,
@@ -59,7 +65,12 @@
     ],
     "tagline": "Clear the undesirable marks from the life",
     "sub_category_raw": "Depigmentation",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/003.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p003_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p003_i01.jpeg"
+    ]
   },
   {
     "page": 4,
@@ -97,7 +108,13 @@
     ],
     "tagline": "A unique formula for glowing skin",
     "sub_category_raw": "Face Wash",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/004.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p004_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p004_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p004_i01.png"
+    ]
   },
   {
     "page": 5,
@@ -123,7 +140,14 @@
     ],
     "tagline": "Rejuvenates the skin & makes it smooth, soft & radiant",
     "sub_category_raw": "Moisturizer",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/005.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p005_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p005_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p005_i00.png",
+      "/tmp/upkem-brochure/imgs/p005_i02.png"
+    ]
   },
   {
     "page": 6,
@@ -149,7 +173,15 @@
     ],
     "tagline": "Protects and rejuvenates skin",
     "sub_category_raw": "Moisturizer",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/006.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p006_i00.png",
+      "/tmp/upkem-brochure/imgs/p006_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i09.jpeg"
+    ]
   },
   {
     "page": 6,
@@ -174,7 +206,15 @@
     ],
     "tagline": "Protects and rejuvenates skin",
     "sub_category_raw": "Moisturizer",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/006.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p006_i00.png",
+      "/tmp/upkem-brochure/imgs/p006_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i09.jpeg"
+    ]
   },
   {
     "page": 6,
@@ -200,7 +240,15 @@
     ],
     "tagline": "Skin Nourishing Lotion",
     "sub_category_raw": "Body Lotion",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/006.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p006_i00.png",
+      "/tmp/upkem-brochure/imgs/p006_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i09.jpeg"
+    ]
   },
   {
     "page": 6,
@@ -226,7 +274,15 @@
     ],
     "tagline": "Skin Nourishing Lotion",
     "sub_category_raw": "Body Lotion",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/006.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p006_i00.png",
+      "/tmp/upkem-brochure/imgs/p006_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p006_i09.jpeg"
+    ]
   },
   {
     "page": 7,
@@ -257,7 +313,15 @@
     ],
     "tagline": "Rich life with rich skin",
     "sub_category_raw": "Oral Supplement",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/007.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p007_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p007_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p007_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p007_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p007_i04.jpeg"
+    ]
   },
   {
     "page": 7,
@@ -292,7 +356,15 @@
     ],
     "tagline": "Hair Growth with Ultrasense",
     "sub_category_raw": "Hair Care",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/007.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p007_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p007_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p007_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p007_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p007_i04.jpeg"
+    ]
   },
   {
     "page": 8,
@@ -323,7 +395,15 @@
     ],
     "tagline": "Stretch Mark Therapy with Aloe Vera",
     "sub_category_raw": "Stretch Marks",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/008.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p008_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p008_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p008_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p008_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p008_i01.jpeg"
+    ]
   },
   {
     "page": 9,
@@ -351,7 +431,13 @@
     ],
     "tagline": "Protect from harmful effects of UVA & UVB",
     "sub_category_raw": "Sunscreen",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/009.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p009_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p009_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p009_i01.png"
+    ]
   },
   {
     "page": 10,
@@ -376,7 +462,15 @@
     ],
     "tagline": "Mineral Sunscreen that protects against Sun and Pollution",
     "sub_category_raw": "Sunscreen",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/010.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p010_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p010_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p010_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p010_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p010_i05.jpeg"
+    ]
   },
   {
     "page": 10,
@@ -401,7 +495,15 @@
     ],
     "tagline": "Advance Skin Protection",
     "sub_category_raw": "Sunscreen",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/010.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p010_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p010_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p010_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p010_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p010_i05.jpeg"
+    ]
   },
   {
     "page": 11,
@@ -442,7 +544,15 @@
     ],
     "tagline": "Enhancing hair Strength & Growth",
     "sub_category_raw": "Hair Care",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/011.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p011_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p011_i35.jpeg",
+      "/tmp/upkem-brochure/imgs/p011_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p011_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p011_i31.jpeg"
+    ]
   },
   {
     "page": 11,
@@ -468,7 +578,15 @@
     ],
     "tagline": "Daily Sensitivity Protection Toothpaste",
     "sub_category_raw": "Oral Care",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/011.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p011_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p011_i35.jpeg",
+      "/tmp/upkem-brochure/imgs/p011_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p011_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p011_i31.jpeg"
+    ]
   },
   {
     "page": 12,
@@ -498,7 +616,15 @@
     ],
     "tagline": "For Glowing and Clear skin",
     "sub_category_raw": "Fairness / Depigmentation",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/012.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p012_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p012_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p012_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p012_i00.png",
+      "/tmp/upkem-brochure/imgs/p012_i02.png"
+    ]
   },
   {
     "page": 12,
@@ -526,7 +652,15 @@
     ],
     "tagline": "Reduces the appearance of acne scars",
     "sub_category_raw": "Fairness / Depigmentation",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/012.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p012_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p012_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p012_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p012_i00.png",
+      "/tmp/upkem-brochure/imgs/p012_i02.png"
+    ]
   },
   {
     "page": 13,
@@ -555,7 +689,15 @@
     ],
     "tagline": "An intense moisturizer with keratolytic effect",
     "sub_category_raw": "Foot Care",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/013.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p013_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p013_i03.png",
+      "/tmp/upkem-brochure/imgs/p013_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p013_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p013_i10.jpeg"
+    ]
   },
   {
     "page": 13,
@@ -574,7 +716,15 @@
     ],
     "tagline": "Hair removal cream with moisturiser",
     "sub_category_raw": "Hair Removal",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/013.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p013_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p013_i03.png",
+      "/tmp/upkem-brochure/imgs/p013_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p013_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p013_i10.jpeg"
+    ]
   },
   {
     "page": 14,
@@ -599,7 +749,15 @@
     ],
     "tagline": "Enhances the beauty",
     "sub_category_raw": "Fairness",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/014.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p014_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p014_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p014_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p014_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p014_i08.jpeg"
+    ]
   },
   {
     "page": 14,
@@ -618,7 +776,15 @@
     ],
     "tagline": "Active Charcoal With Scrub Face Wash",
     "sub_category_raw": "Face Wash",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/014.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p014_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p014_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p014_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p014_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p014_i08.jpeg"
+    ]
   },
   {
     "page": 15,
@@ -646,7 +812,15 @@
     ],
     "tagline": "To maintain moisture balance of Skin",
     "sub_category_raw": "Skin Care",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/015.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p015_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p015_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p015_i00.png",
+      "/tmp/upkem-brochure/imgs/p015_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p015_i09.jpeg"
+    ]
   },
   {
     "page": 15,
@@ -668,7 +842,15 @@
     ],
     "tagline": "The effective and safe therapy in diaper dermatitis",
     "sub_category_raw": "Baby Care",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/015.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p015_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p015_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p015_i00.png",
+      "/tmp/upkem-brochure/imgs/p015_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p015_i09.jpeg"
+    ]
   },
   {
     "page": 16,
@@ -698,7 +880,14 @@
     ],
     "tagline": "Your daily intimate hygiene partner",
     "sub_category_raw": "Intimate Hygiene",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/016.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p016_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p016_i00.png",
+      "/tmp/upkem-brochure/imgs/p016_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p016_i02.png"
+    ]
   },
   {
     "page": 17,
@@ -743,7 +932,12 @@
     ],
     "tagline": "Beautiful way to get Beautiful Skin",
     "sub_category_raw": "Face Gel",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/017.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p017_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p017_i03.jpeg"
+    ]
   },
   {
     "page": 18,
@@ -770,7 +964,15 @@
     ],
     "tagline": "Care your skin with unique feel",
     "sub_category_raw": "Moisturizer",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/018.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p018_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p018_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p018_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p018_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p018_i09.jpeg"
+    ]
   },
   {
     "page": 18,
@@ -801,7 +1003,15 @@
     ],
     "tagline": "Care your skin with unique feel",
     "sub_category_raw": "Face Wash",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/018.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p018_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p018_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p018_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p018_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p018_i09.jpeg"
+    ]
   },
   {
     "page": 19,
@@ -826,7 +1036,15 @@
     ],
     "tagline": "The secret to lasting moisture",
     "sub_category_raw": "Serum",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/019.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p019_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p019_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p019_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p019_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p019_i11.jpeg"
+    ]
   },
   {
     "page": 19,
@@ -852,7 +1070,15 @@
     ],
     "tagline": "Radiant Skin Redefined",
     "sub_category_raw": "Serum / Brightening",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/019.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p019_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p019_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p019_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p019_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p019_i11.jpeg"
+    ]
   },
   {
     "page": 20,
@@ -877,7 +1103,15 @@
     ],
     "tagline": "Fade Spots, Reveal Even Skin",
     "sub_category_raw": "Serum / Depigmentation",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/020.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p020_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p020_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p020_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p020_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p020_i04.png"
+    ]
   },
   {
     "page": 20,
@@ -904,7 +1138,15 @@
     ],
     "tagline": "Acne Relief with a soothing effect",
     "sub_category_raw": "Serum / Anti-Acne",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/020.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p020_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p020_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p020_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p020_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p020_i04.png"
+    ]
   },
   {
     "page": 21,
@@ -927,7 +1169,13 @@
     ],
     "tagline": "For sensitive skin",
     "sub_category_raw": "Cleanser",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/021.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p021_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p021_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p021_i08.jpeg"
+    ]
   },
   {
     "page": 21,
@@ -947,7 +1195,13 @@
     ],
     "tagline": "100% Pure & Organic",
     "sub_category_raw": "Toner",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/021.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p021_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p021_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p021_i08.jpeg"
+    ]
   },
   {
     "page": 22,
@@ -972,7 +1226,13 @@
     ],
     "tagline": "Get freedom from HERPES",
     "sub_category_raw": "Antiviral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/022.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p022_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p022_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p022_i06.jpeg"
+    ]
   },
   {
     "page": 22,
@@ -999,7 +1259,13 @@
     ],
     "tagline": "Clear the Trail of Fungal Infections",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/022.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p022_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p022_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p022_i06.jpeg"
+    ]
   },
   {
     "page": 23,
@@ -1029,7 +1295,13 @@
     ],
     "tagline": "The fast way to treat Acute & Chronic Pain",
     "sub_category_raw": "Anti-Haemorrhoidal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/023.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p023_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p023_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p023_i03.jpeg"
+    ]
   },
   {
     "page": 23,
@@ -1055,7 +1327,13 @@
     ],
     "tagline": "For best blemish free & glowing skin",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/023.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p023_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p023_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p023_i03.jpeg"
+    ]
   },
   {
     "page": 23,
@@ -1079,7 +1357,13 @@
     ],
     "tagline": "For best blemish free & glowing skin",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/023.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p023_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p023_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p023_i03.jpeg"
+    ]
   },
   {
     "page": 23,
@@ -1103,7 +1387,13 @@
     ],
     "tagline": "For best blemish free & glowing skin",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/023.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p023_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p023_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p023_i03.jpeg"
+    ]
   },
   {
     "page": 24,
@@ -1131,7 +1421,13 @@
     ],
     "tagline": "In Fungal & Bacterial Skin Problems",
     "sub_category_raw": "Antibacterial / Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/024.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p024_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p024_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p024_i02.jpeg"
+    ]
   },
   {
     "page": 24,
@@ -1160,7 +1456,13 @@
     ],
     "tagline": "Wipe out Dermatological Disorders",
     "sub_category_raw": "Antibacterial / Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/024.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p024_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p024_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p024_i02.jpeg"
+    ]
   },
   {
     "page": 25,
@@ -1189,7 +1491,13 @@
     ],
     "tagline": "The long fighter",
     "sub_category_raw": "Antibacterial / Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/025.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p025_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p025_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p025_i01.png"
+    ]
   },
   {
     "page": 25,
@@ -1220,7 +1528,13 @@
     ],
     "tagline": "Mixed Infection required Strong Formula",
     "sub_category_raw": "Antifungal / Antibacterial / Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/025.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p025_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p025_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p025_i01.png"
+    ]
   },
   {
     "page": 26,
@@ -1246,7 +1560,15 @@
     ],
     "tagline": "For comprehensive treatment of fungal & mixed infections",
     "sub_category_raw": "Antibacterial / Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/026.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p026_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p026_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p026_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p026_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p026_i03.jpeg"
+    ]
   },
   {
     "page": 26,
@@ -1278,7 +1600,15 @@
     ],
     "tagline": "Healthy Hair Supplement",
     "sub_category_raw": "Hair Growth Supplement",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/026.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p026_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p026_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p026_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p026_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p026_i03.jpeg"
+    ]
   },
   {
     "page": 27,
@@ -1311,7 +1641,15 @@
     ],
     "tagline": "The skin Moisturiser & Revitalizer",
     "sub_category_raw": "Skin Care",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/027.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p027_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p027_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p027_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p027_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p027_i06.jpeg"
+    ]
   },
   {
     "page": 27,
@@ -1355,7 +1693,15 @@
     ],
     "tagline": "Protect, Moisturize, Nourish your skin",
     "sub_category_raw": "Skin Care",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/027.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p027_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p027_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p027_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p027_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p027_i06.jpeg"
+    ]
   },
   {
     "page": 28,
@@ -1382,7 +1728,15 @@
     ],
     "tagline": "Ideal for Patients of Oily Skin & Acne Prone Skin",
     "sub_category_raw": "Anti-Acne Face Wash",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/028.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p028_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p028_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p028_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p028_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p028_i04.jpeg"
+    ]
   },
   {
     "page": 28,
@@ -1411,7 +1765,15 @@
     ],
     "tagline": "Improves complexion bring out the beauty in you",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/028.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p028_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p028_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p028_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p028_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p028_i04.jpeg"
+    ]
   },
   {
     "page": 29,
@@ -1439,7 +1801,15 @@
     ],
     "tagline": "Extra Care for Extra Beauty",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/029.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p029_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p029_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p029_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p029_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p029_i03.jpeg"
+    ]
   },
   {
     "page": 29,
@@ -1467,7 +1837,15 @@
     ],
     "tagline": "The Remedy for Acne Vulgaris",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/029.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p029_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p029_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p029_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p029_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p029_i03.jpeg"
+    ]
   },
   {
     "page": 30,
@@ -1494,7 +1872,15 @@
     ],
     "tagline": "Extra Care for Extra Beauty",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/030.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p030_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i02.jpeg"
+    ]
   },
   {
     "page": 30,
@@ -1519,7 +1905,15 @@
     ],
     "tagline": "Get back the acne free face",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/030.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p030_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i02.jpeg"
+    ]
   },
   {
     "page": 30,
@@ -1543,7 +1937,15 @@
     ],
     "tagline": "Get back the acne free face",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/030.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p030_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p030_i02.jpeg"
+    ]
   },
   {
     "page": 31,
@@ -1571,7 +1973,14 @@
     ],
     "tagline": "Eradicates Acne to Reveal Beautiful Skin",
     "sub_category_raw": "Anti-Acne Soap",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/031.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p031_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p031_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p031_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p031_i02.png"
+    ]
   },
   {
     "page": 31,
@@ -1598,7 +2007,14 @@
     ],
     "tagline": "Advanced Protection from Fungal Infections",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/031.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p031_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p031_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p031_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p031_i02.png"
+    ]
   },
   {
     "page": 32,
@@ -1623,7 +2039,15 @@
     ],
     "tagline": "Safe & Soft Alternative for treat infections",
     "sub_category_raw": "Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/032.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p032_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p032_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p032_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p032_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p032_i05.png"
+    ]
   },
   {
     "page": 32,
@@ -1648,7 +2072,15 @@
     ],
     "tagline": "Safe & Soft Alternative for treat infections",
     "sub_category_raw": "Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/032.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p032_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p032_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p032_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p032_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p032_i05.png"
+    ]
   },
   {
     "page": 33,
@@ -1679,7 +2111,14 @@
     ],
     "tagline": "A challenge against Eczema & Psoriasis",
     "sub_category_raw": "Steroid + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/033.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p033_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p033_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p033_i16.jpeg",
+      "/tmp/upkem-brochure/imgs/p033_i00.png"
+    ]
   },
   {
     "page": 33,
@@ -1711,7 +2150,14 @@
     ],
     "tagline": "Quick relief in mixed skin infections",
     "sub_category_raw": "Steroid + Antifungal + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/033.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p033_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p033_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p033_i16.jpeg",
+      "/tmp/upkem-brochure/imgs/p033_i00.png"
+    ]
   },
   {
     "page": 34,
@@ -1739,7 +2185,15 @@
     ],
     "tagline": "Mixed Skin Infection need a SPECIALIST",
     "sub_category_raw": "Steroid + Antifungal + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/034.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p034_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p034_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p034_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p034_i04.png",
+      "/tmp/upkem-brochure/imgs/p034_i02.png"
+    ]
   },
   {
     "page": 34,
@@ -1767,7 +2221,15 @@
     ],
     "tagline": "Satisfaction Guaranteed",
     "sub_category_raw": "Steroid + Antifungal + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/034.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p034_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p034_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p034_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p034_i04.png",
+      "/tmp/upkem-brochure/imgs/p034_i02.png"
+    ]
   },
   {
     "page": 35,
@@ -1795,7 +2257,13 @@
     ],
     "tagline": "Brush away your Skin Worries",
     "sub_category_raw": "Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/035.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p035_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p035_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p035_i03.jpeg"
+    ]
   },
   {
     "page": 35,
@@ -1823,7 +2291,13 @@
     ],
     "tagline": "Brush away your Skin Worries",
     "sub_category_raw": "Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/035.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p035_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p035_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p035_i03.jpeg"
+    ]
   },
   {
     "page": 35,
@@ -1855,7 +2329,13 @@
     ],
     "tagline": "Curing for better life",
     "sub_category_raw": "Steroid + Keratolytic (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/035.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p035_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p035_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p035_i03.jpeg"
+    ]
   },
   {
     "page": 36,
@@ -1881,7 +2361,15 @@
     ],
     "tagline": "Skin care at its best",
     "sub_category_raw": "Steroid + Antifungal + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/036.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p036_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p036_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p036_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p036_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p036_i11.jpeg"
+    ]
   },
   {
     "page": 36,
@@ -1905,7 +2393,15 @@
     ],
     "tagline": "Life is beautiful",
     "sub_category_raw": "Keratolytic (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/036.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p036_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p036_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p036_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p036_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p036_i11.jpeg"
+    ]
   },
   {
     "page": 37,
@@ -1930,7 +2426,15 @@
     ],
     "tagline": "Caring for better life",
     "sub_category_raw": "Steroid + Keratolytic (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/037.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p037_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i06.jpeg"
+    ]
   },
   {
     "page": 37,
@@ -1954,7 +2458,15 @@
     ],
     "tagline": "Caring for better life",
     "sub_category_raw": "Steroid + Keratolytic (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/037.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p037_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i06.jpeg"
+    ]
   },
   {
     "page": 37,
@@ -1979,7 +2491,15 @@
     ],
     "tagline": "Safe & Soft alternative",
     "sub_category_raw": "Steroid + Keratolytic (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/037.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p037_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p037_i06.jpeg"
+    ]
   },
   {
     "page": 38,
@@ -2005,7 +2525,15 @@
     ],
     "tagline": "Softens keratin, calms skin",
     "sub_category_raw": "Keratolytic (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/038.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p038_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p038_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p038_i03.png",
+      "/tmp/upkem-brochure/imgs/p038_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p038_i06.jpeg"
+    ]
   },
   {
     "page": 38,
@@ -2028,7 +2556,15 @@
     ],
     "tagline": "Higher potency keratolytic",
     "sub_category_raw": "Keratolytic (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/038.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p038_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p038_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p038_i03.png",
+      "/tmp/upkem-brochure/imgs/p038_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p038_i06.jpeg"
+    ]
   },
   {
     "page": 38,
@@ -2054,7 +2590,15 @@
     ],
     "tagline": "Broad-spectrum antifungal",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/038.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p038_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p038_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p038_i03.png",
+      "/tmp/upkem-brochure/imgs/p038_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p038_i06.jpeg"
+    ]
   },
   {
     "page": 39,
@@ -2079,7 +2623,14 @@
     ],
     "tagline": "Trusted therapy for vaginal candidiasis",
     "sub_category_raw": "Antifungal / Vaginal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/039.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p039_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p039_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p039_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p039_i03.png"
+    ]
   },
   {
     "page": 39,
@@ -2105,7 +2656,14 @@
     ],
     "tagline": "For moderate to severe Vaginal Infections",
     "sub_category_raw": "Antifungal + Antibacterial / Vaginal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/039.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p039_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p039_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p039_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p039_i03.png"
+    ]
   },
   {
     "page": 40,
@@ -2132,7 +2690,15 @@
     ],
     "tagline": "Softgel Vaginal Suppositories",
     "sub_category_raw": "Antifungal / Vaginal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/040.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p040_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p040_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p040_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p040_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p040_i06.png"
+    ]
   },
   {
     "page": 40,
@@ -2162,7 +2728,15 @@
     ],
     "tagline": "Skin infections can be Hard to Treat",
     "sub_category_raw": "Steroid + Antifungal + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/040.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p040_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p040_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p040_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p040_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p040_i06.png"
+    ]
   },
   {
     "page": 41,
@@ -2186,7 +2760,15 @@
     ],
     "tagline": "Itching & Irritation can steal the smile",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/041.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p041_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p041_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p041_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p041_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p041_i02.png"
+    ]
   },
   {
     "page": 41,
@@ -2210,7 +2792,15 @@
     ],
     "tagline": "Bring back life with beautiful skin",
     "sub_category_raw": "Steroid + Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/041.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p041_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p041_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p041_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p041_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p041_i02.png"
+    ]
   },
   {
     "page": 42,
@@ -2235,7 +2825,15 @@
     ],
     "tagline": "Enjoy with Acne Free Skin",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/042.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p042_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i00.jpeg"
+    ]
   },
   {
     "page": 42,
@@ -2261,7 +2859,15 @@
     ],
     "tagline": "Eradicated Acne to Reveal Beautiful Skin",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/042.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p042_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i00.jpeg"
+    ]
   },
   {
     "page": 42,
@@ -2285,7 +2891,15 @@
     ],
     "tagline": "Eradicated Acne to Reveal Beautiful Skin",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/042.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p042_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p042_i00.jpeg"
+    ]
   },
   {
     "page": 43,
@@ -2312,7 +2926,14 @@
     ],
     "tagline": "A Spotless Confidence in No Time",
     "sub_category_raw": "Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/043.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p043_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p043_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p043_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p043_i00.png"
+    ]
   },
   {
     "page": 44,
@@ -2336,7 +2957,11 @@
     ],
     "tagline": "An ideal combination for MIXED SKIN INFECTIONS",
     "sub_category_raw": "Antifungal + Antibacterial + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/044.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p044_i08.jpeg"
+    ]
   },
   {
     "page": 44,
@@ -2363,7 +2988,11 @@
     ],
     "tagline": "Anti-Fungal, Anti-Bacterial & Anti-Inflammatory Skin Ointment",
     "sub_category_raw": "Antifungal + Antibacterial + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/044.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p044_i08.jpeg"
+    ]
   },
   {
     "page": 45,
@@ -2391,7 +3020,13 @@
     ],
     "tagline": "For quick results",
     "sub_category_raw": "Antifungal + Antibacterial + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/045.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p045_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p045_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p045_i00.png"
+    ]
   },
   {
     "page": 45,
@@ -2422,7 +3057,13 @@
     ],
     "tagline": "Freedom from Dermatitis with Mixed Infections",
     "sub_category_raw": "Antifungal + Antibacterial + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/045.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p045_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p045_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p045_i00.png"
+    ]
   },
   {
     "page": 46,
@@ -2450,7 +3091,14 @@
     ],
     "tagline": "For acute inflammatory and allergic disorders",
     "sub_category_raw": "Steroid Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/046.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p046_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p046_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p046_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p046_i06.jpeg"
+    ]
   },
   {
     "page": 46,
@@ -2474,7 +3122,14 @@
     ],
     "tagline": "Liberty from skin problems",
     "sub_category_raw": "Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/046.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p046_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p046_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p046_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p046_i06.jpeg"
+    ]
   },
   {
     "page": 46,
@@ -2498,7 +3153,14 @@
     ],
     "tagline": "Liberty from skin problems",
     "sub_category_raw": "Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/046.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p046_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p046_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p046_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p046_i06.jpeg"
+    ]
   },
   {
     "page": 47,
@@ -2524,7 +3186,15 @@
     ],
     "tagline": "Itching... get rid of it fast",
     "sub_category_raw": "Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/047.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p047_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p047_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p047_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p047_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p047_i06.png"
+    ]
   },
   {
     "page": 47,
@@ -2549,7 +3219,15 @@
     ],
     "tagline": "A trusted therapy for Fungal Infections",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/047.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p047_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p047_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p047_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p047_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p047_i06.png"
+    ]
   },
   {
     "page": 48,
@@ -2578,7 +3256,15 @@
     ],
     "tagline": "Optimum care for healthier skin",
     "sub_category_raw": "Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/048.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p048_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p048_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p048_i00.png",
+      "/tmp/upkem-brochure/imgs/p048_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p048_i05.jpeg"
+    ]
   },
   {
     "page": 48,
@@ -2601,7 +3287,15 @@
     ],
     "tagline": "Optimum care for healthier skin",
     "sub_category_raw": "Antibacterial + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/048.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p048_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p048_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p048_i00.png",
+      "/tmp/upkem-brochure/imgs/p048_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p048_i05.jpeg"
+    ]
   },
   {
     "page": 48,
@@ -2629,7 +3323,15 @@
     ],
     "tagline": "Change afflicted skin to healthy one",
     "sub_category_raw": "Antibacterial + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/048.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p048_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p048_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p048_i00.png",
+      "/tmp/upkem-brochure/imgs/p048_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p048_i05.jpeg"
+    ]
   },
   {
     "page": 49,
@@ -2656,7 +3358,15 @@
     ],
     "tagline": "Punch out the FUNGUS",
     "sub_category_raw": "Antifungal Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/049.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p049_i14.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i07.jpeg"
+    ]
   },
   {
     "page": 49,
@@ -2680,7 +3390,15 @@
     ],
     "tagline": "Punch out the FUNGUS",
     "sub_category_raw": "Antifungal Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/049.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p049_i14.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i07.jpeg"
+    ]
   },
   {
     "page": 49,
@@ -2706,7 +3424,15 @@
     ],
     "tagline": "Gain Healthy, Fungal Free Skin",
     "sub_category_raw": "Antifungal + Antiparasitic Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/049.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p049_i14.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p049_i07.jpeg"
+    ]
   },
   {
     "page": 50,
@@ -2732,7 +3458,15 @@
     ],
     "tagline": "Hit the infections in one go",
     "sub_category_raw": "Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/050.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p050_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p050_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p050_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p050_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p050_i04.png"
+    ]
   },
   {
     "page": 50,
@@ -2756,7 +3490,15 @@
     ],
     "tagline": "Put a full stop to invasive Skin Infections",
     "sub_category_raw": "Steroid + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/050.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p050_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p050_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p050_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p050_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p050_i04.png"
+    ]
   },
   {
     "page": 51,
@@ -2783,7 +3525,15 @@
     ],
     "tagline": "Delete fungal infections from life",
     "sub_category_raw": "Antifungal Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/051.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p051_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p051_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p051_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p051_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p051_i04.jpeg"
+    ]
   },
   {
     "page": 51,
@@ -2814,7 +3564,15 @@
     ],
     "tagline": "Multiple benefits with One Cream",
     "sub_category_raw": "Exfoliant / Skin Brightening",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/051.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p051_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p051_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p051_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p051_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p051_i04.jpeg"
+    ]
   },
   {
     "page": 52,
@@ -2842,7 +3600,15 @@
     ],
     "tagline": "An intense moisturizer with keratolytic effect",
     "sub_category_raw": "Foot Care",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/052.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p052_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p052_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p052_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p052_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p052_i03.png"
+    ]
   },
   {
     "page": 52,
@@ -2871,7 +3637,15 @@
     ],
     "tagline": "Heparin Sodium & Benzyl Nicotinate Ointment",
     "sub_category_raw": "Vascular / Anti-inflammatory (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/052.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p052_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p052_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p052_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p052_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p052_i03.png"
+    ]
   },
   {
     "page": 53,
@@ -2897,7 +3671,15 @@
     ],
     "tagline": "Quickly Relief from Itching & Skin Redness",
     "sub_category_raw": "Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/053.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p053_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p053_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p053_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p053_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p053_i06.png"
+    ]
   },
   {
     "page": 53,
@@ -2924,7 +3706,15 @@
     ],
     "tagline": "When ECZEMA creates trouble",
     "sub_category_raw": "Antihistamine Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/053.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p053_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p053_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p053_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p053_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p053_i06.png"
+    ]
   },
   {
     "page": 54,
@@ -2956,7 +3746,15 @@
     ],
     "tagline": "Fight fungal infection fiercely",
     "sub_category_raw": "Antifungal Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/054.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p054_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p054_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p054_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p054_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p054_i01.jpeg"
+    ]
   },
   {
     "page": 54,
@@ -2981,7 +3779,15 @@
     ],
     "tagline": "Fight fungal infection fiercely",
     "sub_category_raw": "Antifungal Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/054.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p054_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p054_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p054_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p054_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p054_i01.jpeg"
+    ]
   },
   {
     "page": 55,
@@ -3010,7 +3816,13 @@
     ],
     "tagline": "Superior Antifungal \u2014 Eradicate Fungal Growth",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/055.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p055_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p055_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p055_i00.jpeg"
+    ]
   },
   {
     "page": 55,
@@ -3035,7 +3847,13 @@
     ],
     "tagline": "Give antifungal treatment to your skin",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/055.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p055_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p055_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p055_i00.jpeg"
+    ]
   },
   {
     "page": 56,
@@ -3062,7 +3880,15 @@
     ],
     "tagline": "Enhance the appeal of beauty skin",
     "sub_category_raw": "Antifungal Soap (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/056.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p056_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p056_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p056_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p056_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p056_i02.jpeg"
+    ]
   },
   {
     "page": 56,
@@ -3093,7 +3919,15 @@
     ],
     "tagline": "Break the web of the fungal infections",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/056.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p056_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p056_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p056_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p056_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p056_i02.jpeg"
+    ]
   },
   {
     "page": 57,
@@ -3119,7 +3953,14 @@
     ],
     "tagline": "For Dandruff Free Hair",
     "sub_category_raw": "Anti-Dandruff Shampoo (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/057.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p057_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p057_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p057_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p057_i05.jpeg"
+    ]
   },
   {
     "page": 57,
@@ -3144,7 +3985,14 @@
     ],
     "tagline": "Have Dandruff Free Hair",
     "sub_category_raw": "Anti-Dandruff Shampoo (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/057.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p057_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p057_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p057_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p057_i05.jpeg"
+    ]
   },
   {
     "page": 58,
@@ -3172,7 +4020,15 @@
     ],
     "tagline": "Proven cure for fungal infections",
     "sub_category_raw": "Antifungal + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/058.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p058_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i04.jpeg"
+    ]
   },
   {
     "page": 58,
@@ -3195,7 +4051,15 @@
     ],
     "tagline": "Proven cure for fungal infections",
     "sub_category_raw": "Antifungal + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/058.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p058_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i04.jpeg"
+    ]
   },
   {
     "page": 58,
@@ -3224,7 +4088,15 @@
     ],
     "tagline": "Break the web of Fungal Infections",
     "sub_category_raw": "Antifungal Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/058.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p058_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p058_i04.jpeg"
+    ]
   },
   {
     "page": 59,
@@ -3256,7 +4128,15 @@
     ],
     "tagline": "Bring back life with beautiful skin",
     "sub_category_raw": "Steroid + Antifungal + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/059.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p059_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p059_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p059_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p059_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p059_i04.jpeg"
+    ]
   },
   {
     "page": 59,
@@ -3284,7 +4164,15 @@
     ],
     "tagline": "Cures the Problems that Changing season brings",
     "sub_category_raw": "Antihistamine Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/059.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p059_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p059_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p059_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p059_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p059_i04.jpeg"
+    ]
   },
   {
     "page": 60,
@@ -3310,7 +4198,15 @@
     ],
     "tagline": "Effective in Short Term",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/060.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p060_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i22.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i10.jpeg"
+    ]
   },
   {
     "page": 60,
@@ -3333,7 +4229,15 @@
     ],
     "tagline": "Effective in Short Term",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/060.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p060_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i22.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i10.jpeg"
+    ]
   },
   {
     "page": 60,
@@ -3356,7 +4260,15 @@
     ],
     "tagline": "Effective in Short Term",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/060.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p060_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i22.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i10.jpeg"
+    ]
   },
   {
     "page": 60,
@@ -3381,7 +4293,15 @@
     ],
     "tagline": "Deadly weapon to treat fungal infections",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/060.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p060_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i22.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i10.jpeg"
+    ]
   },
   {
     "page": 60,
@@ -3402,7 +4322,15 @@
     ],
     "tagline": "Deadly weapon to treat fungal infections",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/060.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p060_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i22.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i10.jpeg"
+    ]
   },
   {
     "page": 60,
@@ -3423,7 +4351,15 @@
     ],
     "tagline": "Deadly weapon to treat fungal infections",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/060.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p060_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i22.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i18.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p060_i10.jpeg"
+    ]
   },
   {
     "page": 61,
@@ -3451,7 +4387,15 @@
     ],
     "tagline": "Cleans & Control Bacterial & Fungal Infections",
     "sub_category_raw": "Antifungal + Steroid + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/061.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p061_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i11.jpeg"
+    ]
   },
   {
     "page": 61,
@@ -3476,7 +4420,15 @@
     ],
     "tagline": "Cleans & Control Bacterial & Fungal Infections",
     "sub_category_raw": "Antifungal + Steroid + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/061.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p061_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i11.jpeg"
+    ]
   },
   {
     "page": 61,
@@ -3501,7 +4453,15 @@
     ],
     "tagline": "Cleans and control bacterial & fungal infections",
     "sub_category_raw": "Antifungal + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/061.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p061_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i11.jpeg"
+    ]
   },
   {
     "page": 61,
@@ -3525,7 +4485,15 @@
     ],
     "tagline": "Cleans and control bacterial & fungal infections",
     "sub_category_raw": "Antifungal + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/061.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p061_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p061_i11.jpeg"
+    ]
   },
   {
     "page": 62,
@@ -3558,7 +4526,15 @@
     ],
     "tagline": "Novel approach for stubborn tinea",
     "sub_category_raw": "Antifungal + Antibacterial + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/062.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p062_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p062_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p062_i01.png",
+      "/tmp/upkem-brochure/imgs/p062_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p062_i04.jpeg"
+    ]
   },
   {
     "page": 62,
@@ -3583,7 +4559,15 @@
     ],
     "tagline": "The novel approach to treat fungal infections",
     "sub_category_raw": "Antifungal + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/062.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p062_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p062_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p062_i01.png",
+      "/tmp/upkem-brochure/imgs/p062_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p062_i04.jpeg"
+    ]
   },
   {
     "page": 63,
@@ -3614,7 +4598,15 @@
     ],
     "tagline": "Quick relief from PAIN",
     "sub_category_raw": "Musculoskeletal Analgesic (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/063.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p063_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i01.jpeg"
+    ]
   },
   {
     "page": 63,
@@ -3644,7 +4636,15 @@
     ],
     "tagline": "For instant topical analgesia",
     "sub_category_raw": "Musculoskeletal Analgesic (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/063.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p063_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i01.jpeg"
+    ]
   },
   {
     "page": 63,
@@ -3670,7 +4670,15 @@
     ],
     "tagline": "For instant topical analgesia",
     "sub_category_raw": "Musculoskeletal Analgesic (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/063.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p063_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p063_i01.jpeg"
+    ]
   },
   {
     "page": 64,
@@ -3696,7 +4704,15 @@
     ],
     "tagline": "Rediscover healthy skin",
     "sub_category_raw": "Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/064.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p064_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i00.png"
+    ]
   },
   {
     "page": 64,
@@ -3719,7 +4735,15 @@
     ],
     "tagline": "Rediscover healthy skin",
     "sub_category_raw": "Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/064.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p064_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i00.png"
+    ]
   },
   {
     "page": 64,
@@ -3743,7 +4767,15 @@
     ],
     "tagline": "Resolve Corticosteroid Responsive Dermatoses & Dermatitis",
     "sub_category_raw": "Steroid + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/064.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p064_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p064_i00.png"
+    ]
   },
   {
     "page": 65,
@@ -3770,7 +4802,15 @@
     ],
     "tagline": "Effective in MRSA infections",
     "sub_category_raw": "Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/065.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p065_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i14.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i01.jpeg"
+    ]
   },
   {
     "page": 65,
@@ -3794,7 +4834,15 @@
     ],
     "tagline": "Effective in MRSA infections",
     "sub_category_raw": "Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/065.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p065_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i14.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i01.jpeg"
+    ]
   },
   {
     "page": 65,
@@ -3824,7 +4872,15 @@
     ],
     "tagline": "Mixed infection cream",
     "sub_category_raw": "Antibacterial + Antifungal + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/065.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p065_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i14.jpeg",
+      "/tmp/upkem-brochure/imgs/p065_i01.jpeg"
+    ]
   },
   {
     "page": 66,
@@ -3848,7 +4904,15 @@
     ],
     "tagline": "Trusted Formula for Skin Infection Protection",
     "sub_category_raw": "Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/066.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p066_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p066_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p066_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p066_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p066_i06.jpeg"
+    ]
   },
   {
     "page": 66,
@@ -3879,7 +4943,15 @@
     ],
     "tagline": "Break the barrier of Chronic Asthma & Allergies",
     "sub_category_raw": "Herbal Soap",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/066.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p066_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p066_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p066_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p066_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p066_i06.jpeg"
+    ]
   },
   {
     "page": 67,
@@ -3905,7 +4977,15 @@
     ],
     "tagline": "For fast relief from Pain, Sprain & Strain",
     "sub_category_raw": "Ayurvedic Pain Relief",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/067.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p067_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p067_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p067_i00.png",
+      "/tmp/upkem-brochure/imgs/p067_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p067_i02.png"
+    ]
   },
   {
     "page": 68,
@@ -3931,7 +5011,14 @@
     ],
     "tagline": "New Powerful Treatment of Pediculosis",
     "sub_category_raw": "Anti-Scabies (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/068.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p068_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p068_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p068_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p068_i03.jpeg"
+    ]
   },
   {
     "page": 68,
@@ -3956,7 +5043,14 @@
     ],
     "tagline": "Complete Protection from Ectoparasites",
     "sub_category_raw": "Anti-Scabies (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/068.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p068_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p068_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p068_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p068_i03.jpeg"
+    ]
   },
   {
     "page": 69,
@@ -3981,7 +5075,15 @@
     ],
     "tagline": "New Powerful Treatment of Pediculosis & Scabies",
     "sub_category_raw": "Anti-Scabies (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/069.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p069_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p069_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p069_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p069_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p069_i03.png"
+    ]
   },
   {
     "page": 69,
@@ -4006,7 +5108,15 @@
     ],
     "tagline": "Complete Protection from Ectoparasites",
     "sub_category_raw": "Anti-Lice Shampoo (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/069.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p069_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p069_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p069_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p069_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p069_i03.png"
+    ]
   },
   {
     "page": 70,
@@ -4032,7 +5142,14 @@
     ],
     "tagline": "For Persistent Itching and Skin Irritation",
     "sub_category_raw": "Anti-Scabies Soap (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/070.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p070_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p070_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p070_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p070_i04.jpeg"
+    ]
   },
   {
     "page": 70,
@@ -4061,7 +5178,14 @@
     ],
     "tagline": "Perfect treatment in Cuts & Wounds",
     "sub_category_raw": "Antiseptic (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/070.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p070_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p070_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p070_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p070_i04.jpeg"
+    ]
   },
   {
     "page": 71,
@@ -4097,7 +5221,12 @@
     ],
     "tagline": "Healing with Hygiene & Safety",
     "sub_category_raw": "Antiseptic + Antibacterial (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/071.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p071_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p071_i04.jpeg"
+    ]
   },
   {
     "page": 71,
@@ -4129,7 +5258,12 @@
     ],
     "tagline": "Trusted by most Doctors for the First Line Treatment in Burnt Patients",
     "sub_category_raw": "Burn Care (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/071.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p071_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p071_i04.jpeg"
+    ]
   },
   {
     "page": 72,
@@ -4159,7 +5293,15 @@
     ],
     "tagline": "Get a Glowing & Flawless Skin",
     "sub_category_raw": "Fairness / Anti-pigmentation (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/072.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p072_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p072_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p072_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p072_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p072_i05.jpeg"
+    ]
   },
   {
     "page": 72,
@@ -4196,7 +5338,15 @@
     ],
     "tagline": "Beautify your Skin Naturally",
     "sub_category_raw": "Skin Brightening Oral Supplement",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/072.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p072_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p072_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p072_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p072_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p072_i05.jpeg"
+    ]
   },
   {
     "page": 73,
@@ -4226,7 +5376,14 @@
     ],
     "tagline": "For Soother, Softer & Rash free Skin",
     "sub_category_raw": "Moisturizer",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/073.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p073_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p073_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p073_i00.png",
+      "/tmp/upkem-brochure/imgs/p073_i02.png"
+    ]
   },
   {
     "page": 74,
@@ -4252,7 +5409,15 @@
     ],
     "tagline": "For sure success in Scabies & Pediculosis",
     "sub_category_raw": "Anti-Scabies (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/074.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p074_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p074_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p074_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p074_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p074_i05.jpeg"
+    ]
   },
   {
     "page": 74,
@@ -4280,7 +5445,15 @@
     ],
     "tagline": "The closer looking therapy against Psoriasis",
     "sub_category_raw": "Anti-Dandruff (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/074.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p074_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p074_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p074_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p074_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p074_i05.jpeg"
+    ]
   },
   {
     "page": 75,
@@ -4305,7 +5478,15 @@
     ],
     "tagline": "Powerful Antifungal Agent",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/075.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p075_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i16.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i04.jpeg"
+    ]
   },
   {
     "page": 75,
@@ -4329,7 +5510,15 @@
     ],
     "tagline": "Powerful Antifungal Agent",
     "sub_category_raw": "Antifungal (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/075.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p075_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i16.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i04.jpeg"
+    ]
   },
   {
     "page": 75,
@@ -4357,7 +5546,15 @@
     ],
     "tagline": "Get your nail infection where it grows",
     "sub_category_raw": "Antifungal Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/075.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p075_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i16.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p075_i04.jpeg"
+    ]
   },
   {
     "page": 76,
@@ -4383,7 +5580,15 @@
     ],
     "tagline": "An advanced corticosteroid with longer duration of action",
     "sub_category_raw": "Antifungal + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/076.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p076_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p076_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p076_i05.png",
+      "/tmp/upkem-brochure/imgs/p076_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p076_i03.jpeg"
+    ]
   },
   {
     "page": 76,
@@ -4409,7 +5614,15 @@
     ],
     "tagline": "An advanced corticosteroid with Longer duration of Action",
     "sub_category_raw": "Antifungal + Steroid (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/076.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p076_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p076_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p076_i05.png",
+      "/tmp/upkem-brochure/imgs/p076_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p076_i03.jpeg"
+    ]
   },
   {
     "page": 77,
@@ -4437,7 +5650,13 @@
     ],
     "tagline": "Most Effective Comedolytic Agent",
     "sub_category_raw": "Retinoid / Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/077.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p077_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p077_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p077_i02.png"
+    ]
   },
   {
     "page": 77,
@@ -4463,7 +5682,13 @@
     ],
     "tagline": "Most Effective Comedolytic Agent",
     "sub_category_raw": "Retinoid / Anti-Acne (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/077.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p077_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p077_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p077_i02.png"
+    ]
   },
   {
     "page": 78,
@@ -4491,7 +5716,14 @@
     ],
     "tagline": "Get rid of Dark Spots on Skin",
     "sub_category_raw": "Depigmentation (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/078.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p078_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p078_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p078_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p078_i03.png"
+    ]
   },
   {
     "page": 79,
@@ -4520,7 +5752,12 @@
     ],
     "tagline": "Effective & Safe Treatment for Atopic Dermatitis & Vitiligo",
     "sub_category_raw": "Immunomodulator (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/079.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p079_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p079_i00.jpeg"
+    ]
   },
   {
     "page": 79,
@@ -4543,7 +5780,12 @@
     ],
     "tagline": "Effective & Safe Treatment for Atopic Dermatitis & Vitiligo",
     "sub_category_raw": "Immunomodulator (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/079.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p079_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p079_i00.jpeg"
+    ]
   },
   {
     "page": 79,
@@ -4566,7 +5808,12 @@
     ],
     "tagline": "Effective & Safe Treatment for Atopic Dermatitis & Vitiligo",
     "sub_category_raw": "Immunomodulator (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/079.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p079_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p079_i00.jpeg"
+    ]
   },
   {
     "page": 80,
@@ -4594,7 +5841,15 @@
     ],
     "tagline": "Brings back beautiful smile",
     "sub_category_raw": "Oral Care (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/080.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p080_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p080_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p080_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p080_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p080_i00.png"
+    ]
   },
   {
     "page": 80,
@@ -4623,7 +5878,15 @@
     ],
     "tagline": "For Complete Mouth Care",
     "sub_category_raw": "Oral Care (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/080.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p080_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p080_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p080_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p080_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p080_i00.png"
+    ]
   },
   {
     "page": 81,
@@ -4649,7 +5912,15 @@
     ],
     "tagline": "In Allergic Rhinitis & Urticaria",
     "sub_category_raw": "Antihistamine Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/081.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p081_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p081_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p081_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p081_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p081_i03.png"
+    ]
   },
   {
     "page": 81,
@@ -4680,7 +5951,15 @@
     ],
     "tagline": "Clears Allergies with Rapid Response",
     "sub_category_raw": "Antihistamine + Leukotriene Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/081.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p081_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p081_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p081_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p081_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p081_i03.png"
+    ]
   },
   {
     "page": 82,
@@ -4706,7 +5985,15 @@
     ],
     "tagline": "When Vitamin D Levels Disturbed, Re-Establish it with",
     "sub_category_raw": "Vitamin D Supplement",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/082.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p082_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i14.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i02.jpeg"
+    ]
   },
   {
     "page": 82,
@@ -4727,7 +6014,15 @@
     ],
     "tagline": "Vitamin D3 Oral Solution",
     "sub_category_raw": "Vitamin D Supplement",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/082.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p082_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i14.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i02.jpeg"
+    ]
   },
   {
     "page": 82,
@@ -4755,7 +6050,15 @@
     ],
     "tagline": "Give Them Empowerment From Pain Entrapment",
     "sub_category_raw": "Analgesic Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/082.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p082_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i14.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p082_i02.jpeg"
+    ]
   },
   {
     "page": 83,
@@ -4785,7 +6088,15 @@
     ],
     "tagline": "Break the chain of Pain, Inflammation & Fever",
     "sub_category_raw": "Analgesic + Muscle Relaxant Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/083.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p083_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p083_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p083_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p083_i00.png",
+      "/tmp/upkem-brochure/imgs/p083_i03.jpeg"
+    ]
   },
   {
     "page": 83,
@@ -4813,7 +6124,15 @@
     ],
     "tagline": "Get the Power to Win over Critical Infections",
     "sub_category_raw": "Antibiotic Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/083.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p083_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p083_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p083_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p083_i00.png",
+      "/tmp/upkem-brochure/imgs/p083_i03.jpeg"
+    ]
   },
   {
     "page": 84,
@@ -4844,7 +6163,15 @@
     ],
     "tagline": "For an Active & Healthy Daily Living",
     "sub_category_raw": "Multivitamin Oral Supplement",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/084.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p084_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p084_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p084_i14.jpeg",
+      "/tmp/upkem-brochure/imgs/p084_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p084_i08.jpeg"
+    ]
   },
   {
     "page": 84,
@@ -4873,7 +6200,15 @@
     ],
     "tagline": "Nourish your patients health with the right supplement",
     "sub_category_raw": "Antioxidant Oral Supplement",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/084.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p084_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p084_i06.jpeg",
+      "/tmp/upkem-brochure/imgs/p084_i14.jpeg",
+      "/tmp/upkem-brochure/imgs/p084_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p084_i08.jpeg"
+    ]
   },
   {
     "page": 85,
@@ -4900,7 +6235,14 @@
     ],
     "tagline": "When UNCONTROLLED LEVEL troubles you",
     "sub_category_raw": "Diabetes Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/085.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p085_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p085_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p085_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p085_i00.png"
+    ]
   },
   {
     "page": 85,
@@ -4922,7 +6264,14 @@
     ],
     "tagline": "When UNCONTROLLED LEVEL troubles you",
     "sub_category_raw": "Diabetes Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/085.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p085_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p085_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p085_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p085_i00.png"
+    ]
   },
   {
     "page": 86,
@@ -4953,7 +6302,15 @@
     ],
     "tagline": "Prevent Hyper Responsiveness & Bronchial Constriction",
     "sub_category_raw": "Respiratory Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/086.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p086_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p086_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p086_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p086_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p086_i07.jpeg"
+    ]
   },
   {
     "page": 86,
@@ -4980,7 +6337,15 @@
     ],
     "tagline": "Break the barrier of Chronic Asthma & Allergies",
     "sub_category_raw": "Respiratory Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/086.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p086_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p086_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p086_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p086_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p086_i07.jpeg"
+    ]
   },
   {
     "page": 87,
@@ -5007,7 +6372,15 @@
     ],
     "tagline": "Potent Anti-Allergic with Allergy Free",
     "sub_category_raw": "Respiratory Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/087.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p087_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p087_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p087_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p087_i02.png",
+      "/tmp/upkem-brochure/imgs/p087_i05.jpeg"
+    ]
   },
   {
     "page": 87,
@@ -5038,7 +6411,15 @@
     ],
     "tagline": "To Prevent Cold getting down to the Chest",
     "sub_category_raw": "Cold & Cough Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/087.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p087_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p087_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p087_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p087_i02.png",
+      "/tmp/upkem-brochure/imgs/p087_i05.jpeg"
+    ]
   },
   {
     "page": 88,
@@ -5064,7 +6445,15 @@
     ],
     "tagline": "Before the disease worsen. Choose the best PPI for relief",
     "sub_category_raw": "Gastro Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/088.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p088_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p088_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p088_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p088_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p088_i04.jpeg"
+    ]
   },
   {
     "page": 88,
@@ -5091,7 +6480,15 @@
     ],
     "tagline": "Trusted & Time Tested Combination",
     "sub_category_raw": "Gastro Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/088.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p088_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p088_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p088_i12.jpeg",
+      "/tmp/upkem-brochure/imgs/p088_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p088_i04.jpeg"
+    ]
   },
   {
     "page": 89,
@@ -5116,7 +6513,15 @@
     ],
     "tagline": "Cut down burning sensation of Acid Reflux",
     "sub_category_raw": "Gastro Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/089.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p089_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p089_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p089_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p089_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p089_i02.png"
+    ]
   },
   {
     "page": 89,
@@ -5144,7 +6549,15 @@
     ],
     "tagline": "When acidity create burning sensation",
     "sub_category_raw": "Gastro Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/089.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p089_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p089_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p089_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p089_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p089_i02.png"
+    ]
   },
   {
     "page": 90,
@@ -5172,7 +6585,15 @@
     ],
     "tagline": "Desired morning with",
     "sub_category_raw": "Gastro Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/090.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p090_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i07.jpeg"
+    ]
   },
   {
     "page": 90,
@@ -5201,7 +6622,15 @@
     ],
     "tagline": "Overcome the Barriers of multiple PROBLEMS",
     "sub_category_raw": "Steroid Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/090.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p090_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i07.jpeg"
+    ]
   },
   {
     "page": 90,
@@ -5226,7 +6655,15 @@
     ],
     "tagline": "Overcome the Barriers of multiple PROBLEMS",
     "sub_category_raw": "Steroid Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/090.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p090_i13.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p090_i07.jpeg"
+    ]
   },
   {
     "page": 91,
@@ -5257,7 +6694,15 @@
     ],
     "tagline": "Don't let these SYMPTOMS Restrict Life",
     "sub_category_raw": "Analgesic Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/091.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p091_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p091_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p091_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p091_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p091_i00.png"
+    ]
   },
   {
     "page": 91,
@@ -5286,7 +6731,15 @@
     ],
     "tagline": "Knocks Out Spasm, Inflammation & Pain",
     "sub_category_raw": "Analgesic + Muscle Relaxant Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/091.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p091_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p091_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p091_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p091_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p091_i00.png"
+    ]
   },
   {
     "page": 92,
@@ -5316,7 +6769,15 @@
     ],
     "tagline": "Safest combination for Cold & Fever",
     "sub_category_raw": "Cold & Cough Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/092.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p092_i00.png",
+      "/tmp/upkem-brochure/imgs/p092_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p092_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p092_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p092_i01.jpeg"
+    ]
   },
   {
     "page": 92,
@@ -5346,7 +6807,15 @@
     ],
     "tagline": "Fight against Cold & Fever",
     "sub_category_raw": "Cold & Cough Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/092.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p092_i00.png",
+      "/tmp/upkem-brochure/imgs/p092_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p092_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p092_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p092_i01.jpeg"
+    ]
   },
   {
     "page": 93,
@@ -5373,7 +6842,15 @@
     ],
     "tagline": "A Soft Cough Remedy for Tough Coughs",
     "sub_category_raw": "Cough Syrup (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/093.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p093_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i07.jpeg"
+    ]
   },
   {
     "page": 93,
@@ -5398,7 +6875,15 @@
     ],
     "tagline": "A Soft Cough Remedy for Tough Coughs",
     "sub_category_raw": "Cough Syrup (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/093.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p093_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i07.jpeg"
+    ]
   },
   {
     "page": 93,
@@ -5428,7 +6913,15 @@
     ],
     "tagline": "When your patient's life stop due to Cough & Cold",
     "sub_category_raw": "Cough & Cold Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/093.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p093_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p093_i07.jpeg"
+    ]
   },
   {
     "page": 94,
@@ -5458,7 +6951,15 @@
     ],
     "tagline": "Proven Mucolytic, Bronchodilator, Expectorant",
     "sub_category_raw": "Cough Syrup Paediatric (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/094.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p094_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p094_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p094_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p094_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p094_i07.jpeg"
+    ]
   },
   {
     "page": 94,
@@ -5486,7 +6987,15 @@
     ],
     "tagline": "Cough means Unproductive Days",
     "sub_category_raw": "Cough Syrup (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/094.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p094_i11.jpeg",
+      "/tmp/upkem-brochure/imgs/p094_i03.jpeg",
+      "/tmp/upkem-brochure/imgs/p094_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p094_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p094_i07.jpeg"
+    ]
   },
   {
     "page": 95,
@@ -5515,7 +7024,15 @@
     ],
     "tagline": "Don't suffer from Dry Cough",
     "sub_category_raw": "Cough Syrup (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/095.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p095_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p095_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p095_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p095_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p095_i06.jpeg"
+    ]
   },
   {
     "page": 95,
@@ -5549,7 +7066,15 @@
     ],
     "tagline": "Multi-symptom cough & cold relief",
     "sub_category_raw": "Cough Syrup (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/095.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p095_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p095_i04.jpeg",
+      "/tmp/upkem-brochure/imgs/p095_i02.jpeg",
+      "/tmp/upkem-brochure/imgs/p095_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p095_i06.jpeg"
+    ]
   },
   {
     "page": 96,
@@ -5578,7 +7103,15 @@
     ],
     "tagline": "Cut Down Burning Sensation of Acid Reflux",
     "sub_category_raw": "Gastro Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/096.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p096_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p096_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p096_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p096_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p096_i04.jpeg"
+    ]
   },
   {
     "page": 96,
@@ -5608,7 +7141,15 @@
     ],
     "tagline": "When gastric distension troubles",
     "sub_category_raw": "Gastro Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/096.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p096_i00.jpeg",
+      "/tmp/upkem-brochure/imgs/p096_i08.jpeg",
+      "/tmp/upkem-brochure/imgs/p096_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p096_i10.jpeg",
+      "/tmp/upkem-brochure/imgs/p096_i04.jpeg"
+    ]
   },
   {
     "page": 97,
@@ -5636,7 +7177,15 @@
     ],
     "tagline": "Freedom from Allergic Problems",
     "sub_category_raw": "Steroid Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/097.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p097_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i00.png"
+    ]
   },
   {
     "page": 97,
@@ -5662,7 +7211,15 @@
     ],
     "tagline": "Freedom from Allergic Problems",
     "sub_category_raw": "Steroid Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/097.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p097_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i00.png"
+    ]
   },
   {
     "page": 97,
@@ -5688,6 +7245,14 @@
     ],
     "tagline": "Freedom from Allergic Problems",
     "sub_category_raw": "Steroid Oral (Rx)",
-    "category": "Derma"
+    "category": "Derma",
+    "page_image": "/tmp/upkem-brochure/pages/097.png",
+    "candidate_photos": [
+      "/tmp/upkem-brochure/imgs/p097_i01.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i05.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i07.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i09.jpeg",
+      "/tmp/upkem-brochure/imgs/p097_i00.png"
+    ]
   }
 ]

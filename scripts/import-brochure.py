@@ -194,18 +194,22 @@ def main() -> None:
     if not supabase_url or not service_key:
         print("Supabase creds missing in .env.local", file=sys.stderr)
         sys.exit(1)
-    if not args.skip_photo and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("ANTHROPIC_API_KEY not set (needed for photo picking). Use --skip-photo to skip.", file=sys.stderr)
-        sys.exit(1)
+    # Vision-based photo picking is optional. If ANTHROPIC_API_KEY is set,
+    # we use Claude to disambiguate between multiple candidates on a page.
+    # Otherwise we fall back to the pre-computed `page_image` field baked
+    # into vakul-derma-products.json — the rendered brochure page. That's
+    # always correct (the page IS the product's marketing shot) though a
+    # multi-product page will make its 2-3 SKUs share the same image.
+    use_vision = not args.skip_photo and os.environ.get("ANTHROPIC_API_KEY")
 
     products = json.loads(PRODUCTS_JSON.read_text())
-    manifest = json.loads(MANIFEST_JSON.read_text())
+    manifest = json.loads(MANIFEST_JSON.read_text()) if MANIFEST_JSON.exists() else []
     imgs_by_page: dict[int, list[dict]] = {}
     for m in manifest:
         imgs_by_page.setdefault(m["page"], []).append(m)
 
     supabase: Client = create_client(supabase_url, service_key)
-    claude = anthropic.Anthropic() if not args.skip_photo else None
+    claude = anthropic.Anthropic() if use_vision else None
 
     if not args.dry_run:
         make_bucket_public(supabase, STORAGE_BUCKET)
@@ -226,24 +230,55 @@ def main() -> None:
         candidates = [Path(m["file"]) for m in imgs_by_page.get(page, []) if is_likely_product_photo(m)]
 
         image_url = None
-        if not args.skip_photo and candidates:
+        candidate_urls: list[str] = []
+        chosen: Path | None = None
+
+        # Photo strategy — vision if available, else pre-computed page_image.
+        if use_vision and candidates:
             page_img = BROCHURE_DIR / "pages" / f"{page:03d}.png"
             try:
                 chosen = pick_photo(claude, page_img, candidates, p.get("photo_hint") or "")
             except anthropic.APIError as e:
                 print(f"  ✗ vision picker failed for {key}: {e}", file=sys.stderr)
                 chosen = candidates[0]
+        elif not args.skip_photo:
+            # No vision — use the rendered brochure page (guaranteed available).
+            page_img_str = p.get("page_image")
+            if page_img_str and Path(page_img_str).exists():
+                chosen = Path(page_img_str)
 
-            if chosen and not args.dry_run:
-                remote_key = f"vakul-derma/p{page:03d}-{slugify(p['name'])}{chosen.suffix}"
+        if chosen and not args.dry_run:
+            remote_key = f"vakul-derma/p{page:03d}-{slugify(p['name'])}{chosen.suffix}"
+            try:
+                image_url = upload_photo(supabase, chosen, remote_key)
+            except Exception as e:
+                print(f"  ✗ primary upload failed for {key}: {e}", file=sys.stderr)
+                image_url = None
+
+            # Also upload the top 3 candidate isolated shots so the admin
+            # can swap the primary later without needing to re-run this script.
+            for i, cand_str in enumerate(p.get("candidate_photos", [])[:3]):
+                cand = Path(cand_str)
+                if not cand.exists() or cand == chosen:
+                    continue
                 try:
-                    image_url = upload_photo(supabase, chosen, remote_key)
-                except Exception as e:
-                    print(f"  ✗ upload failed for {key}: {e}", file=sys.stderr)
-                    image_url = None
-            elif chosen:
-                image_url = f"[dry-run] would upload {chosen.name}"
+                    ck = f"vakul-derma/p{page:03d}-{slugify(p['name'])}-alt{i}{cand.suffix}"
+                    candidate_urls.append(upload_photo(supabase, cand, ck))
+                except Exception:
+                    pass
+        elif chosen:
+            image_url = f"[dry-run] would upload {chosen.name}"
 
+        # Description = tagline + features + indications, since the brochure
+        # is dense with marketing copy the customer will want to see.
+        desc_parts = [p.get("tagline") or ""]
+        if p.get("features"):
+            desc_parts.append("Key benefits: " + " · ".join(p["features"]))
+        if p.get("indications"):
+            desc_parts.append("Indications: " + ", ".join(p["indications"]))
+        description = "\n\n".join(x for x in desc_parts if x).strip()
+
+        images_all = ([image_url] if image_url else []) + candidate_urls
         row = {
             "name": p.get("name"),
             "company": p.get("brand") or "Vakul Lifescience",
@@ -252,9 +287,9 @@ def main() -> None:
             "packing": p.get("pack"),
             "mrp": p.get("mrp"),
             "price": p.get("mrp"),        # PTR set in admin later
-            "description": p.get("tagline") or "",
+            "description": description,
             "composition": ", ".join(p.get("composition") or []) or None,
-            "images": [image_url] if image_url and not args.dry_run else [],
+            "images": images_all if not args.dry_run else [],
             "image_url": image_url if not args.dry_run else None,
             "stock": 100,
             "stock_status": "In Stock",
