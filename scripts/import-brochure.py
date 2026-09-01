@@ -53,7 +53,9 @@ except ImportError as e:
 
 
 BROCHURE_DIR = Path("/tmp/upkem-brochure")
-PRODUCTS_JSON = BROCHURE_DIR / "products.json"
+# Prefer the committed copy in the repo; fall back to /tmp for a fresh run.
+REPO_PRODUCTS = Path(__file__).parent.parent / "data" / "vakul-derma-products.json"
+PRODUCTS_JSON = REPO_PRODUCTS if REPO_PRODUCTS.exists() else BROCHURE_DIR / "products.json"
 MANIFEST_JSON = BROCHURE_DIR / "manifest.json"
 IMGS_DIR = BROCHURE_DIR / "imgs"
 PROGRESS = BROCHURE_DIR / "import-progress.json"
