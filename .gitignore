@@ -24,3 +24,4 @@ mobile/google-play-service-account.json
 # Android signing keystore
 *.jks
 *.keystore
+.gstack/
