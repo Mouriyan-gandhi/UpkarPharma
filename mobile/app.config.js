@@ -26,7 +26,12 @@ module.exports = () => {
       // CATALOG_MODE=all to restore the multi-category browsing UI.
       catalogMode: process.env.CATALOG_MODE || 'derma',
     },
+    // Merge plugins: preserve anything app.json (or `expo install`) added
+    // (e.g. expo-updates), then add our own two. Avoids the classic
+    // dynamic-config footgun where returning `plugins: [...]` silently
+    // wipes plugins the CLI wrote to app.json.
     plugins: [
+      ...(base.plugins || []),
       [
         'expo-build-properties',
         {
