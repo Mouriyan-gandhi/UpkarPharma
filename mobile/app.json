@@ -17,7 +17,10 @@
       "bundleIdentifier": "com.upkemlabs.b2b",
       "buildNumber": "1",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification", "fetch"],
+        "UIBackgroundModes": [
+          "remote-notification",
+          "fetch"
+        ],
         "NSCameraUsageDescription": "Used by admin to photograph product packaging for the catalog.",
         "NSPhotoLibraryUsageDescription": "Used by admin to attach product photos from your gallery, and by pharmacies to upload store documents.",
         "ITSAppUsesNonExemptEncryption": false
@@ -46,6 +49,11 @@
     },
     "runtimeVersion": {
       "policy": "appVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "69f85e08-6726-4f49-b990-503c86f26184"
+      }
     }
   }
 }
