@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 
@@ -4952,6 +4953,75 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
     setForm({ ...form, images: next });
   };
 
+  // Upload state: prevents double-tap while a photo is in-flight.
+  const [uploading, setUploading] = useState(false);
+
+  // Upload a picked photo (URI from ImagePicker) to /api/admin/product-image
+  // and append the returned public URL to form.images. FormData in React
+  // Native accepts { uri, name, type } which the fetch layer converts to a
+  // multipart boundary automatically — do NOT set Content-Type ourselves.
+  const uploadPickedPhoto = async (uri: string, mimeGuess: string) => {
+    setUploading(true);
+    try {
+      const filename = `product-${Date.now()}.${mimeGuess.split('/')[1] || 'jpg'}`;
+      const fd = new FormData();
+      fd.append('file', ({ uri, name: filename, type: mimeGuess } as unknown) as Blob);
+      const url = `${useStore.getState().getBaseUrl()}/api/admin/product-image`;
+      const authHeaders = useStore.getState().authHeaders();
+      // Strip Content-Type so RN sets the multipart boundary itself.
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(authHeaders)) {
+        if (k.toLowerCase() !== 'content-type') headers[k] = v;
+      }
+      const res = await fetch(url, { method: 'POST', headers, body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setForm((f: any) => ({ ...f, images: [...f.images, data.url] }));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Photo uploaded', 'success');
+    } catch (e: any) {
+      Alert.alert('Upload failed', e.message || 'Try again in a moment.');
+    }
+    setUploading(false);
+  };
+
+  // Camera → capture single photo → upload.
+  const takePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Camera access needed', 'Enable camera permission in Settings to take product photos.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    await uploadPickedPhoto(asset.uri, asset.mimeType || 'image/jpeg');
+  };
+
+  // Gallery → pick 1+ photos → upload each.
+  const pickFromGallery = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Photos access needed', 'Enable photo library permission in Settings to attach product images.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      selectionLimit: 5,
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.length) return;
+    for (const asset of result.assets) {
+      await uploadPickedPhoto(asset.uri, asset.mimeType || 'image/jpeg');
+    }
+  };
+
   const save = async () => {
     if (!form.name || !form.price_ptr) return Alert.alert('Missing', 'Name and PTR price are required.');
     setBusy(true);
@@ -5042,21 +5112,42 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
               <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '700', marginTop: 6 }}>No photos yet</Text>
             </View>
           )}
-          {/* URL input (photo picker & upload comes in Phase 4) */}
+          {/* Camera + Gallery — main upload path for shop admins */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+            <TouchableOpacity
+              disabled={uploading}
+              onPress={takePhoto}
+              style={{ flex: 1, backgroundColor: BRAND[800], paddingVertical: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: uploading ? 0.6 : 1 }}
+            >
+              {uploading ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="camera" size={16} color="#fff" />}
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '900' }}>Take photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              disabled={uploading}
+              onPress={pickFromGallery}
+              style={{ flex: 1, backgroundColor: '#fff', borderWidth: 1.5, borderColor: BRAND[800], paddingVertical: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, opacity: uploading ? 0.6 : 1 }}
+            >
+              <Ionicons name="images" size={16} color={BRAND[800]} />
+              <Text style={{ color: BRAND[800], fontSize: 13, fontWeight: '900' }}>From gallery</Text>
+            </TouchableOpacity>
+          </View>
+          {/* URL fallback — still works for admins who have a hosted image */}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TextInput
               value={urlInput}
               onChangeText={setUrlInput}
-              placeholder="Paste image URL"
+              placeholder="Or paste image URL"
               placeholderTextColor="#94a3b8"
               autoCapitalize="none"
               style={{ flex: 1, borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#f8fafc', padding: 10, borderRadius: 10, fontSize: 13, fontWeight: '600', color: '#1A1A1A' }}
             />
-            <TouchableOpacity onPress={addImage} style={{ backgroundColor: BRAND[800], paddingHorizontal: 14, borderRadius: 10, justifyContent: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>Add</Text>
+            <TouchableOpacity onPress={addImage} style={{ backgroundColor: '#f1f5f9', paddingHorizontal: 14, borderRadius: 10, justifyContent: 'center' }}>
+              <Text style={{ color: '#475569', fontWeight: '900', fontSize: 12 }}>Add</Text>
             </TouchableOpacity>
           </View>
-          <Text style={{ marginTop: 8, fontSize: 10, color: '#94a3b8', fontWeight: '600' }}>Gallery upload arrives in Phase 4 with the new storage backend.</Text>
+          <Text style={{ marginTop: 8, fontSize: 10, color: '#94a3b8', fontWeight: '600' }}>
+            Photos upload to secure storage. First photo becomes the main image customers see.
+          </Text>
         </View>
 
         <Text style={labelStyle}>Name</Text>

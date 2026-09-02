@@ -462,8 +462,14 @@ export async function POST(request: Request) {
     if (action === 'update_product' && admin) {
       if (!item.id) return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
       const patch: any = {};
-      for (const k of ['name','company','category','packing','price','price_ptr','mrp','stock','description','composition','images','short_expiry','discount_percent','expiry_date','hsn','gst_percent']) {
+      for (const k of ['name','company','category','body_system','packing','price','price_ptr','mrp','stock','description','composition','images','short_expiry','discount_percent','expiry_date','hsn','gst_percent']) {
         if (item[k] !== undefined) patch[k] = item[k];
+      }
+      // Keep image_url in sync with images[0] — that's what customer catalog
+      // cards render as their thumbnail. Without this, admin uploads a photo
+      // but the grid stays blank until we also patch image_url separately.
+      if (Array.isArray(item.images)) {
+        patch.image_url = item.images.length > 0 ? item.images[0] : null;
       }
       const { error } = await sb.from('products').update(patch).eq('id', item.id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
