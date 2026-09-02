@@ -38,6 +38,16 @@ export async function middleware(request: NextRequest) {
     const to = isCustomerProtected ? '/customer-login' : '/login';
     return NextResponse.redirect(new URL(to, request.url));
   }
+
+  // Login-page redirects — a logged-in user landing on /login or
+  // /customer-login should go to whichever home they can actually access.
+  // The role isn't in the JWT (it lives in public.users), so we do the
+  // final gate at the layout level (src/app/admin/layout.tsx and
+  // src/app/shop/layout.tsx). Here we only nudge them off the login page
+  // to their default landing — the layout will redirect again if the role
+  // is wrong. Sending everyone to /shop is safe because /shop/layout will
+  // bounce non-customers back to /customer-login, and admins get their
+  // real UX by landing on /admin themselves.
   if (isAdminLogin && user) {
     return NextResponse.redirect(new URL('/admin', request.url));
   }
