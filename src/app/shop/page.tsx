@@ -3,13 +3,38 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Package, Receipt, ShoppingCart, User, ArrowRight, TrendingUp, AlertCircle, Pill } from "lucide-react";
 
-// Server component — fetches this user's data via service_role (RLS would need
-// user-scoped Supabase client; keeping server-side + explicit user filter for
-// simplicity in Phase 1).
+// Feature flag mirroring the catalog page. When enabled, the home-page
+// "Top products" carousel only surfaces Derma SKUs so a customer's first
+// impression matches the launch scope.
+const CATALOG_MODE = process.env.NEXT_PUBLIC_CATALOG_MODE || "derma";
+const DERMA_ONLY = CATALOG_MODE === "derma";
+const LOCKED_CATEGORY = "Derma";
+
+// Server component — fetches this user's data via service_role. In Derma
+// mode we bias the featured carousel toward OTC SKUs (Sunscreen, Moisturizer,
+// Face Wash, Serum) so the first thing a retailer sees is browsable and
+// friendly, not a wall of Rx dermatology drugs.
+const FEATURED_OTC_SUBS = [
+  "Sunscreen", "Moisturizer & Skin Care", "Face Wash & Cleanser",
+  "Serum", "Fairness & Depigmentation", "Hair Care",
+];
+
 async function loadHomeData(userId: string) {
   const sb = supabaseAdmin();
+  const productsQ = DERMA_ONLY
+    ? sb.from("products")
+        .select("id, name, company, packing, price, price_ptr, mrp, images, image_url, category, body_system")
+        .eq("category", LOCKED_CATEGORY)
+        .in("body_system", FEATURED_OTC_SUBS)
+        .order("id", { ascending: false })   // newer entries first
+        .limit(8)
+    : sb.from("products")
+        .select("id, name, company, packing, price, price_ptr, mrp, images, image_url, category, body_system")
+        .order("id", { ascending: true })
+        .limit(8);
+
   const [{ data: products }, { data: orders }] = await Promise.all([
-    sb.from("products").select("id, name, company, packing, price, price_ptr, mrp, images, image_url, category").order("id", { ascending: true }).limit(8),
+    productsQ,
     sb.from("orders").select("id, status, total, date, created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(5),
   ]);
   return { products: products || [], orders: orders || [] };
@@ -150,9 +175,15 @@ export default async function ShopHome() {
       {/* Featured products */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="font-bold text-slate-900 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-brand-700" /> Top products
-          </h3>
+          <div>
+            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-brand-700" />
+              {DERMA_ONLY ? "Popular in Derma" : "Top products"}
+            </h3>
+            {DERMA_ONLY && (
+              <p className="text-[11px] text-slate-500 mt-0.5">Sunscreens · Serums · Moisturizers · Face care</p>
+            )}
+          </div>
           <Link href="/shop/catalog" className="text-xs font-bold text-brand-800 hover:underline flex items-center gap-1">
             View all <ArrowRight className="w-3 h-3" />
           </Link>
@@ -163,18 +194,24 @@ export default async function ShopHome() {
             const ptr = Number(p.price_ptr) || 0;
             const price = ptr > 0 ? ptr : Number(p.price) || 0;
             const mrp = Number(p.mrp) || 0;
+            const isRx = !!p.body_system && p.body_system.includes("(Rx)");
             return (
               <Link
                 key={p.id}
                 href={`/shop/catalog?id=${p.id}`}
-                className="border border-slate-100 rounded-lg p-3 hover:border-brand-300 hover:shadow-sm transition-all bg-white"
+                className="border border-slate-100 rounded-lg p-3 hover:border-brand-300 hover:shadow-md hover:-translate-y-0.5 transition-all bg-white"
               >
-                <div className="aspect-square rounded bg-slate-50 mb-2 flex items-center justify-center overflow-hidden">
+                <div className="aspect-square rounded bg-slate-50 mb-2 flex items-center justify-center overflow-hidden relative">
                   {image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={image} alt={p.name} className="w-full h-full object-cover" />
                   ) : (
                     <Pill className="w-8 h-8 text-slate-300" />
+                  )}
+                  {isRx && (
+                    <span className="absolute top-1.5 left-1.5 bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded shadow-sm">
+                      Rx
+                    </span>
                   )}
                 </div>
                 <p className="text-xs font-bold text-slate-900 line-clamp-2 leading-snug">{p.name}</p>

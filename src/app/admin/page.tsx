@@ -967,7 +967,7 @@ export default function Dashboard() {
             { label: "Total SKUs", value: inventory.length.toLocaleString(), sub: "Upkar & Swasthik Catalog", icon: <Package className="w-5 h-5" />, bg: "bg-brand-50 text-brand-800" },
             { label: "Pharmacy Partners", value: users.filter((u) => u.role !== "admin").length, sub: `${pendingUsersCount} Pending Approvals`, icon: <Building2 className="w-5 h-5" />, bg: "bg-blue-50 text-blue-700" },
             { label: "Wholesale Orders", value: orders.length, sub: `${newOrdersCount} New Orders`, icon: <Activity className="w-5 h-5" />, bg: "bg-amber-50 text-amber-700" },
-            { label: "Total Sales", value: `₹${fmt(totalRevenue)}`, sub: "Verified Orders Only", icon: <BarChart2 className="w-5 h-5" />, bg: "bg-brand-100 text-brand-800" },
+            { label: "Total Sales", value: totalRevenue > 0 ? `₹${fmt(totalRevenue)}` : "—", sub: totalRevenue > 0 ? "Verified Orders Only" : "No verified orders yet", icon: <BarChart2 className="w-5 h-5" />, bg: "bg-brand-100 text-brand-800" },
           ].map((kpi, i) => (
             <Card key={i} className="bg-white border border-slate-200 shadow-sm rounded-xl p-5">
               <div className="flex justify-between items-start">
