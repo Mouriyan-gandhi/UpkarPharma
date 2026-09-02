@@ -1,12 +1,8 @@
 // Dynamic Expo config. Extends app.json and injects environment-specific settings.
 //
-// Production build:
-//   APP_ENV=production \
+// Preview/Production build:
 //   API_BASE_URL=https://your-app.vercel.app \
-//   FIREBASE_API_KEY=AIza... \
-//   FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com \
-//   FIREBASE_PROJECT_ID=your-project-id \
-//   eas build --profile production
+//   npx eas build --platform android --profile preview
 
 const base = require('./app.json').expo;
 
@@ -16,10 +12,6 @@ module.exports = () => {
 
   if (isProduction && !apiBaseUrl) {
     console.error('[app.config] ERROR: API_BASE_URL must be set for production builds.');
-    process.exit(1);
-  }
-  if (isProduction && !process.env.FIREBASE_API_KEY) {
-    console.error('[app.config] ERROR: FIREBASE_API_KEY must be set for production builds.');
     process.exit(1);
   }
 
@@ -33,13 +25,8 @@ module.exports = () => {
       // category=Derma and hides Category+Company filter sections. Set
       // CATALOG_MODE=all to restore the multi-category browsing UI.
       catalogMode: process.env.CATALOG_MODE || 'derma',
-      firebaseApiKey: process.env.FIREBASE_API_KEY || '',
-      firebaseAuthDomain: process.env.FIREBASE_AUTH_DOMAIN || '',
-      firebaseProjectId: process.env.FIREBASE_PROJECT_ID || '',
     },
     plugins: [
-      '@react-native-firebase/app',
-      '@react-native-firebase/auth',
       [
         'expo-build-properties',
         {

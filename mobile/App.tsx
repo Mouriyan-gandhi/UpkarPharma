@@ -19,7 +19,6 @@ import * as Device from 'expo-device';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import auth from '@react-native-firebase/auth';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
