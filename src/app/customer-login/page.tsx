@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, Pill, ShieldCheck, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,17 @@ export default function CustomerLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
-  const search = useSearchParams();
-  const pending = search.get("pending") === "1";
-  const blocked = search.get("blocked") === "1";
+  // Read ?pending=1 / ?blocked=1 from the URL client-side. Avoids the
+  // useSearchParams() hook which requires a Suspense boundary during SSG
+  // in Next 16 and would otherwise fail the prod build.
+  const [pending, setPending] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    setPending(p.get("pending") === "1");
+    setBlocked(p.get("blocked") === "1");
+  }, []);
 
   const canSubmit = phone.length >= 10 && password.length >= 4;
 
