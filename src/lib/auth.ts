@@ -2,6 +2,8 @@ import { supabaseServer } from './supabase/server';
 import { supabaseAdmin } from './supabase/admin';
 
 // Public shape used across API routes + admin pages.
+// Named AdminUser for legacy reasons — actually represents any authenticated
+// public.users row (admin OR client), so credit fields are included here.
 export interface AdminUser {
   id: string;            // auth.users UUID
   phone: string;
@@ -9,6 +11,8 @@ export interface AdminUser {
   role: 'admin' | 'client';
   is_approved: boolean;
   is_blocked: boolean;
+  credit_balance?: number;
+  credit_limit?: number;
 }
 
 /**
