@@ -147,13 +147,6 @@ export default function CustomerLoginPage() {
           <span>·</span>
           <span>60-day credit</span>
         </div>
-
-        <p className="text-center mt-4 text-[11px] text-slate-500 font-medium">
-          Are you an admin?{" "}
-          <Link href="/login" className="text-brand-700 font-bold hover:underline">
-            Admin login →
-          </Link>
-        </p>
       </div>
     </div>
   );
