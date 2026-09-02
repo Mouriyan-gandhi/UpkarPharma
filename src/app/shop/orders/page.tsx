@@ -2,6 +2,7 @@ import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { FileText, Package, Truck, Receipt, ChevronRight, CheckCircle2, XCircle, Clock } from "lucide-react";
+import ReorderButton from "./_ReorderButton";
 
 function fmt(n: number) {
   return (n || 0).toLocaleString("en-IN");
@@ -98,6 +99,7 @@ export default async function OrdersPage() {
                 <div className="text-right shrink-0">
                   <p className="text-lg font-black text-slate-900 tabular-nums">₹{fmt(o.total)}</p>
                 </div>
+                <ReorderButton orderId={o.id} />
                 <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
               </Link>
             );
