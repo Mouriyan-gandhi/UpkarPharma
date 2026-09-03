@@ -4775,7 +4775,17 @@ function AdminProductsScreen({ onBack, onEditProduct, onAddProduct, onRefresh })
   const products = useStore((s) => s.products) || [];
   const [q, setQ] = useState('');
   const [uploading, setUploading] = useState(false);
-  const filtered = q ? products.filter((p: any) => (p.name + ' ' + (p.company || '') + ' ' + (p.category || '')).toLowerCase().includes(q.toLowerCase())) : products;
+  // Category filter — defaults to Derma so the launch catalog is what admin
+  // sees first. The DB still holds the legacy SQLite-migrated products
+  // (mostly non-Derma), which the admin can access via the 'All' chip.
+  const [catFilter, setCatFilter] = useState<'Derma' | 'all'>(DERMA_ONLY ? 'Derma' : 'all');
+
+  const searchable = catFilter === 'all' ? products : products.filter((p: any) => p.category === catFilter);
+  const filtered = q
+    ? searchable.filter((p: any) => (p.name + ' ' + (p.company || '') + ' ' + (p.body_system || '')).toLowerCase().includes(q.toLowerCase()))
+    : searchable;
+
+  const dermaCount = products.filter((p: any) => p.category === 'Derma').length;
 
   // Pick an Excel/CSV and POST it as multipart/form-data to /api/upload.
   // The server-side route already handles: MIME + size caps (10 MB / xls/xlsx/csv),
@@ -4829,7 +4839,7 @@ function AdminProductsScreen({ onBack, onEditProduct, onAddProduct, onRefresh })
       <StatusBar barStyle="dark-content" />
       <AdminBackHeader
         title="Products"
-        subtitle={`${products.length} SKUs`}
+        subtitle={`${filtered.length} of ${searchable.length} · ${catFilter === 'Derma' ? 'Derma catalog' : 'All categories'}`}
         onBack={onBack}
         right={
           <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -4845,6 +4855,23 @@ function AdminProductsScreen({ onBack, onEditProduct, onAddProduct, onRefresh })
         }
       />
       <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+        {/* Category filter — Derma vs everything. Derma is the launch catalog
+            (203 SKUs). 'All' also surfaces the ~5,900 legacy SKUs migrated
+            from SQLite that aren't part of the pilot. */}
+        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+          <TouchableOpacity
+            onPress={() => setCatFilter('Derma')}
+            style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: catFilter === 'Derma' ? BRAND[800] : '#f1f5f9' }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '900', color: catFilter === 'Derma' ? '#fff' : '#475569' }}>Derma ({dermaCount})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setCatFilter('all')}
+            style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: catFilter === 'all' ? BRAND[800] : '#f1f5f9' }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '900', color: catFilter === 'all' ? '#fff' : '#475569' }}>All ({products.length})</Text>
+          </TouchableOpacity>
+        </View>
         <View style={{ backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }}>
           <Ionicons name="search-outline" size={16} color="#94a3b8" />
           <TextInput placeholder="Search SKUs" placeholderTextColor="#94a3b8" value={q} onChangeText={setQ}

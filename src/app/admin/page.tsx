@@ -104,9 +104,11 @@ export default function Dashboard() {
   const userFileInput    = useRef<HTMLInputElement>(null);
   const productFileInput = useRef<HTMLInputElement>(null);
 
-  // Inventory
+  // Inventory — default to Derma so the launch catalog surfaces first.
+  // Admin can flip to a specific category or clear the filter to see all
+  // 6106 SKUs (the pre-Derma-launch legacy SQLite migration is also in the DB).
   const [invSearch, setInvSearch]       = useState("");
-  const [invCategory, setInvCategory]   = useState("");
+  const [invCategory, setInvCategory]   = useState("Derma");
   const [invStockFilter, setInvStockFilter] = useState("");
   const [invPage, setInvPage]           = useState(1);
   const ITEMS_PER_PAGE = 50;
