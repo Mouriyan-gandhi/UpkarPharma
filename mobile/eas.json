@@ -15,13 +15,15 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_ENV": "production"
+        "APP_ENV": "production",
+        "API_BASE_URL": "https://upkarpharma.vercel.app"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "APP_ENV": "production"
+        "APP_ENV": "production",
+        "API_BASE_URL": "https://upkarpharma.vercel.app"
       }
     }
   },
