@@ -991,9 +991,13 @@ function SignupScreen({ setCurrentScreen }) {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={{ alignItems: 'center', marginBottom: 40 }} onPress={() => setShowConfig(true)}>
-          <Text style={{ color: '#475569', fontWeight: '800', fontSize: 10, letterSpacing: 1 }}>NETWORK SETUP</Text>
-        </TouchableOpacity>
+        {/* NETWORK SETUP link — dev-only. Prod builds have API_BASE_URL baked in
+            from eas.json so the user never needs to configure an IP. */}
+        {!API_BASE_URL && (
+          <TouchableOpacity style={{ alignItems: 'center', marginBottom: 40 }} onPress={() => setShowConfig(true)}>
+            <Text style={{ color: '#475569', fontWeight: '800', fontSize: 10, letterSpacing: 1 }}>NETWORK SETUP</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Network Config Modal (kept for dev) */}
         <Modal visible={showConfig} transparent animationType="fade">
@@ -1305,9 +1309,12 @@ function LoginScreen({ setCurrentScreen }) {
             <Text style={styles.configText}>New distributor? <Text style={{color: BRAND[800], fontWeight: '900'}}>Request access</Text></Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={{ marginTop: 20 }} onPress={() => setShowConfig(true)}>
-            <Text style={[styles.configText, { fontSize: 11 }]}>NETWORK CONFIGURATION</Text>
-          </TouchableOpacity>
+          {/* NETWORK CONFIGURATION link — dev-only. See note above the SignupScreen version. */}
+          {!API_BASE_URL && (
+            <TouchableOpacity style={{ marginTop: 20 }} onPress={() => setShowConfig(true)}>
+              <Text style={[styles.configText, { fontSize: 11 }]}>NETWORK CONFIGURATION</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Version badge */}
           <Text style={{ textAlign: 'center', marginTop: 16, fontSize: 10, color: '#cbd5e1', fontWeight: '600' }}>v{APP_VERSION} · UPKEM LABS</Text>
