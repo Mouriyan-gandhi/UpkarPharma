@@ -39,8 +39,20 @@ if (!url || !svc) {
 
 const [, , rawPhone, storeName = 'UPKAR Admin', providedPassword] = process.argv;
 if (!rawPhone) {
-  console.error('Usage: node scripts/seed-first-admin.mjs <phone> [store_name] [password]');
+  console.error('Usage: node scripts/seed-first-admin.mjs <phone> "<store name>"');
   console.error('  phone: 10-digit Indian number, e.g. 9876543210 (91 prefix added automatically)');
+  console.error('  store name: WRAP IN QUOTES if it has a space');
+  console.error('Example: node scripts/seed-first-admin.mjs 9876543210 "Dhruv Pharma"');
+  process.exit(1);
+}
+// Reject nonsense phone numbers early — saves the operator from typing
+// `6379 019139` (with space) and creating a broken row with a 4-digit phone.
+const cleanDigits = String(rawPhone).replace(/\D/g, '');
+if (cleanDigits.length !== 10 && !(cleanDigits.length === 12 && cleanDigits.startsWith('91'))) {
+  console.error(`❌ Bad phone: "${rawPhone}" → ${cleanDigits.length} digits after stripping. Need exactly 10 (or 12 with 91 prefix).`);
+  console.error('If your phone number has a space, quote it or remove the space:');
+  console.error('  ✓  node scripts/seed-first-admin.mjs 6379019139 "Dhruv Gandhi"');
+  console.error('  ✗  node scripts/seed-first-admin.mjs 6379 019139 "Dhruv Gandhi"  (space splits into 3 args)');
   process.exit(1);
 }
 

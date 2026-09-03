@@ -1883,41 +1883,8 @@ function HomeScreen({ setCurrentScreen, onCategorySelect, onRefresh }) {
           </>
         )}
 
-        {/* Compact account snapshot at bottom (moved from stats row) */}
-        <View style={{ marginHorizontal: 16, marginTop: 24, backgroundColor: '#fff', borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm }}>
-          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
-            Your account
-          </Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700' }}>Credit left</Text>
-              <Text style={{ fontSize: 18, fontWeight: '900', color: BRAND[800], marginTop: 2 }}>
-                ₹{availableCredit.toLocaleString('en-IN', { notation: 'compact', compactDisplay: 'short' })}
-              </Text>
-              <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '600', marginTop: 1 }}>
-                of ₹{(user?.credit_limit || 0).toLocaleString('en-IN', { notation: 'compact', compactDisplay: 'short' })}
-              </Text>
-            </View>
-            <View style={{ width: 1, backgroundColor: '#f1f5f9', marginHorizontal: 8 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700' }}>Orders</Text>
-              <Text style={{ fontSize: 18, fontWeight: '900', color: '#1A1A1A', marginTop: 2 }}>
-                {orders.length}
-              </Text>
-              <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '600', marginTop: 1 }}>all time</Text>
-            </View>
-            <View style={{ width: 1, backgroundColor: '#f1f5f9', marginHorizontal: 8 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700' }}>Last order</Text>
-              <Text style={{ fontSize: 18, fontWeight: '900', color: '#1A1A1A', marginTop: 2 }}>
-                ₹{lastOrder ? (lastOrder.total || 0).toLocaleString('en-IN', { notation: 'compact', compactDisplay: 'short' }) : '0'}
-              </Text>
-              <Text style={{ fontSize: 10, color: '#94a3b8', fontWeight: '600', marginTop: 1 }} numberOfLines={1}>
-                {lastOrder?.date || '—'}
-              </Text>
-            </View>
-          </View>
-        </View>
+        {/* Account snapshot moved to the Profile tab — no need to duplicate it
+            on the browse-focused Home screen. Users find it via the tab bar. */}
       </ScrollView>
 
       {/* ── Notifications drawer ─────────────────────────────────────────────── */}

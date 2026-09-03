@@ -72,38 +72,21 @@ export default async function ShopHome() {
 
   return (
     <div className="space-y-6">
-      {/* Hero card */}
+      {/* Hero card — greeting only. Full credit + order stats live in /shop/profile
+          so the home page stays focused on browse-and-order (the primary action). */}
       <div className="bg-brand-900 text-white rounded-2xl p-6 md:p-8 relative overflow-hidden">
         <div className="absolute inset-0 opacity-[0.04]" style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23fff'%3E%3Ccircle cx='7' cy='7' r='2'/%3E%3Ccircle cx='37' cy='37' r='2'/%3E%3C/g%3E%3C/svg%3E")`
         }} />
-        <div className="relative">
-          <p className="text-brand-100/80 text-sm font-semibold">Good {greeting},</p>
-          <h1 className="text-2xl md:text-3xl font-black tracking-tight mt-1">{user.store_name}</h1>
-          <p className="text-brand-100/70 text-sm mt-1">{user.user_type || "Pharmacy"}{user.city ? ` · ${user.city}` : ""}</p>
-
-          {/* Credit summary */}
-          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white/10 backdrop-blur rounded-xl p-3 border border-white/10">
-              <p className="text-[10px] font-bold text-brand-100/80 uppercase tracking-wider">Available Credit</p>
-              <p className="text-lg md:text-xl font-black text-white mt-1 tabular-nums">₹{fmt(available)}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-3 border border-white/10">
-              <p className="text-[10px] font-bold text-brand-100/80 uppercase tracking-wider">Credit Used</p>
-              <p className="text-lg md:text-xl font-black text-white mt-1 tabular-nums">₹{fmt(user.credit_balance)}</p>
-              <div className="w-full h-1 bg-white/20 rounded-full mt-2">
-                <div className={`h-1 rounded-full ${utilization > 90 ? "bg-rose-400" : utilization > 60 ? "bg-amber-300" : "bg-brand-300"}`} style={{ width: `${utilization}%` }} />
-              </div>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-3 border border-white/10">
-              <p className="text-[10px] font-bold text-brand-100/80 uppercase tracking-wider">Total Orders</p>
-              <p className="text-lg md:text-xl font-black text-white mt-1 tabular-nums">{orders.length}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-3 border border-white/10">
-              <p className="text-[10px] font-bold text-brand-100/80 uppercase tracking-wider">Payment Terms</p>
-              <p className="text-lg md:text-xl font-black text-white mt-1">60 days</p>
-            </div>
+        <div className="relative flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-brand-100/80 text-sm font-semibold">Good {greeting},</p>
+            <h1 className="text-2xl md:text-3xl font-black tracking-tight mt-1">{user.store_name}</h1>
+            <p className="text-brand-100/70 text-sm mt-1">{user.user_type || "Pharmacy"}{user.city ? ` · ${user.city}` : ""}</p>
           </div>
+          <Link href="/shop/profile" className="text-xs font-bold text-brand-100 hover:text-white bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg backdrop-blur">
+            Credit ₹{fmt(available)} <span className="opacity-60">/ ₹{fmt(user.credit_limit)}</span>
+          </Link>
         </div>
       </div>
 
@@ -113,7 +96,7 @@ export default async function ShopHome() {
         }`}>
           <AlertCircle className="w-5 h-5 shrink-0" />
           <div className="flex-1 text-sm font-semibold">
-            You've used {Math.round(utilization)}% of your credit limit. {utilization > 90 ? "Settle invoices soon to keep ordering." : "Consider settling recent invoices."}
+            You've used {Math.round(utilization)}% of your credit limit. {utilization > 90 ? "Settle invoices soon to keep ordering." : "Consider settling recent invoices."} <Link href="/shop/profile" className="underline font-bold">View credit →</Link>
           </div>
         </div>
       )}
