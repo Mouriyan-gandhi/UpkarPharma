@@ -4377,7 +4377,14 @@ function AdminOrdersScreen({ onBack, onOpenOrder }) {
           />
         </View>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, marginBottom: 8 }}>
+      {/* Explicit row + center + shrink so chips size to their content on RN Web
+          (default column-flex + stretch made them draw as tall boxes). */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 16, gap: 8, marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}
+        style={{ flexGrow: 0, marginBottom: 8 }}
+      >
         {chip('All', 'all')}
         {chip('Invoicing', 0)}
         {chip('Packaging', 1)}
