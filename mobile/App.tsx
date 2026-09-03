@@ -2416,7 +2416,9 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
       </Modal>
 
       {Object.keys(cart).length > 0 && (
-        <AnimatedPressable 
+        <TouchableOpacity
+          activeOpacity={0.85}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={[styles.smartCartTracker, isMinMet ? SHADOWS.glowEmerald : SHADOWS.glowGreen]}
           onPress={() => { Haptics.selectionAsync(); setCurrentScreen('Cart'); }}
         >
@@ -2431,7 +2433,7 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
           <View style={[styles.smartCartBtn, isMinMet ? { backgroundColor: '#10b981' } : {}]}>
             <Ionicons name="arrow-forward" size={20} color="#ffffff" />
           </View>
-        </AnimatedPressable>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -2445,6 +2447,9 @@ function CartScreen({ setCurrentScreen }) {
   const removeFromCart = useStore((state) => state.removeFromCart);
   const setCartQuantity = useStore((state) => state.setCartQuantity);
   const user = useStore((state) => state.user);
+  // Latch that blocks the Review-order button from firing twice on
+  // fast/repeated taps while the screen transition is happening.
+  const [navigatingToReview, setNavigatingToReview] = useState(false);
 
   const cartItems = Object.keys(cart).map(id => {
     const product = products.find(p => p.id === parseInt(id));
@@ -2546,18 +2551,33 @@ function CartScreen({ setCurrentScreen }) {
             </Text>
           </View>
         )}
-        <AnimatedPressable
+        {/* Plain TouchableOpacity (not AnimatedPressable) — the scale animation
+            wrapper was swallowing taps on Android + RN Web, forcing users to
+            double- or triple-tap. Also added hitSlop so accidental near-taps
+            near the system gesture bar still count. */}
+        <TouchableOpacity
           style={[
-            { paddingVertical: 18, borderRadius: 16, alignItems: 'center' },
+            { paddingVertical: 18, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
             isMinMet ? { backgroundColor: BRAND[800], ...SHADOWS.glowGreen } : { backgroundColor: '#E5E7EB' }
           ]}
-          disabled={!isMinMet}
-          onPress={() => { Haptics.selectionAsync(); setCurrentScreen('Review'); }}
+          activeOpacity={0.75}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          disabled={!isMinMet || navigatingToReview}
+          onPress={() => {
+            if (!isMinMet || navigatingToReview) return;
+            setNavigatingToReview(true);
+            Haptics.selectionAsync();
+            // Defer the screen change so React can render the disabled state
+            // once before the transition — otherwise a double-tap can fire
+            // twice before disabled propagates.
+            setTimeout(() => setCurrentScreen('Review'), 0);
+          }}
         >
+          {navigatingToReview && <ActivityIndicator color="#fff" size="small" />}
           <Text style={{ color: isMinMet ? '#fff' : '#9CA3AF', fontSize: 16, fontWeight: '800' }}>
-            {isMinMet ? `Review order · ₹${totalValue.toLocaleString('en-IN')}` : `Add ₹${amountNeeded.toLocaleString('en-IN')} more`}
+            {navigatingToReview ? 'Loading…' : isMinMet ? `Review order · ₹${totalValue.toLocaleString('en-IN')}` : `Add ₹${amountNeeded.toLocaleString('en-IN')} more`}
           </Text>
-        </AnimatedPressable>
+        </TouchableOpacity>
       </View>
     </View>
   );

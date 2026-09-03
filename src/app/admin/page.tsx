@@ -87,6 +87,10 @@ export default function Dashboard() {
   const [inventory, setInventory] = useState<any[]>([]);
   const [orders, setOrders]       = useState<any[]>([]);
   const [schemes, setSchemes]     = useState<any[]>([]);
+  // Tile-based nav — matches the mobile AdminHome layout. Setting from
+  // the tile grid instead of a tab bar. Defaults to 'home' which shows
+  // the tile grid; picking a tile switches to that section.
+  const [activeTab, setActiveTab] = useState<"home" | "orders" | "inventory" | "users" | "schemes" | "analytics">("home");
   const [adminSessions, setAdminSessions] = useState<any[]>([]);
   const prevOrderCount = useRef(0);
 
@@ -963,41 +967,78 @@ export default function Dashboard() {
       {/* ── MAIN ─────────────────────────────────────────────────────────────── */}
       <main className="max-w-[1440px] mx-auto px-6 py-8">
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {[
-            { label: "Total SKUs", value: inventory.length.toLocaleString(), sub: "Upkar & Swasthik Catalog", icon: <Package className="w-5 h-5" />, bg: "bg-brand-50 text-brand-800" },
-            { label: "Pharmacy Partners", value: users.filter((u) => u.role !== "admin").length, sub: `${pendingUsersCount} Pending Approvals`, icon: <Building2 className="w-5 h-5" />, bg: "bg-blue-50 text-blue-700" },
-            { label: "Wholesale Orders", value: orders.length, sub: `${newOrdersCount} New Orders`, icon: <Activity className="w-5 h-5" />, bg: "bg-amber-50 text-amber-700" },
-            { label: "Total Sales", value: totalRevenue > 0 ? `₹${fmt(totalRevenue)}` : "—", sub: totalRevenue > 0 ? "Verified Orders Only" : "No verified orders yet", icon: <BarChart2 className="w-5 h-5" />, bg: "bg-brand-100 text-brand-800" },
-          ].map((kpi, i) => (
-            <Card key={i} className="bg-white border border-slate-200 shadow-sm rounded-xl p-5">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{kpi.label}</p>
-                  <h3 className="text-2xl font-extrabold text-slate-900 mt-1 tabular-nums">{kpi.value}</h3>
-                  <p className="text-[11px] text-slate-500 font-medium mt-1">{kpi.sub}</p>
-                </div>
-                <div className={`p-2.5 rounded-lg ${kpi.bg}`}>{kpi.icon}</div>
-              </div>
-            </Card>
-          ))}
-        </div>
+        {/* Home landing — tile grid matching the mobile AdminHome layout.
+            KPI snapshot + big tap targets, one screen per section. Section
+            tab bodies below only render when activeTab !== 'home'. */}
+        {activeTab === "home" ? (
+          <>
+            {/* Snapshot row — same 3 stats the mobile app shows on AdminHome */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              {[
+                { label: "Pending", value: pendingUsersCount, icon: <Building2 className="w-4 h-4" />, color: "text-amber-700 bg-amber-50 ring-amber-100" },
+                { label: "Products", value: inventory.length, icon: <Package className="w-4 h-4" />, color: "text-brand-800 bg-brand-50 ring-brand-100" },
+                { label: "Orders", value: orders.length, icon: <Activity className="w-4 h-4" />, color: "text-blue-700 bg-blue-50 ring-blue-100" },
+              ].map((s, i) => (
+                <Card key={i} className="bg-white border border-slate-200 shadow-sm rounded-2xl p-5">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ring-1 ${s.color}`}>
+                    {s.icon}
+                  </div>
+                  <h3 className="text-3xl font-black text-slate-900 tabular-nums tracking-tight">{s.value}</h3>
+                  <p className="text-xs font-bold text-slate-500 mt-1 uppercase tracking-wider">{s.label}</p>
+                </Card>
+              ))}
+            </div>
 
-        {/* Tabs */}
-        <Tabs defaultValue="orders" className="w-full">
-          <TabsList className="h-12 bg-white border border-slate-200 p-1 rounded-xl shadow-sm inline-flex mb-6 overflow-x-auto">
-            {[
-              { val: "orders", icon: <Activity className="w-4 h-4" />, label: `Orders (${orders.length})` },
-              { val: "inventory", icon: <Package className="w-4 h-4" />, label: `Inventory (${inventory.length})` },
-              { val: "users", icon: <Building2 className="w-4 h-4" />, label: `Partners (${users.filter((u) => u.role !== "admin").length})` },
-              { val: "schemes", icon: <Tag className="w-4 h-4" />, label: "Schemes" },
-              { val: "analytics", icon: <BarChart2 className="w-4 h-4" />, label: "Analytics" },
-            ].map((t) => (
-              <TabsTrigger key={t.val} value={t.val} className="data-[state=active]:bg-brand-800 data-[state=active]:text-white rounded-lg px-4 font-semibold text-xs transition-all flex items-center gap-2 whitespace-nowrap">
-                {t.icon} {t.label}
-              </TabsTrigger>
-            ))}
+            {/* Tile grid — same actions as mobile AdminHome */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[
+                { val: "users",     title: "Approvals",   subtitle: pendingUsersCount ? `${pendingUsersCount} pending` : "No pending requests", icon: <Building2 className="w-6 h-6" />, color: "bg-amber-50 text-amber-700", urgent: pendingUsersCount > 0 },
+                { val: "orders",    title: "Orders",      subtitle: "Invoicing → Packaging → Dispatch", icon: <Activity className="w-6 h-6" />, color: "bg-blue-50 text-blue-700" },
+                { val: "inventory", title: "Products",    subtitle: `${inventory.length} SKUs · add · edit · upload photos`, icon: <Package className="w-6 h-6" />, color: "bg-brand-50 text-brand-800" },
+                { val: "users",     title: "Partners",    subtitle: `${users.filter((u) => u.role !== "admin").length} pharmacies · credit · block`, icon: <Building2 className="w-6 h-6" />, color: "bg-sky-50 text-sky-700" },
+                { val: "schemes",   title: "Schemes",     subtitle: `${schemes.filter((s) => s.is_active).length} live · B2B coupons`, icon: <Tag className="w-6 h-6" />, color: "bg-emerald-50 text-emerald-700" },
+                { val: "analytics", title: "Analytics",   subtitle: "Revenue · pipeline · top SKUs", icon: <BarChart2 className="w-6 h-6" />, color: "bg-orange-50 text-orange-700" },
+              ].map((tile, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveTab(tile.val as typeof activeTab)}
+                  className={`text-left bg-white rounded-2xl border p-5 flex items-center gap-4 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all ${tile.urgent ? "border-amber-300 ring-2 ring-amber-100" : "border-slate-200 hover:border-brand-300"}`}
+                >
+                  <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${tile.color}`}>
+                    {tile.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-black text-slate-900">{tile.title}</p>
+                      {tile.urgent && <span className="text-[9px] font-black uppercase tracking-wider bg-amber-500 text-white px-1.5 py-0.5 rounded">New</span>}
+                    </div>
+                    <p className="text-xs text-slate-500 font-semibold mt-0.5 line-clamp-1">{tile.subtitle}</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-slate-300 shrink-0" />
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Back-to-home strip when a tile is selected */}
+            <button
+              onClick={() => setActiveTab("home")}
+              className="mb-6 inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-brand-800"
+            >
+              <ChevronLeft className="w-4 h-4" /> Back to Home
+            </button>
+          </>
+        )}
+
+        {/* Tabs (controlled) — hidden trigger bar; tiles above drive activeTab */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="w-full">
+          <TabsList className="hidden">
+            <TabsTrigger value="orders">Orders</TabsTrigger>
+            <TabsTrigger value="inventory">Inventory</TabsTrigger>
+            <TabsTrigger value="users">Partners</TabsTrigger>
+            <TabsTrigger value="schemes">Schemes</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
           {/* ── ORDERS TAB ─────────────────────────────────────────────────── */}
