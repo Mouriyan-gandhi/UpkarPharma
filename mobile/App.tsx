@@ -1140,19 +1140,10 @@ function LoginScreen({ setCurrentScreen }) {
   const requestOtp = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (phone.length < 10) return Alert.alert('Invalid', 'Enter a valid 10-digit phone number');
-    // Dev bypass: if a password is provided, skip Firebase OTP entirely.
-    if (password && password.length > 0) return devLogin();
-    setIsLoading(true);
-    try {
-      const result = await auth().signInWithPhoneNumber('+91' + phone);
-      setConfirmation(result);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setOtpSent(true);
-    } catch (e) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Error', e?.message || 'Failed to send OTP. Check your number and try again.');
+    if (!password || password.length === 0) {
+      return Alert.alert('Password required', 'Enter the password shared by your distributor. SMS-based OTP login isn\'t enabled yet — coming with the MSG91 rollout.');
     }
-    setIsLoading(false);
+    return devLogin();
   };
 
   const verifyOtp = async () => {
