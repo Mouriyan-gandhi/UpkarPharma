@@ -165,9 +165,28 @@
     text-wrap: balance;
   }
 
+  /* Branded loader — logo pulse + expanding halo (see UpkemLoader.tsx) */
+  .animate-upkem-pulse {
+    animation: upkem-pulse 1.8s ease-in-out infinite;
+    display: inline-block;
+    transform-origin: center;
+  }
+  .animate-upkem-halo {
+    animation: upkem-halo 1.8s ease-in-out infinite;
+  }
+
   .product-card-image {
     aspect-ratio: 1 / 1;
     object-fit: contain;
     background: #F0F5F3;
   }
+}
+
+@keyframes upkem-pulse {
+  0%, 100% { transform: scale(0.94); }
+  50%      { transform: scale(1.06); }
+}
+@keyframes upkem-halo {
+  0%, 100% { transform: scale(1.0);  opacity: 0.15; }
+  50%      { transform: scale(1.35); opacity: 0.45; }
 }

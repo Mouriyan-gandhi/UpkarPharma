@@ -146,13 +146,25 @@ export async function POST(request: Request) {
     const { collection, item, action } = body;
     const sb = supabaseAdmin();
 
-    const admin = await getAdmin();
+    // Cookie-based admin (web /admin) OR bearer-token admin (mobile AdminHome).
+    // getAdmin() only reads cookies, so admins signed in on the phone come in
+    // via getMobileUser + a role check. Without this, mobile admin actions
+    // like update_product silently 403 — the photo uploads to Storage but the
+    // product row is never patched, so neither admin nor customer sees the new
+    // image after the 5s poll refresh.
+    const cookieAdmin = await getAdmin();
+    const bearerUser = cookieAdmin ? null : await getMobileUser(request);
+    const bearerAdmin = bearerUser && (bearerUser as { role?: string }).role === 'admin'
+      ? bearerUser
+      : null;
+    const admin = cookieAdmin || bearerAdmin;
+
     // "mobileUser" identifies any authenticated customer regardless of channel:
     // native mobile app (Bearer token) OR web /shop (cookie). Kept the name to
     // minimize diff churn — semantically it's "current customer".
     const mobileUser = admin
       ? null
-      : (await getMobileUser(request)) || (await getWebUser());
+      : bearerUser || (await getWebUser());
     const actor = admin || mobileUser;
 
     // ── Actions restricted to admin ─────────────────────────────────────────

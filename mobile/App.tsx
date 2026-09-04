@@ -326,6 +326,56 @@ function SkeletonCard({ height = 80, style = {} }) {
   );
 }
 
+// ── UpkemLoader — branded spinner ───────────────────────────────────────────
+// A gentle pulse+halo around the UPKEM logo mark. Replaces ActivityIndicator
+// in the fullscreen splash and other high-visibility loading states so the
+// brand is reinforced during waits (which is where users stare longest).
+// `size` = logo diameter in px. `variant='light'` for use on the dark green
+// splash background; `variant='dark'` for use on white cards.
+function UpkemLoader({ size = 72, variant = 'dark' }: { size?: number; variant?: 'light' | 'dark' }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.06] });
+  const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.45] });
+  const haloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.35] });
+  const haloColor = variant === 'light' ? '#52B788' : '#0B2618';
+  const logoBg = variant === 'light' ? 'rgba(255,255,255,0.08)' : 'transparent';
+
+  return (
+    <View style={{ width: size * 1.6, height: size * 1.6, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View
+        style={{
+          position: 'absolute',
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: haloColor,
+          opacity: haloOpacity,
+          transform: [{ scale: haloScale }],
+        }}
+      />
+      <Animated.View style={{ transform: [{ scale }], backgroundColor: logoBg, borderRadius: size / 2, padding: 6 }}>
+        <Image
+          source={require('./assets/logo-mark.png')}
+          style={{ width: size, height: size }}
+          resizeMode="contain"
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
 // Product image mapping by category
 const CATEGORY_IMAGES: Record<string, string> = {
   'Analgesics':       'https://images.unsplash.com/photo-1550572017-edd951b55104?w=300&h=300&fit=crop',
@@ -1122,7 +1172,12 @@ function LoginScreen({ setCurrentScreen }) {
         setUser(data.user);
         await AsyncStorage.setItem('@upkem_session_id', data.session_id);
         await AsyncStorage.setItem('@upkem_user', JSON.stringify(data.user));
-        setCurrentScreen('Home');
+        // Route straight to the correct home based on role. Previously we
+        // hardcoded 'Home' (the customer landing) and let a subscription
+        // effect flip to 'AdminHome' one tick later, which caused admins
+        // to see a flash of the customer UI on login.
+        const isAdmin = data.user?.is_admin || data.user?.role === 'admin';
+        setCurrentScreen(isAdmin ? 'AdminHome' : 'Home');
       } else if (data.pending) {
         setUser(data.user);
         setCurrentScreen('PendingApproval');
@@ -1169,7 +1224,8 @@ function LoginScreen({ setCurrentScreen }) {
         setUser(data.user);
         await AsyncStorage.setItem('@upkem_session_id', data.session_id);
         await AsyncStorage.setItem('@upkem_user', JSON.stringify(data.user));
-        setCurrentScreen('Home');
+        const isAdmin = data.user?.is_admin || data.user?.role === 'admin';
+        setCurrentScreen(isAdmin ? 'AdminHome' : 'Home');
         registerForPushNotificationsAsync().then((pushToken) => {
           if (!pushToken) return;
           fetch(useStore.getState().getTokenUrl(), {
@@ -4560,8 +4616,8 @@ function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
 
         {/* Invoice card */}
         {invLoading ? (
-          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9', alignItems: 'center' }}>
-            <ActivityIndicator color={BRAND[700]} />
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, marginBottom: 16, borderWidth: 1, borderColor: '#f1f5f9', alignItems: 'center' }}>
+            <UpkemLoader size={40} variant="dark" />
           </View>
         ) : invoice ? (
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: invoice.status === 'Draft' ? '#FDE68A' : BRAND[200] }}>
@@ -5055,11 +5111,18 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
       };
       const action = editing ? 'update_product' : 'add_product';
       const collection = 'products';
-      await fetch(url, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: useStore.getState().authHeaders(),
         body: JSON.stringify({ collection, action, item: payload }),
       });
+      if (!res.ok) {
+        // Don't do the optimistic update — if the server rejected the save,
+        // showing the change locally only to have it wiped by the next 5s
+        // poll is worse than surfacing the error immediately.
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `Save failed (${res.status})`);
+      }
       // Optimistic local update
       const products = useStore.getState().products || [];
       let next;
@@ -5086,11 +5149,12 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
           const url = useStore.getState().getApiUrl();
-          await fetch(url, {
+          const res = await fetch(url, {
             method: 'POST',
             headers: useStore.getState().authHeaders(),
             body: JSON.stringify({ collection: 'products', action: 'delete_product', item: { id: form.id } }),
           });
+          if (!res.ok) throw new Error(`Delete failed (${res.status})`);
           const products = (useStore.getState().products || []).filter((p: any) => p.id !== form.id);
           useStore.getState().setProducts(products);
           showToast('Deleted', 'info');
@@ -6145,8 +6209,8 @@ export default function App() {
     if (currentScreen === 'Loading') return (
       <View style={{ flex: 1, backgroundColor: '#0B2618', justifyContent: 'center', alignItems: 'center' }}>
         <StatusBar barStyle="light-content" />
-        <Image source={require('./assets/pharma_logo.jpeg')} style={{ width: 80, height: 80, borderRadius: 20, marginBottom: 24 }} resizeMode="contain" />
-        <ActivityIndicator color="#52B788" size="large" />
+        <UpkemLoader size={96} variant="light" />
+        <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, fontWeight: '700', letterSpacing: 2, marginTop: 20, textTransform: 'uppercase' }}>Upkem Labs</Text>
       </View>
     );
     if (currentScreen === 'Login') return <LoginScreen setCurrentScreen={setCurrentScreen} />;

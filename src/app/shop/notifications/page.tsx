@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Bell, FileText, Package, Truck, XCircle, CheckCircle, User, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { UpkemLoader } from "@/components/UpkemLoader";
 
 type Notification = {
   id: number;
@@ -100,9 +101,8 @@ export default function NotificationsPage() {
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-16 text-center text-slate-500">
-          <Loader2 className="w-6 h-6 mx-auto animate-spin mb-2" />
-          Loading…
+        <div className="bg-white rounded-xl border border-slate-200 p-16">
+          <UpkemLoader size={56} label="Loading" />
         </div>
       ) : items.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 p-16 text-center text-slate-500">

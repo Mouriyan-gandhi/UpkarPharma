@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Building2, Mail, MapPin, CreditCard, FileText, Lock, ShieldCheck, Loader2, AlertCircle, Save, Undo2, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { UpkemLoader } from "@/components/UpkemLoader";
 
 type Profile = {
   id: string;
@@ -181,9 +182,8 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
-        <Loader2 className="w-6 h-6 mx-auto animate-spin text-slate-400 mb-2" />
-        <p className="text-slate-500">Loading profile…</p>
+      <div className="bg-white rounded-xl border border-slate-200 p-16">
+        <UpkemLoader size={56} label="Loading profile" />
       </div>
     );
   }
