@@ -6,7 +6,7 @@ import {
   StyleSheet, Text, View, TextInput, TouchableOpacity, Alert,
   FlatList, Image, Modal, KeyboardAvoidingView, Platform, ScrollView,
   LayoutAnimation, UIManager, Animated, Easing, Keyboard, StatusBar,
-  Dimensions, RefreshControl, ActivityIndicator, PanResponder
+  Dimensions, RefreshControl, ActivityIndicator, PanResponder, AppState
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { create } from 'zustand';
@@ -20,6 +20,7 @@ import * as Device from 'expo-device';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -56,6 +57,30 @@ const MIN_ORDER_VALUE = 2500;
 const CATALOG_MODE = Constants.expoConfig?.extra?.catalogMode ?? 'derma';
 const DERMA_ONLY = CATALOG_MODE === 'derma';
 const LOCKED_CATEGORY = 'Derma';
+
+// ════════════════════════════════════════════════════════════════════════════
+// Supabase Realtime client — WebSocket-driven live updates.
+//
+// The mobile app already speaks to /api/data on Vercel for writes. This
+// client is READ-ONLY: it opens a WebSocket to Supabase's postgres_changes
+// stream and pushes deltas into the zustand store the moment they happen.
+// A 30s poll runs as a safety net in case the socket dropped without our
+// noticing (e.g. tower-switch on mobile data).
+//
+// Auth: the anon key gets us onto the socket; setAuth() with the user's
+// JWT makes RLS apply, so a customer only receives their own orders and
+// notifications, an admin receives everything.
+// ════════════════════════════════════════════════════════════════════════════
+const _extra = Constants.expoConfig?.extra || {};
+const SB_URL = typeof _extra.supabaseUrl === 'string' ? _extra.supabaseUrl : '';
+const SB_ANON = typeof _extra.supabaseAnonKey === 'string' ? _extra.supabaseAnonKey : '';
+const sb = SB_URL && SB_ANON
+  ? createClient(SB_URL, SB_ANON, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      realtime: { params: { eventsPerSecond: 10 } },
+    })
+  : null;
+
 
 // UPKEM / UPKAR PHARMA company details for invoice
 const COMPANY = {
@@ -6693,13 +6718,118 @@ export default function App() {
 
   useEffect(() => {
     fetchAPI();
-    // 3s poll keeps the customer & admin surfaces feeling live without holding
-    // a persistent WebSocket connection (Supabase realtime IS enabled on
-    // orders/invoices/notifications/credit_requests — could be swapped in
-    // later if 3s ever feels sluggish for a specific flow).
-    const interval = setInterval(fetchAPI, 3000);
+    // 30s poll is a safety net — the primary live channel is Supabase Realtime
+    // (see the effect below). Poll covers three edge cases:
+    //   1. Socket drops silently (mobile tower switch, VPN reconnect)
+    //   2. Cold-start race between session restore and socket subscribe
+    //   3. Non-realtime tables (schemes, etc.) still need periodic refresh
+    const interval = setInterval(fetchAPI, 30_000);
     return () => clearInterval(interval);
   }, []);
+
+  // ── Realtime subscription (Supabase postgres_changes over WebSocket) ──
+  // Opens one channel per table we care about. Deltas are merged straight
+  // into the zustand store so the UI updates the moment the DB does — no
+  // polling delay. RLS applies via setAuth(userJwt), so a customer only
+  // gets their own rows, an admin gets everything.
+  //
+  // Lifecycle:
+  //  - Mount when user has a session + supabase client is initialized
+  //  - Unmount / cleanup on sign-out (user becomes null)
+  //  - Resubscribe when app foregrounds after > 5min in background
+  //  - Refresh setAuth() whenever sessionId changes (JWT refresh)
+  useEffect(() => {
+    if (!sb) return;
+    const user = useStore.getState().user;
+    const session = useStore.getState().sessionId;
+    if (!user || !session) return;
+    const isAdmin = !!(user.is_admin || user.role === 'admin');
+    // Bind RLS identity for this socket. Without this the anon key applies
+    // and the customer would see zero rows (correctly RLS-blocked).
+    sb.realtime.setAuth(session);
+
+    const channels: RealtimeChannel[] = [];
+    const store = useStore.getState();
+
+    // — products: everyone sees admin edits (photos, description, price)
+    channels.push(
+      sb.channel('rt:products').on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
+        const current = useStore.getState().products || [];
+        if (payload.eventType === 'INSERT') {
+          useStore.getState().setProducts([...current, payload.new]);
+        } else if (payload.eventType === 'UPDATE') {
+          useStore.getState().setProducts(current.map((p: any) => p.id === payload.new.id ? { ...p, ...payload.new } : p));
+        } else if (payload.eventType === 'DELETE') {
+          useStore.getState().setProducts(current.filter((p: any) => p.id !== (payload.old as any).id));
+        }
+      }).subscribe()
+    );
+
+    // — orders: customer sees their own; admin sees all (RLS enforces)
+    channels.push(
+      sb.channel('rt:orders').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        // Orders carry embedded items which are fetched by /api/data —
+        // easier to trigger a refetch than reconstruct the item join here.
+        fetchAPI();
+      }).subscribe()
+    );
+
+    // — invoices: mostly relevant to customer to know invoice approved
+    channels.push(
+      sb.channel('rt:invoices').on('postgres_changes', { event: '*', schema: 'public', table: 'invoices' }, () => {
+        fetchAPI();
+      }).subscribe()
+    );
+
+    // — notifications: bell badge + toast for the receiver
+    channels.push(
+      sb.channel('rt:notifs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
+        const n = payload.new as any;
+        // Filter client-side (belt + braces on top of RLS)
+        if (!isAdmin && n.user_id !== user.id) return;
+        if (isAdmin && !n.for_admin) return;
+        const current = useStore.getState().notifications || [];
+        useStore.getState().setNotifications([n, ...current]);
+      }).subscribe()
+    );
+
+    // — credit_requests: admin sees new pending; customer sees decisions
+    channels.push(
+      sb.channel('rt:credit').on('postgres_changes', { event: '*', schema: 'public', table: 'credit_requests' }, () => {
+        // Store-owner is the caller who's reading via API; keep the pattern
+        // consistent and trigger a refetch of the small credit-requests list.
+        // (Cheap — one row per pending request.)
+        fetchAPI();
+      }).subscribe()
+    );
+
+    // — users: for the CURRENT customer, catch credit_limit bumps live
+    channels.push(
+      sb.channel('rt:me').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` }, (payload) => {
+        const fresh = payload.new as any;
+        useStore.getState().setUser({ ...useStore.getState().user, ...fresh });
+        AsyncStorage.setItem('@upkem_user', JSON.stringify({ ...useStore.getState().user, ...fresh })).catch(() => {});
+      }).subscribe()
+    );
+
+    // Resubscribe on foreground if socket has been idle a while.
+    let lastBackgroundedAt = 0;
+    const appStateSub = AppState.addEventListener('change', (next) => {
+      if (next === 'background' || next === 'inactive') {
+        lastBackgroundedAt = Date.now();
+      } else if (next === 'active' && lastBackgroundedAt > 0) {
+        // If we were away > 5 min, force a fresh fetch. The socket usually
+        // reconnects on its own; the fetch just guarantees no missed deltas.
+        if (Date.now() - lastBackgroundedAt > 5 * 60_000) fetchAPI();
+      }
+    });
+
+    return () => {
+      appStateSub.remove();
+      for (const c of channels) { try { sb.removeChannel(c); } catch {} }
+    };
+    // Rebind whenever user or session token changes (login / logout / JWT refresh)
+  }, [useStore((s) => s.user?.id), useStore((s) => s.sessionId)]);
 
   const renderScreen = () => {
     if (currentScreen === 'Loading') return (

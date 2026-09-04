@@ -16,14 +16,18 @@
       },
       "env": {
         "APP_ENV": "production",
-        "API_BASE_URL": "https://upkarpharma.vercel.app"
+        "API_BASE_URL": "https://upkarpharma.vercel.app",
+        "SUPABASE_URL": "https://wbzfooatizknbjlcsceh.supabase.co",
+        "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndiemZvb2F0aXprbmJqbGNzY2VoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4MzU4MzEsImV4cCI6MjEwMzQxMTgzMX0.XsZ3SbaWiAFOV0f7npozBbwj_fhqTcu5XfwYe84MeO0"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "APP_ENV": "production",
-        "API_BASE_URL": "https://upkarpharma.vercel.app"
+        "API_BASE_URL": "https://upkarpharma.vercel.app",
+        "SUPABASE_URL": "https://wbzfooatizknbjlcsceh.supabase.co",
+        "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndiemZvb2F0aXprbmJqbGNzY2VoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4MzU4MzEsImV4cCI6MjEwMzQxMTgzMX0.XsZ3SbaWiAFOV0f7npozBbwj_fhqTcu5XfwYe84MeO0"
       }
     }
   },

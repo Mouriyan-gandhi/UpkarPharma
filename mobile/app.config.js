@@ -25,6 +25,13 @@ module.exports = () => {
       // category=Derma and hides Category+Company filter sections. Set
       // CATALOG_MODE=all to restore the multi-category browsing UI.
       catalogMode: process.env.CATALOG_MODE || 'derma',
+      // Supabase creds for the mobile realtime WebSocket. The anon key is
+      // safe to ship (it's public and RLS-gated); we set the user's JWT via
+      // supabase.realtime.setAuth() so row-level security still applies.
+      // Reads from env at build time — fall back to the values baked into
+      // eas.json so preview builds work without extra flags.
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '',
+      supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
     },
     // Merge plugins: preserve anything app.json (or `expo install`) added
     // (e.g. expo-updates), then add our own two. Avoids the classic
