@@ -2404,29 +2404,42 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 }}>
                   <TouchableOpacity
                     onPress={() => setSelectedProduct(null)}
-                    style={{ flex: 1, paddingVertical: 16, paddingHorizontal: 16, borderRadius: 16, backgroundColor: '#f1f5f9', alignItems: 'center' }}
+                    style={{ flex: 1, height: 56, borderRadius: 16, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }}
                   >
                     <Text style={{ fontSize: 15, fontWeight: '800', color: '#475569' }}>Close</Text>
                   </TouchableOpacity>
                   {(!cart[selectedProduct.id] || cart[selectedProduct.id] === 0) ? (
                     <TouchableOpacity
                       activeOpacity={0.85}
-                      style={{ flex: 1, backgroundColor: BRAND[800], paddingVertical: 16, paddingHorizontal: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8, ...SHADOWS.glowGreen }}
+                      style={{ flex: 1, backgroundColor: BRAND[800], height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, ...SHADOWS.glowGreen }}
                       onPress={() => { addToCart(selectedProduct.id); }}
                     >
                       <Ionicons name="cart-outline" size={18} color="#fff" />
                       <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 }}>Add to cart</Text>
                     </TouchableOpacity>
                   ) : (
-                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: BRAND[50], paddingHorizontal: 12, paddingVertical: 10, borderRadius: 16, borderWidth: 1.5, borderColor: BRAND[500] }}>
-                      <Text style={{ fontSize: 13, fontWeight: '800', color: BRAND[800] }}>In cart</Text>
-                      <QtyControl
-                        value={cart[selectedProduct.id]}
-                        onAdd={() => addToCart(selectedProduct.id)}
-                        onSub={() => removeFromCart(selectedProduct.id)}
-                        onSet={(n) => setCartQuantity(selectedProduct.id, n)}
-                        compact
-                      />
+                    // Match the Add-to-cart button's height + solid brand color.
+                    // Row layout: minus | quantity | plus, spread evenly so the
+                    // button reads as one clean stepper (no bordered inner pill).
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: BRAND[800], paddingHorizontal: 8, height: 56, borderRadius: 16, ...SHADOWS.glowGreen }}>
+                      <TouchableOpacity
+                        onPress={() => removeFromCart(selectedProduct.id)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={{ width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' }}
+                      >
+                        <Ionicons name="remove" size={20} color="#fff" />
+                      </TouchableOpacity>
+                      <View style={{ flex: 1, alignItems: 'center' }}>
+                        <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' }}>In cart</Text>
+                        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900', marginTop: 1 }}>{cart[selectedProduct.id]}</Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => addToCart(selectedProduct.id)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={{ width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)' }}
+                      >
+                        <Ionicons name="add" size={20} color="#fff" />
+                      </TouchableOpacity>
                     </View>
                   )}
                 </View>
@@ -3474,6 +3487,7 @@ function ProfileScreen({ setCurrentScreen }) {
 
   const FIELD_META: Record<string, { label: string; multiline?: boolean; keyboardType?: any; placeholder?: string }> = {
     address:             { label: 'Delivery address', multiline: true,  placeholder: 'Building, street, area, PIN…' },
+    google_maps_link:    { label: 'Google Maps link', keyboardType: 'url', placeholder: 'https://maps.app.goo.gl/…' },
     email:               { label: 'Email',            keyboardType: 'email-address', placeholder: 'you@firm.com' },
     gst_number:          { label: 'GST number',       placeholder: '15-char GSTIN' },
     drug_license:        { label: 'Drug licence',     placeholder: 'e.g. TN-02-20B-XXXXX' },
@@ -3583,15 +3597,20 @@ function ProfileScreen({ setCurrentScreen }) {
           Alert.alert('Could not submit', data.error || 'Please try again.');
         }
       } else {
-        // Direct update via /api/data
+        // Direct update via /api/data. The API's action is `update_own_profile`
+        // (accepts email/address/city/zone/google_maps_link as top-level fields),
+        // NOT the old `update_profile` — that name never existed so the save
+        // used to silently no-op. authFetch handles JWT refresh on 401.
         const url = useStore.getState().getApiUrl();
-        const body: any = { action: 'update_profile', field: editField.key, value: editValue };
-        if (editField.key === 'address') { body.action = 'update_address'; body.address = editValue; }
-        await fetch(url, {
+        const body: any = { action: 'update_own_profile', [editField.key]: editValue };
+        const res = await useStore.getState().authFetch(url, {
           method: 'POST',
-          headers: useStore.getState().authHeaders(),
           body: JSON.stringify(body),
         });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error || `Save failed (${res.status})`);
+        }
         setUser({ ...user, [editField.key]: editValue });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setEditField(null);
@@ -3753,7 +3772,7 @@ function ProfileScreen({ setCurrentScreen }) {
             </View>
             <Ionicons name={user.address ? 'create-outline' : 'add-circle-outline'} size={18} color={BRAND[600]} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowCityPicker(true)} activeOpacity={0.85} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 }}>
+          <TouchableOpacity onPress={() => setShowCityPicker(true)} activeOpacity={0.85} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
             <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
               <Ionicons name="map-outline" size={17} color={BRAND[700]} />
             </View>
@@ -3764,6 +3783,29 @@ function ProfileScreen({ setCurrentScreen }) {
               </Text>
             </View>
             <Ionicons name={user.city ? 'create-outline' : 'add-circle-outline'} size={18} color={BRAND[600]} />
+          </TouchableOpacity>
+          {/* Google Maps pin — helps the delivery driver navigate straight to the
+              shop. Long-press to open the saved link in Maps; tap to edit. */}
+          <TouchableOpacity
+            onPress={() => openEditField('google_maps_link')}
+            onLongPress={() => {
+              if (user.google_maps_link) {
+                import('react-native').then(({ Linking }) => Linking.openURL(user.google_maps_link).catch(() => {}));
+              }
+            }}
+            activeOpacity={0.85}
+            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 }}
+          >
+            <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+              <Ionicons name="navigate-outline" size={17} color={BRAND[700]} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Google Maps link</Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: user.google_maps_link ? BRAND[800] : '#94a3b8', marginTop: 2 }} numberOfLines={1}>
+                {user.google_maps_link || 'Tap to add · long-press to open'}
+              </Text>
+            </View>
+            <Ionicons name={user.google_maps_link ? 'create-outline' : 'add-circle-outline'} size={18} color={BRAND[600]} />
           </TouchableOpacity>
         </View>
 
@@ -3908,7 +3950,7 @@ function ProfileScreen({ setCurrentScreen }) {
 
       {/* Generic field editor modal */}
       <Modal visible={!!editField} transparent animationType="slide" onRequestClose={() => setEditField(null)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlayBottom}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayBottom}>
           <View style={styles.bottomSheet}>
             <View style={styles.dragHandle} />
             <Text style={styles.modalTitle}>
@@ -3954,7 +3996,7 @@ function ProfileScreen({ setCurrentScreen }) {
 
       {/* Request more credit modal */}
       <Modal visible={showCreditReqModal} transparent animationType="slide" onRequestClose={() => setShowCreditReqModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlayBottom}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayBottom}>
           <View style={styles.bottomSheet}>
             <View style={styles.dragHandle} />
             <Text style={styles.modalTitle}>Request more credit</Text>
@@ -4013,10 +4055,9 @@ function ProfileScreen({ setCurrentScreen }) {
                     setUser({ ...user, city, zone: user.zone || 'Tamil Nadu' });
                     setShowCityPicker(false);
                     try {
-                      await fetch(useStore.getState().getApiUrl(), {
+                      await useStore.getState().authFetch(useStore.getState().getApiUrl(), {
                         method: 'POST',
-                        headers: useStore.getState().authHeaders(),
-                        body: JSON.stringify({ action: 'update_profile', field: 'city', value: city }),
+                        body: JSON.stringify({ action: 'update_own_profile', city, zone: user.zone || 'Tamil Nadu' }),
                       });
                     } catch { /* local update kept */ }
                   }}
@@ -4439,6 +4480,7 @@ function AdminUserDetailModal({ user, onClose, onSaved }: any) {
     user_type: user.user_type || 'Retailer',
     zone: user.zone || '',
     city: user.city || '',
+    google_maps_link: user.google_maps_link || '',
   });
   const [blockReason, setBlockReason] = useState(user.blocked_reason || '');
 
@@ -4589,6 +4631,18 @@ function AdminUserDetailModal({ user, onClose, onSaved }: any) {
                       <Text style={{ flex: 1, fontSize: 13, color: v ? '#0f172a' : '#94a3b8', fontWeight: '700' }}>{v || '—'}</Text>
                     </View>
                   ))}
+                  {/* Google Maps pin — tap-through opens the partner's saved
+                      location in Maps so delivery can navigate quickly. */}
+                  {user.google_maps_link ? (
+                    <TouchableOpacity
+                      onPress={() => import('react-native').then(({ Linking }) => Linking.openURL(user.google_maps_link).catch(() => {}))}
+                      style={{ flexDirection: 'row', paddingVertical: 8, alignItems: 'center', marginTop: 4, backgroundColor: BRAND[50], paddingHorizontal: 10, borderRadius: 10 }}
+                    >
+                      <Ionicons name="navigate-outline" size={16} color={BRAND[700]} style={{ marginRight: 8 }} />
+                      <Text style={{ flex: 1, fontSize: 13, color: BRAND[800], fontWeight: '800' }} numberOfLines={1}>Open in Maps</Text>
+                      <Ionicons name="open-outline" size={14} color={BRAND[700]} />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </View>
             )}
@@ -4615,6 +4669,7 @@ function AdminUserDetailModal({ user, onClose, onSaved }: any) {
                   ['city', 'City'],
                   ['zone', 'Zone'],
                   ['address', 'Address'],
+                  ['google_maps_link', 'Google Maps link'],
                 ] as const).map(([k, label]) => (
                   <View key={k} style={{ marginBottom: 12 }}>
                     <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{label}</Text>
@@ -5423,7 +5478,7 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
   const labelStyle = { fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: 0.5, marginBottom: 4 };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#F7FAF8' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#F7FAF8' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <StatusBar barStyle="dark-content" />
       <AdminBackHeader title={editing ? 'Edit product' : 'Add product'} onBack={onBack} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">

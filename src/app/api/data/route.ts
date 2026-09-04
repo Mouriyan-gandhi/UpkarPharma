@@ -442,12 +442,12 @@ export async function POST(request: Request) {
     }
 
     // ── update_own_profile — customer edits their own free-edit fields ──
-    // Only email/address/city/zone are allowed here. Identity fields (GST,
-    // drug_license, store_name, user_type) must go through
-    // /api/profile-change-requests for admin approval.
+    // Only email/address/city/zone/google_maps_link are allowed here.
+    // Identity fields (GST, drug_license, store_name, user_type) must go
+    // through /api/profile-change-requests for admin approval.
     if (action === 'update_own_profile' && mobileUser) {
       const patch: any = {};
-      for (const k of ['email', 'address', 'city', 'zone']) {
+      for (const k of ['email', 'address', 'city', 'zone', 'google_maps_link']) {
         if (body[k] !== undefined) patch[k] = body[k] || null;
       }
       if (Object.keys(patch).length === 0) {
@@ -500,7 +500,7 @@ export async function POST(request: Request) {
       const { phone } = body;
       if (!phone) return NextResponse.json({ error: 'Phone required' }, { status: 400 });
       const patch: any = {};
-      for (const k of ['store_name','drug_license','gst_number','registration_number','address','email','user_type','zone','city']) {
+      for (const k of ['store_name','drug_license','gst_number','registration_number','address','email','user_type','zone','city','google_maps_link']) {
         if (body[k] !== undefined) patch[k] = body[k];
       }
       const { error } = await sb.from('users').update(patch).eq('phone', phone);
