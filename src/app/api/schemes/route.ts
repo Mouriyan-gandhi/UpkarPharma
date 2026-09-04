@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getAdmin, getMobileUser } from '@/lib/auth';
+import { getAnyAdmin, getMobileUser } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // GET — full list (admin) or active-only (mobile with ?active=true)
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const activeOnly = searchParams.get('active') === 'true';
-  const admin = await getAdmin();
+  const admin = await getAnyAdmin(request);
   const mobile = admin ? null : await getMobileUser(request);
 
   if (activeOnly) {
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 
 // POST — create a new scheme
 export async function POST(request: Request) {
-  if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!(await getAnyAdmin(request))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const body = await request.json();
   const { title, code, scheme_type, start_date, end_date } = body;
   if (!title || !code || !scheme_type || !start_date || !end_date) {
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
 // PUT — update or toggle active
 export async function PUT(request: Request) {
-  if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!(await getAnyAdmin(request))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const body = await request.json();
   const { id, action } = body;
   if (!id) return NextResponse.json({ error: 'Scheme ID is required' }, { status: 400 });
@@ -86,7 +86,7 @@ export async function PUT(request: Request) {
 
 // DELETE
 export async function DELETE(request: Request) {
-  if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!(await getAnyAdmin(request))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Scheme ID is required' }, { status: 400 });

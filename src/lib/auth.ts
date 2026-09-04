@@ -95,3 +95,17 @@ export async function getWebUser(): Promise<AdminUser | null> {
 export function listAdminSessions(): any[] {
   return [];
 }
+
+/**
+ * Returns an admin from EITHER the web cookie session (getAdmin) OR the
+ * mobile bearer token (getMobileUser + role check). Use this in API routes
+ * that must accept admins from both channels — e.g. invoice approval,
+ * product edits from the mobile admin app.
+ */
+export async function getAnyAdmin(request: Request): Promise<AdminUser | null> {
+  const cookieAdmin = await getAdmin();
+  if (cookieAdmin) return cookieAdmin;
+  const mobile = await getMobileUser(request);
+  if (mobile && (mobile as { role?: string }).role === 'admin') return mobile;
+  return null;
+}

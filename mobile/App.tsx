@@ -677,6 +677,8 @@ const useStore = create((set, get) => ({
   setUser: (user) => set({ user }),
   sessionId: null,
   setSessionId: (sessionId) => set({ sessionId }),
+  refreshToken: null,
+  setRefreshToken: (refreshToken) => set({ refreshToken }),
   // Auth headers for every protected API call. The session_id (issued by
   // /api/auth/verify) is sent as a Bearer token the backend validates.
   authHeaders: () => {
@@ -684,6 +686,44 @@ const useStore = create((set, get) => ({
     return sid
       ? { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sid}` }
       : { 'Content-Type': 'application/json' };
+  },
+  // Refresh the Supabase access token when it expires (default 1h). Returns
+  // true if we got a fresh token, false if the refresh_token itself is dead
+  // (in which case the caller should force the user back to Login).
+  refreshSession: async () => {
+    const rt = get().refreshToken;
+    if (!rt) return false;
+    try {
+      const res = await fetch(`${get().getBaseUrl()}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: rt }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (!data.access_token) return false;
+      set({ sessionId: data.access_token, refreshToken: data.refresh_token || rt });
+      await AsyncStorage.setItem('@upkem_session_id', data.access_token);
+      if (data.refresh_token) await AsyncStorage.setItem('@upkem_refresh_token', data.refresh_token);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  // Fetch wrapper that transparently refreshes on 401 and retries once. Use
+  // this for any bearer-protected call so callers don't have to hand-roll
+  // refresh logic. Falls through to a bare fetch if there's no session.
+  authFetch: async (url, init = {}) => {
+    const doFetch = () => fetch(url, {
+      ...init,
+      headers: { ...(init.headers || {}), ...get().authHeaders() },
+    });
+    let res = await doFetch();
+    if (res.status === 401 && get().refreshToken) {
+      const ok = await get().refreshSession();
+      if (ok) res = await doFetch();
+    }
+    return res;
   },
   cart: {},
   products: [],
@@ -1169,8 +1209,10 @@ function LoginScreen({ setCurrentScreen }) {
       if (data.success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         useStore.getState().setSessionId(data.session_id);
+        if (data.refresh_token) useStore.getState().setRefreshToken(data.refresh_token);
         setUser(data.user);
         await AsyncStorage.setItem('@upkem_session_id', data.session_id);
+        if (data.refresh_token) await AsyncStorage.setItem('@upkem_refresh_token', data.refresh_token);
         await AsyncStorage.setItem('@upkem_user', JSON.stringify(data.user));
         // Route straight to the correct home based on role. Previously we
         // hardcoded 'Home' (the customer landing) and let a subscription
@@ -1221,8 +1263,10 @@ function LoginScreen({ setCurrentScreen }) {
       if (data.success) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         useStore.getState().setSessionId(data.session_id);
+        if (data.refresh_token) useStore.getState().setRefreshToken(data.refresh_token);
         setUser(data.user);
         await AsyncStorage.setItem('@upkem_session_id', data.session_id);
+        if (data.refresh_token) await AsyncStorage.setItem('@upkem_refresh_token', data.refresh_token);
         await AsyncStorage.setItem('@upkem_user', JSON.stringify(data.user));
         const isAdmin = data.user?.is_admin || data.user?.role === 'admin';
         setCurrentScreen(isAdmin ? 'AdminHome' : 'Home');
@@ -3331,11 +3375,11 @@ function ProfileScreen({ setCurrentScreen }) {
     Alert.alert("Confirm Logout", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
       { text: "Logout", style: "destructive", onPress: async () => {
-        await AsyncStorage.multiRemove(['@upkem_session_id', '@upkem_user', '@upkem_cached_db']);
+        await AsyncStorage.multiRemove(['@upkem_session_id', '@upkem_refresh_token', '@upkem_user', '@upkem_cached_db']);
         setUser(null);
         clearCart();
         useStore.getState().clearCoupon();
-        useStore.getState().setSessionId(null);
+        useStore.getState().setSessionId(null); useStore.getState().setRefreshToken(null);
         setCurrentScreen('Login');
       }}
     ]);
@@ -3361,11 +3405,11 @@ function ProfileScreen({ setCurrentScreen }) {
                 headers: useStore.getState().authHeaders(),
               });
               if (res.ok) {
-                await AsyncStorage.multiRemove(['@upkem_session_id', '@upkem_user', '@upkem_cached_db']);
+                await AsyncStorage.multiRemove(['@upkem_session_id', '@upkem_refresh_token', '@upkem_user', '@upkem_cached_db']);
                 setUser(null);
                 clearCart();
                 useStore.getState().clearCoupon();
-                useStore.getState().setSessionId(null);
+                useStore.getState().setSessionId(null); useStore.getState().setRefreshToken(null);
                 setCurrentScreen('Login');
                 Alert.alert('Account deleted', 'Your data has been permanently removed.');
               } else {
@@ -3406,11 +3450,18 @@ function ProfileScreen({ setCurrentScreen }) {
 
   // Pending change requests (fetched from server) — used to badge locked fields
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  // Credit request state — separate from profile change requests; customer can
+  // submit an ask ("please raise my limit by ₹X"), admin reviews on their side.
+  const [creditRequests, setCreditRequests] = useState<any[]>([]);
+  const [showCreditReqModal, setShowCreditReqModal] = useState(false);
+  const [creditReqAmount, setCreditReqAmount] = useState('');
+  const [creditReqNote, setCreditReqNote] = useState('');
+  const [submittingCreditReq, setSubmittingCreditReq] = useState(false);
 
   const loadPendingRequests = async () => {
     try {
       const url = `${useStore.getState().getBaseUrl()}/api/profile-change-requests?status=Pending`;
-      const res = await fetch(url, { headers: useStore.getState().authHeaders() });
+      const res = await useStore.getState().authFetch(url);
       if (res.ok) {
         const data = await res.json();
         setPendingRequests(data.requests || []);
@@ -3418,7 +3469,46 @@ function ProfileScreen({ setCurrentScreen }) {
     } catch { /* ignore */ }
   };
 
-  useEffect(() => { loadPendingRequests(); }, []);
+  const loadCreditRequests = async () => {
+    try {
+      const url = `${useStore.getState().getBaseUrl()}/api/credit-requests`;
+      const res = await useStore.getState().authFetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setCreditRequests(data.requests || []);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const submitCreditRequest = async () => {
+    const amt = Number(creditReqAmount.replace(/[^0-9.]/g, ''));
+    if (!Number.isFinite(amt) || amt <= 0) {
+      Alert.alert('Enter an amount', 'How much extra credit do you need?');
+      return;
+    }
+    setSubmittingCreditReq(true);
+    try {
+      const url = `${useStore.getState().getBaseUrl()}/api/credit-requests`;
+      const res = await useStore.getState().authFetch(url, {
+        method: 'POST',
+        body: JSON.stringify({ amount: amt, note: creditReqNote.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Submit failed');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowCreditReqModal(false);
+      setCreditReqAmount('');
+      setCreditReqNote('');
+      loadCreditRequests();
+      Alert.alert('Request sent', 'Admin will review your credit request and notify you once decided.');
+    } catch (e: any) {
+      Alert.alert('Could not submit', e.message || 'Try again.');
+    }
+    setSubmittingCreditReq(false);
+  };
+
+  useEffect(() => { loadPendingRequests(); loadCreditRequests(); }, []);
+  const pendingCreditReq = creditRequests.find((r) => r.status === 'Pending');
 
   // Fields currently in a pending change request
   const pendingFieldKeys = new Set<string>();
@@ -3678,6 +3768,45 @@ function ProfileScreen({ setCurrentScreen }) {
             <View style={{ height: 8, backgroundColor: creditColor, borderRadius: 4, width: `${Math.min(creditUtilization, 100)}%` }} />
           </View>
           <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '600', marginTop: 6, textAlign: 'right' }}>{Math.round(creditUtilization)}% utilized · 60 day terms</Text>
+
+          {/* Request-more-credit CTA + pending state */}
+          {pendingCreditReq ? (
+            <View style={{ marginTop: 14, backgroundColor: '#FEF3C7', borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="time-outline" size={18} color="#B45309" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '900', color: '#78350F' }}>
+                  Request pending · +₹{Number(pendingCreditReq.amount).toLocaleString('en-IN')}
+                </Text>
+                <Text style={{ fontSize: 11, color: '#92400E', fontWeight: '700', marginTop: 2 }}>Admin will review shortly.</Text>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => { Haptics.selectionAsync(); setShowCreditReqModal(true); }}
+              style={{
+                marginTop: 14, borderRadius: 12, borderWidth: 1.5, borderColor: BRAND[600], borderStyle: 'dashed',
+                paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              <Ionicons name="add-circle-outline" size={18} color={BRAND[700]} />
+              <Text style={{ fontSize: 13, fontWeight: '900', color: BRAND[700] }}>Request more credit</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Recent decisions — last 2 non-pending */}
+          {creditRequests.filter((r) => r.status !== 'Pending').slice(0, 2).map((r) => (
+            <View key={r.id} style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons
+                name={r.status === 'Approved' ? 'checkmark-circle' : 'close-circle'}
+                size={14}
+                color={r.status === 'Approved' ? BRAND[600] : '#dc2626'}
+              />
+              <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600', flex: 1 }} numberOfLines={1}>
+                +₹{Number(r.amount).toLocaleString('en-IN')} · {r.status}
+                {r.admin_note ? ` · ${r.admin_note}` : ''}
+              </Text>
+            </View>
+          ))}
         </View>
 
         {/* Removed Make Payment / Bank Details from Profile as per Spec */}
@@ -3788,6 +3917,45 @@ function ProfileScreen({ setCurrentScreen }) {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* Request more credit modal */}
+      <Modal visible={showCreditReqModal} transparent animationType="slide" onRequestClose={() => setShowCreditReqModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlayBottom}>
+          <View style={styles.bottomSheet}>
+            <View style={styles.dragHandle} />
+            <Text style={styles.modalTitle}>Request more credit</Text>
+            <Text style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>
+              Ask admin to raise your credit limit. Current limit ₹{(user.credit_limit || 0).toLocaleString('en-IN')}.
+            </Text>
+            <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Amount (₹)</Text>
+            <TextInput
+              style={[styles.inputFieldConfig, { marginBottom: 14 }]}
+              placeholder="e.g. 50000"
+              keyboardType="numeric"
+              value={creditReqAmount}
+              onChangeText={setCreditReqAmount}
+            />
+            <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Reason (optional)</Text>
+            <TextInput
+              style={[styles.inputFieldConfig, { height: 90, textAlignVertical: 'top', marginBottom: 20 }]}
+              multiline
+              placeholder="Why do you need more credit?"
+              value={creditReqNote}
+              onChangeText={setCreditReqNote}
+            />
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity style={styles.btnCancel} onPress={() => setShowCreditReqModal(false)} disabled={submittingCreditReq}>
+                <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnSave} onPress={submitCreditRequest} disabled={submittingCreditReq}>
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
+                  {submittingCreditReq ? 'Submitting…' : 'Submit request'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* District picker */}
       <Modal visible={showCityPicker} transparent animationType="slide" onRequestClose={() => setShowCityPicker(false)}>
         <View style={styles.modalOverlayBottom}>
@@ -3841,7 +4009,7 @@ function ProfileScreen({ setCurrentScreen }) {
 // raw_override for approvals).
 // ═════════════════════════════════════════════════════════════════════════════
 
-function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onOpenAnalytics, onOpenNotifications, onOpenChangeRequests, onExit }) {
+function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onOpenAnalytics, onOpenNotifications, onOpenChangeRequests, onOpenCreditRequests, onExit }) {
   const usersList = useStore((s) => s.usersList) || [];
   const products = useStore((s) => s.products) || [];
   // NOTE: orders in the store are filtered to the current user by the polling
@@ -3943,6 +4111,13 @@ function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOp
             icon="create-outline"
             color="#7C3AED"
             onPress={onOpenChangeRequests}
+          />
+          <AdminTile
+            title="Credit requests"
+            subtitle="Raise a partner's credit limit"
+            icon="wallet-outline"
+            color="#10B981"
+            onPress={onOpenCreditRequests}
           />
           <AdminTile
             title="Pricing & Discounts"
@@ -5352,6 +5527,153 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
   );
 }
 
+// --- Admin Credit Requests (approve/reject a partner's ask for more credit) ---
+function AdminCreditRequestsScreen({ onBack }: any) {
+  const [requests, setRequests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<any>(null);
+  const [statusFilter, setStatusFilter] = useState<'Pending' | 'Approved' | 'Rejected' | 'all'>('Pending');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const url = `${useStore.getState().getBaseUrl()}/api/credit-requests`;
+      const res = await useStore.getState().authFetch(url);
+      const data = await res.json();
+      const all = data.requests || [];
+      setRequests(statusFilter === 'all' ? all : all.filter((r: any) => r.status === statusFilter));
+    } catch {
+      Alert.alert('Error', 'Could not load credit requests');
+    }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, [statusFilter]);
+
+  const patch = async (id: any, action: 'approve' | 'reject', adminNote?: string) => {
+    setBusyId(id);
+    try {
+      const url = `${useStore.getState().getBaseUrl()}/api/credit-requests/${id}`;
+      const res = await useStore.getState().authFetch(url, {
+        method: 'PATCH',
+        body: JSON.stringify({ action, admin_note: adminNote || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(`Request ${action}d`, action === 'approve' ? 'success' : 'info');
+      load();
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    }
+    setBusyId(null);
+  };
+
+  const promptReject = (id: any) => {
+    Alert.prompt?.('Reject credit request', 'Optional note for the customer', (note) => {
+      patch(id, 'reject', note || undefined);
+    }) ?? patch(id, 'reject');
+  };
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader
+        title="Credit requests"
+        subtitle={`${requests.length} ${statusFilter.toLowerCase()}`}
+        onBack={onBack}
+      />
+      <View style={{ paddingHorizontal: 16, paddingBottom: 8, flexDirection: 'row', gap: 6 }}>
+        {(['Pending', 'Approved', 'Rejected', 'all'] as const).map((s) => {
+          const active = statusFilter === s;
+          return (
+            <TouchableOpacity key={s} onPress={() => setStatusFilter(s)} style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: active ? BRAND[800] : '#f1f5f9' }}>
+              <Text style={{ fontSize: 12, fontWeight: '900', color: active ? '#fff' : '#475569' }}>{s === 'all' ? 'All' : s}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <FlatList
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        data={requests}
+        keyExtractor={(r: any) => String(r.id)}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', marginTop: 60 }}>
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+              <Ionicons name="wallet-outline" size={30} color={BRAND[700]} />
+            </View>
+            <Text style={{ color: '#0f172a', fontSize: 15, fontWeight: '900' }}>No credit requests</Text>
+            <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '700', marginTop: 4 }}>Partners haven't asked for more credit.</Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const busy = busyId === item.id;
+          const isPending = item.status === 'Pending';
+          return (
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+                  <Text style={{ color: BRAND[800], fontSize: 14, fontWeight: '900' }}>{item.store_name?.[0]?.toUpperCase() || '?'}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '900', color: '#0f172a' }} numberOfLines={1}>{item.store_name || 'Unknown partner'}</Text>
+                  <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '700' }}>+91 {item.phone || '—'} · {new Date(item.requested_at).toLocaleDateString()}</Text>
+                </View>
+                <View style={{
+                  paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+                  backgroundColor: item.status === 'Approved' ? BRAND[100] : item.status === 'Rejected' ? '#FEE2E2' : '#FEF3C7',
+                }}>
+                  <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 0.5,
+                    color: item.status === 'Approved' ? BRAND[800] : item.status === 'Rejected' ? '#B91C1C' : '#B45309',
+                  }}>{item.status?.toUpperCase()}</Text>
+                </View>
+              </View>
+
+              <View style={{ backgroundColor: '#F8FAFC', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                <Text style={{ fontSize: 10, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Amount requested</Text>
+                <Text style={{ fontSize: 22, fontWeight: '900', color: BRAND[800], marginTop: 2 }}>
+                  +₹{Number(item.amount).toLocaleString('en-IN')}
+                </Text>
+                {item.note ? (
+                  <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600', fontStyle: 'italic', marginTop: 8 }}>
+                    “{item.note}”
+                  </Text>
+                ) : null}
+              </View>
+
+              {item.admin_note ? (
+                <View style={{ backgroundColor: '#F1F5F9', borderRadius: 8, padding: 8, marginBottom: 12 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 2 }}>Admin note</Text>
+                  <Text style={{ fontSize: 12, color: '#475569', fontWeight: '700' }}>{item.admin_note}</Text>
+                </View>
+              ) : null}
+
+              {isPending && (
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    disabled={busy}
+                    onPress={() => promptReject(item.id)}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', borderWidth: 1.5, borderColor: '#FCA5A5' }}
+                  >
+                    <Text style={{ color: '#B91C1C', fontWeight: '900', fontSize: 13 }}>{busy ? '…' : 'Reject'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    disabled={busy}
+                    onPress={() => patch(item.id, 'approve')}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: BRAND[800] }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13 }}>{busy ? '…' : `Approve +₹${Number(item.amount).toLocaleString('en-IN')}`}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          );
+        }}
+      />
+    </View>
+  );
+}
+
 // --- Admin Profile Change Requests (approve / reject) ---
 function AdminChangeRequestsScreen({ onBack }: any) {
   const [requests, setRequests] = useState<any[]>([]);
@@ -6136,9 +6458,11 @@ export default function App() {
     (async () => {
       try {
         const sessionId = await AsyncStorage.getItem('@upkem_session_id');
+        const refreshToken = await AsyncStorage.getItem('@upkem_refresh_token');
         const userStr = await AsyncStorage.getItem('@upkem_user');
         if (sessionId && userStr) {
           useStore.getState().setSessionId(sessionId);
+          if (refreshToken) useStore.getState().setRefreshToken(refreshToken);
           const u = JSON.parse(userStr);
           useStore.getState().setUser(u);
           setCurrentScreen((u?.is_admin || u?.role === 'admin') ? 'AdminHome' : 'Home');
@@ -6187,7 +6511,9 @@ export default function App() {
     if (!useStore.getState().sessionId) return;
     try {
       const url = useStore.getState().getApiUrl();
-      const res = await fetch(url, { headers: useStore.getState().authHeaders() });
+      // authFetch transparently refreshes the JWT on 401 and retries once,
+      // so a stale token no longer triggers the "OFFLINE MODE" banner.
+      const res = await useStore.getState().authFetch(url);
       if (!res.ok) throw new Error('API Not OK');
       const db = await res.json();
       
@@ -6265,10 +6591,10 @@ export default function App() {
       Alert.alert('Sign out', 'Sign out of the admin portal?', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Sign out', style: 'destructive', onPress: async () => {
-          await AsyncStorage.multiRemove(['@upkem_session_id', '@upkem_user', '@upkem_cached_db']);
+          await AsyncStorage.multiRemove(['@upkem_session_id', '@upkem_refresh_token', '@upkem_user', '@upkem_cached_db']);
           useStore.getState().setUser(null);
           useStore.getState().clearCart();
-          useStore.getState().setSessionId(null);
+          useStore.getState().setSessionId(null); useStore.getState().setRefreshToken(null);
           setCurrentScreen('Login');
         }},
       ]);
@@ -6286,6 +6612,7 @@ export default function App() {
           onOpenAnalytics={() => setCurrentScreen('AdminAnalytics')}
           onOpenNotifications={() => setCurrentScreen('AdminNotifications')}
           onOpenChangeRequests={() => setCurrentScreen('AdminChangeRequests')}
+          onOpenCreditRequests={() => setCurrentScreen('AdminCreditRequests')}
           onExit={adminSignOut}
         />
       </View>
@@ -6354,6 +6681,11 @@ export default function App() {
     if (currentScreen === 'AdminChangeRequests') return (
       <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
         <AdminChangeRequestsScreen onBack={() => setCurrentScreen('AdminHome')} />
+      </View>
+    );
+    if (currentScreen === 'AdminCreditRequests') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminCreditRequestsScreen onBack={() => setCurrentScreen('AdminHome')} />
       </View>
     );
     if (currentScreen === 'AdminPricing') return (

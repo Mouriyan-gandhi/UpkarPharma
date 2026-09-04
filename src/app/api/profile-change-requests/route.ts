@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAdmin, getMobileUser } from '@/lib/auth';
+import { getAnyAdmin, getMobileUser } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // Fields customers may request to change (all others are self-editable via
@@ -12,7 +12,7 @@ const ALLOWED_KEYS = new Set([
 //   Customer: own only
 //   Admin: all (or ?status=Pending for the review queue)
 export async function GET(request: Request) {
-  const admin = await getAdmin();
+  const admin = await getAnyAdmin(request);
   const mobile = admin ? null : await getMobileUser(request);
   if (!admin && !mobile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
 // We could wrap them here for consistency:
 // PATCH /api/profile-change-requests  { id, action: 'approve'|'reject', note? }
 export async function PATCH(request: Request) {
-  const admin = await getAdmin();
+  const admin = await getAnyAdmin(request);
   if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const { id, action, note } = await request.json().catch(() => ({}));
   if (!id || !action) return NextResponse.json({ error: 'id + action required' }, { status: 400 });

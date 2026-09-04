@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
-import { getAdmin, getMobileUser } from '@/lib/auth';
+import { getAnyAdmin } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { checkRateLimit } from '@/lib/rate-limit';
 
@@ -35,15 +35,9 @@ export async function POST(request: Request) {
     );
   }
 
-  // Accept either an authenticated admin (cookie-based web session) or a
-  // bearer-token mobile user whose role check we run manually.
-  const admin = await getAdmin();
-  let isAdmin = !!admin;
-  if (!isAdmin) {
-    const mobile = await getMobileUser(request);
-    isAdmin = !!mobile && (mobile as { role?: string }).role === 'admin';
-  }
-  if (!isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  // getAnyAdmin accepts cookie-based web sessions AND mobile bearer tokens
+  // whose profile has role='admin'.
+  if (!(await getAnyAdmin(request))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const form = await request.formData().catch(() => null);
   const file = form?.get('file');

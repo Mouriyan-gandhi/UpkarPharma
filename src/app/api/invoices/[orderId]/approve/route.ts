@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAdmin } from '@/lib/auth';
+import { getAnyAdmin } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // POST /api/invoices/[orderId]/approve
@@ -12,7 +12,7 @@ export async function POST(
   request: Request,
   ctx: { params: Promise<{ orderId: string }> }
 ) {
-  const admin = await getAdmin();
+  const admin = await getAnyAdmin(request);
   if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { orderId } = await ctx.params;

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import crypto from 'node:crypto';
-import { getAdmin } from '@/lib/auth';
+import { getAnyAdmin } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 function normalizeKey(key: string): string {
@@ -65,7 +65,7 @@ const ALLOWED_MIME = new Set([
 
 export async function POST(request: Request) {
   try {
-    if (!(await getAdmin())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!(await getAnyAdmin(request))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const formData = await request.formData();
     const file = formData.get('file') as File;

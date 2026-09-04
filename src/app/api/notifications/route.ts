@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getAdmin, getMobileUser } from '@/lib/auth';
+import { getAnyAdmin, getMobileUser } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // GET /api/notifications
 // Customer: their own notifications (user_id = them)
 // Admin: their own + all admin-broadcast notifications (for_admin=true)
 export async function GET(request: Request) {
-  const admin = await getAdmin();
+  const admin = await getAnyAdmin(request);
   const mobile = admin ? null : await getMobileUser(request);
   if (!admin && !mobile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 //   { target: 'user', user_id, title, body, type? }    → one row for that user
 // Also fires an Expo push (best-effort) to each recipient with a token.
 export async function POST(request: Request) {
-  const admin = await getAdmin();
+  const admin = await getAnyAdmin(request);
   if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const body = await request.json().catch(() => ({}));
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
 //   { ids: [1,2,3] } — mark specific notifications as read
 //   { all: true }    — mark all of my notifications as read
 export async function PATCH(request: Request) {
-  const admin = await getAdmin();
+  const admin = await getAnyAdmin(request);
   const mobile = admin ? null : await getMobileUser(request);
   if (!admin && !mobile) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
