@@ -12,6 +12,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { create } from 'zustand';
 import Constants from 'expo-constants';
 import * as Print from 'expo-print';
+import * as Updates from 'expo-updates';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
@@ -3951,45 +3952,53 @@ function ProfileScreen({ setCurrentScreen }) {
       {/* Generic field editor modal */}
       <Modal visible={!!editField} transparent animationType="slide" onRequestClose={() => setEditField(null)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayBottom}>
-          <View style={styles.bottomSheet}>
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => setEditField(null)} />
+          <View style={[styles.bottomSheet, { maxHeight: '90%' }]}>
             <View style={styles.dragHandle} />
-            <Text style={styles.modalTitle}>
-              {editField && LOCKED_FIELDS.has(editField.key) ? `Request change: ${editField.label}` : editField?.label}
-            </Text>
-            {editField && LOCKED_FIELDS.has(editField.key) ? (
-              <View style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA', borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 16, flexDirection: 'row' }}>
-                <Ionicons name="shield-checkmark-outline" size={18} color="#C2410C" style={{ marginRight: 10, marginTop: 1 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: '#9A3412', fontSize: 12, fontWeight: '800' }}>Admin approval required</Text>
-                  <Text style={{ color: '#9A3412', fontSize: 12, fontWeight: '500', marginTop: 2, lineHeight: 16 }}>
-                    Identity fields (GST, licence, firm name) can't be changed directly. Your request goes to admin for review — you'll be notified once approved.
-                  </Text>
-                </View>
-              </View>
-            ) : (
-              <Text style={{ color: '#64748b', fontSize: 14, marginBottom: 20 }}>
-                This will update your profile.
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 8 }}
+            >
+              <Text style={styles.modalTitle}>
+                {editField && LOCKED_FIELDS.has(editField.key) ? `Request change: ${editField.label}` : editField?.label}
               </Text>
-            )}
-            <TextInput
-              style={[styles.inputFieldConfig, editField?.multiline ? { height: 100, textAlignVertical: 'top' } : {}, { marginBottom: 20 }]}
-              multiline={editField?.multiline}
-              placeholder={editField?.placeholder || ''}
-              value={editValue}
-              onChangeText={setEditValue}
-              keyboardType={editField?.keyboardType || 'default'}
-              autoCapitalize={editField?.key === 'email' ? 'none' : 'sentences'}
-            />
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity style={styles.btnCancel} onPress={() => setEditField(null)}>
-                <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
-              </TouchableOpacity>
-              <AnimatedPressable style={styles.btnSave} onPress={saveEditField} disabled={savingField}>
-                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
-                  {savingField ? 'Saving…' : (editField && LOCKED_FIELDS.has(editField.key) ? 'Submit for approval' : 'Save')}
+              {editField && LOCKED_FIELDS.has(editField.key) ? (
+                <View style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA', borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 16, flexDirection: 'row' }}>
+                  <Ionicons name="shield-checkmark-outline" size={18} color="#C2410C" style={{ marginRight: 10, marginTop: 1 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: '#9A3412', fontSize: 12, fontWeight: '800' }}>Admin approval required</Text>
+                    <Text style={{ color: '#9A3412', fontSize: 12, fontWeight: '500', marginTop: 2, lineHeight: 16 }}>
+                      Identity fields (GST, licence, firm name) can't be changed directly. Your request goes to admin for review — you'll be notified once approved.
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <Text style={{ color: '#64748b', fontSize: 14, marginBottom: 20 }}>
+                  This will update your profile.
                 </Text>
-              </AnimatedPressable>
-            </View>
+              )}
+              <TextInput
+                style={[styles.inputFieldConfig, editField?.multiline ? { height: 100, textAlignVertical: 'top' } : {}, { marginBottom: 20 }]}
+                multiline={editField?.multiline}
+                placeholder={editField?.placeholder || ''}
+                value={editValue}
+                onChangeText={setEditValue}
+                keyboardType={editField?.keyboardType || 'default'}
+                autoCapitalize={editField?.key === 'email' ? 'none' : 'sentences'}
+                autoFocus
+              />
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity style={styles.btnCancel} onPress={() => setEditField(null)}>
+                  <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.85} style={styles.btnSave} onPress={saveEditField} disabled={savingField}>
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
+                    {savingField ? 'Saving…' : (editField && LOCKED_FIELDS.has(editField.key) ? 'Submit for approval' : 'Save')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -3997,38 +4006,41 @@ function ProfileScreen({ setCurrentScreen }) {
       {/* Request more credit modal */}
       <Modal visible={showCreditReqModal} transparent animationType="slide" onRequestClose={() => setShowCreditReqModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayBottom}>
-          <View style={styles.bottomSheet}>
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => setShowCreditReqModal(false)} />
+          <View style={[styles.bottomSheet, { maxHeight: '90%' }]}>
             <View style={styles.dragHandle} />
-            <Text style={styles.modalTitle}>Request more credit</Text>
-            <Text style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>
-              Ask admin to raise your credit limit. Current limit ₹{(user.credit_limit || 0).toLocaleString('en-IN')}.
-            </Text>
-            <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Amount (₹)</Text>
-            <TextInput
-              style={[styles.inputFieldConfig, { marginBottom: 14 }]}
-              placeholder="e.g. 50000"
-              keyboardType="numeric"
-              value={creditReqAmount}
-              onChangeText={setCreditReqAmount}
-            />
-            <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Reason (optional)</Text>
-            <TextInput
-              style={[styles.inputFieldConfig, { height: 90, textAlignVertical: 'top', marginBottom: 20 }]}
-              multiline
-              placeholder="Why do you need more credit?"
-              value={creditReqNote}
-              onChangeText={setCreditReqNote}
-            />
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity style={styles.btnCancel} onPress={() => setShowCreditReqModal(false)} disabled={submittingCreditReq}>
-                <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.btnSave} onPress={submitCreditRequest} disabled={submittingCreditReq}>
-                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
-                  {submittingCreditReq ? 'Submitting…' : 'Submit request'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+              <Text style={styles.modalTitle}>Request more credit</Text>
+              <Text style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>
+                Ask admin to raise your credit limit. Current limit ₹{(user.credit_limit || 0).toLocaleString('en-IN')}.
+              </Text>
+              <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Amount (₹)</Text>
+              <TextInput
+                style={[styles.inputFieldConfig, { marginBottom: 14 }]}
+                placeholder="e.g. 50000"
+                keyboardType="numeric"
+                value={creditReqAmount}
+                onChangeText={setCreditReqAmount}
+              />
+              <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Reason (optional)</Text>
+              <TextInput
+                style={[styles.inputFieldConfig, { height: 90, textAlignVertical: 'top', marginBottom: 20 }]}
+                multiline
+                placeholder="Why do you need more credit?"
+                value={creditReqNote}
+                onChangeText={setCreditReqNote}
+              />
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity style={styles.btnCancel} onPress={() => setShowCreditReqModal(false)} disabled={submittingCreditReq}>
+                  <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.btnSave} onPress={submitCreditRequest} disabled={submittingCreditReq}>
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
+                    {submittingCreditReq ? 'Submitting…' : 'Submit request'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -4565,7 +4577,10 @@ function AdminUserDetailModal({ user, onClose, onSaved }: any) {
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}
+      >
         <View style={{ backgroundColor: '#F7FAF8', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%', paddingBottom: 24 }}>
           {/* Header */}
           <View style={{ padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center' }}>
@@ -4595,7 +4610,7 @@ function AdminUserDetailModal({ user, onClose, onSaved }: any) {
               );
             })}
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16 }}>
+          <ScrollView contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
             {tab === 'overview' && (
               <View>
                 {!user.is_approved && (
@@ -4713,7 +4728,7 @@ function AdminUserDetailModal({ user, onClose, onSaved }: any) {
             )}
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -5070,7 +5085,7 @@ function AdminInvoiceLinesModal({ orderId, items, onClose, onSaved }: any) {
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
         <View style={{ backgroundColor: '#F7FAF8', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' }}>
           <View style={{ padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center' }}>
             <Text style={{ flex: 1, fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>Edit invoice lines</Text>
@@ -5078,7 +5093,7 @@ function AdminInvoiceLinesModal({ orderId, items, onClose, onSaved }: any) {
               <Ionicons name="close" size={22} color="#475569" />
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
             <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 12 }}>
               Set batch number + expiry per SKU. Only editable while invoice is Draft.
             </Text>
@@ -5115,7 +5130,7 @@ function AdminInvoiceLinesModal({ orderId, items, onClose, onSaved }: any) {
             </TouchableOpacity>
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -5137,7 +5152,7 @@ function AdminDispatchModal({ existing, onClose, onConfirm }: any) {
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
         <View style={{ backgroundColor: '#F7FAF8', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
             <Text style={{ flex: 1, fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>Dispatch order</Text>
@@ -5156,7 +5171,7 @@ function AdminDispatchModal({ existing, onClose, onConfirm }: any) {
             <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>{busy ? 'Dispatching…' : 'Confirm dispatch'}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -6427,7 +6442,7 @@ function AdminSchemeEditModal({ scheme, onClose, onSaved }: any) {
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
         <View style={{ backgroundColor: '#F7FAF8', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' }}>
           <View style={{ padding: 16, borderBottomWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center' }}>
             <Text style={{ flex: 1, fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>{isNew ? 'New scheme' : 'Edit scheme'}</Text>
@@ -6435,7 +6450,7 @@ function AdminSchemeEditModal({ scheme, onClose, onSaved }: any) {
               <Ionicons name="close" size={22} color="#475569" />
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
             <F label="Title" value={form.title} onChangeText={(v: string) => setForm({ ...form, title: v })} placeholder="First-order Derma discount" />
             <F label="Description (optional)" value={form.description} onChangeText={(v: string) => setForm({ ...form, description: v })} placeholder="What the customer sees" multiline />
             <F label="Code (uppercase)" value={form.code} onChangeText={(v: string) => setForm({ ...form, code: v.toUpperCase() })} placeholder="DERMA10" autoCapitalize="characters" />
@@ -6472,7 +6487,7 @@ function AdminSchemeEditModal({ scheme, onClose, onSaved }: any) {
             </TouchableOpacity>
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -6562,6 +6577,24 @@ export default function App() {
       } catch {
         setCurrentScreen('Login');
       }
+    })();
+  }, []);
+
+  // Check for OTA updates on cold start and reload immediately if one is
+  // available. Expo defaults to check-on-launch but only applies on the NEXT
+  // launch — this makes it apply now so users don't have to close/reopen the
+  // app to see a shipped fix. Guarded to only run in built binaries (Updates
+  // is a no-op in Expo Go).
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!Updates.isEnabled) return;
+        const u = await Updates.checkForUpdateAsync();
+        if (u.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch { /* offline or no update — ignore */ }
     })();
   }, []);
 
