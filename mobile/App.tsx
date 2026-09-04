@@ -2057,6 +2057,10 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
   const [sortOption, setSortOption] = useState('name_asc');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [filterShortExpiry, setFilterShortExpiry] = useState(initialCategory === '__short_expiry__');
+  // Type-ahead search inside the filter sheet — Derma launch has ~20
+  // sub-categories which makes the chip cloud hard to scan. Search is only
+  // rendered when there are enough options to justify it.
+  const [systemSearch, setSystemSearch] = useState('');
 
   const categories = [...new Set(productsList.map(p => p.category).filter(Boolean))].sort() as string[];
   const systems = [...new Set(productsList.map(p => p.body_system).filter(Boolean))].sort() as string[];
@@ -2434,22 +2438,61 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
               )}
 
               {/* Body System / Sub-category — always visible; the primary filter in Derma mode */}
-              {systems.length > 0 && (
-                <>
-                  <Text style={styles.filterSectionTitle}>{DERMA_ONLY ? 'Sub-category' : 'Body System / Target'}</Text>
-                  <View style={styles.filterChipsWrap}>
-                    {systems.map(sys => (
-                      <TouchableOpacity
-                        key={sys}
-                        style={[styles.filterChip, selectedSystems.includes(sys) && styles.filterChipActive]}
-                        onPress={() => toggleSystem(sys)}
-                      >
-                        <Text style={[styles.filterChipText, selectedSystems.includes(sys) && styles.filterChipTextActive]}>{sys}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </>
-              )}
+              {systems.length > 0 && (() => {
+                const q = systemSearch.trim().toLowerCase();
+                const filtered = q ? systems.filter(s => s.toLowerCase().includes(q)) : systems;
+                const showSearch = systems.length > 8;
+                return (
+                  <>
+                    <View style={styles.filterSectionTitleRow}>
+                      <Text style={[styles.filterSectionTitle, { marginTop: 0, marginBottom: 0 }]}>{DERMA_ONLY ? 'Sub-category' : 'Body System / Target'}</Text>
+                      {selectedSystems.length > 0 && (
+                        <View style={styles.filterCountBadge}>
+                          <Text style={styles.filterCountText}>{selectedSystems.length}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {showSearch && (
+                      <View style={styles.filterSearchWrap}>
+                        <Ionicons name="search" size={16} color="#94a3b8" />
+                        <TextInput
+                          value={systemSearch}
+                          onChangeText={setSystemSearch}
+                          placeholder="Search sub-categories"
+                          placeholderTextColor="#94a3b8"
+                          style={styles.filterSearchInput}
+                          autoCorrect={false}
+                          autoCapitalize="none"
+                        />
+                        {systemSearch.length > 0 && (
+                          <TouchableOpacity onPress={() => setSystemSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Ionicons name="close-circle" size={18} color="#94a3b8" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+                    <View style={styles.filterChipsWrap}>
+                      {filtered.map(sys => {
+                        const isSelected = selectedSystems.includes(sys);
+                        return (
+                          <TouchableOpacity
+                            key={sys}
+                            style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                            onPress={() => toggleSystem(sys)}
+                            activeOpacity={0.7}
+                          >
+                            {isSelected && <Ionicons name="checkmark" size={14} color={BRAND[800]} style={{ marginRight: 4 }} />}
+                            <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>{sys}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                      {filtered.length === 0 && (
+                        <Text style={styles.filterEmptyText}>No matches for "{systemSearch}"</Text>
+                      )}
+                    </View>
+                  </>
+                );
+              })()}
               <View style={{ height: 24 }} />
             </ScrollView>
             {/* Footer: Reset + Apply */}
@@ -6580,9 +6623,35 @@ const styles = StyleSheet.create({
   radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: BRAND[800] },
   filterOptionText: { fontSize: 16, color: '#475569', fontWeight: '600' },
   filterOptionTextActive: { color: '#1A1A1A', fontWeight: '800' },
-  filterChipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
-  filterChipActive: { backgroundColor: BRAND[100], borderColor: BRAND[800] },
+  filterChipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, rowGap: 12 },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  filterChipActive: { backgroundColor: BRAND[50], borderColor: BRAND[800], borderWidth: 1.5 },
   filterChipText: { fontSize: 13, fontWeight: '600', color: '#475569' },
   filterChipTextActive: { color: BRAND[800], fontWeight: '800' },
+
+  // Sub-category header row (title + count badge) + inline search
+  filterSectionTitleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 20, marginBottom: 12, gap: 8 },
+  filterCountBadge: { backgroundColor: BRAND[800], paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, minWidth: 22, alignItems: 'center' },
+  filterCountText: { color: '#fff', fontSize: 11, fontWeight: '900' },
+  filterSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  filterSearchInput: { flex: 1, fontSize: 14, color: '#0f172a', fontWeight: '500', padding: 0 },
+  filterEmptyText: { color: '#94a3b8', fontSize: 13, fontWeight: '600', paddingVertical: 8 },
 });
