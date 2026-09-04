@@ -6,7 +6,7 @@ import {
   StyleSheet, Text, View, TextInput, TouchableOpacity, Alert,
   FlatList, Image, Modal, KeyboardAvoidingView, Platform, ScrollView,
   LayoutAnimation, UIManager, Animated, Easing, Keyboard, StatusBar,
-  Dimensions, RefreshControl, ActivityIndicator
+  Dimensions, RefreshControl, ActivityIndicator, PanResponder
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { create } from 'zustand';
@@ -1309,7 +1309,7 @@ function LoginScreen({ setCurrentScreen }) {
         <Animated.View style={[styles.loginCard, { transform: [{ translateY: cardTranslateY }], opacity: cardOpacity }]}>
           <View style={styles.dragHandle} />
           <Text style={styles.loginTitle}>{otpSent ? 'Verify your\nidentity.' : 'Sign in to your\ndistributor account.'}</Text>
-          <Text style={styles.loginSubtitle}>{otpSent ? `6-digit code sent to +91 ${phone}` : 'Enter the phone number registered with Upkem.\nWe\'ll send a secure OTP via SMS.'}</Text>
+          <Text style={styles.loginSubtitle}>{otpSent ? `6-digit code sent to +91 ${phone}` : 'Enter your registered phone number and password.'}</Text>
           
           {otpSent && (
             <TouchableOpacity onPress={() => { setOtpSent(false); setOtpDigits(['','','','']); }} style={{ marginTop: -16, marginBottom: 20 }}>
@@ -1327,7 +1327,7 @@ function LoginScreen({ setCurrentScreen }) {
               <View style={[styles.inputWrapper, { marginTop: 12 }]}>
                 <TextInput
                   style={[styles.inputField, { paddingLeft: 16 }]}
-                  placeholder="Dev password (skip OTP)"
+                  placeholder="Password"
                   placeholderTextColor="#94a3b8"
                   secureTextEntry
                   autoCapitalize="none"
@@ -2106,6 +2106,23 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
   // rendered when there are enough options to justify it.
   const [systemSearch, setSystemSearch] = useState('');
 
+  // Swipe-down-to-dismiss PanResponders for the product-detail modal and the
+  // filter sheet. Triggered by dragging the top of the sheet down >60px with
+  // downward velocity. The filter sheet's dismiss ALSO commits the filters
+  // (matches user expectation of "swipe down = apply").
+  const productSheetPan = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+    onPanResponderRelease: (_, g) => {
+      if (g.dy > 60 || g.vy > 0.5) setSelectedProduct(null);
+    },
+  })).current;
+  const filterSheetPan = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+    onPanResponderRelease: (_, g) => {
+      if (g.dy > 60 || g.vy > 0.5) setShowFilterPanel(false);
+    },
+  })).current;
+
   const categories = [...new Set(productsList.map(p => p.category).filter(Boolean))].sort() as string[];
   const systems = [...new Set(productsList.map(p => p.body_system).filter(Boolean))].sort() as string[];
   const companies = ['All', ...new Set(productsList.map(p => p.company).filter(Boolean))];
@@ -2324,7 +2341,14 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
       {/* Product Details Modal */}
       <Modal visible={!!selectedProduct} transparent animationType="slide" onRequestClose={() => setSelectedProduct(null)}>
         <View style={styles.modalOverlayBottom}>
-          <View style={[styles.bottomSheet, { maxHeight: '92%', paddingBottom: 24 }]}>
+          {/* Tap outside the sheet to close — same intent as a swipe-down gesture,
+              works without pulling in a gesture-handler library. */}
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{ flex: 1 }}
+            onPress={() => setSelectedProduct(null)}
+          />
+          <View style={[styles.bottomSheet, { maxHeight: '92%', paddingBottom: 24 }]} {...productSheetPan.panHandlers}>
             <View style={styles.dragHandle} />
             {selectedProduct && (
               <>
@@ -2375,22 +2399,24 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
                   </View>
                 </ScrollView>
 
-                {/* Sticky footer: close / add-to-cart with inline qty */}
+                {/* Sticky footer: close / add-to-cart share the row equally, with
+                    proper horizontal padding so text + icon don't hug the border. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 }}>
                   <TouchableOpacity
                     onPress={() => setSelectedProduct(null)}
-                    style={{ paddingVertical: 16, paddingHorizontal: 20, borderRadius: 16, backgroundColor: '#f1f5f9' }}
+                    style={{ flex: 1, paddingVertical: 16, paddingHorizontal: 16, borderRadius: 16, backgroundColor: '#f1f5f9', alignItems: 'center' }}
                   >
                     <Text style={{ fontSize: 15, fontWeight: '800', color: '#475569' }}>Close</Text>
                   </TouchableOpacity>
                   {(!cart[selectedProduct.id] || cart[selectedProduct.id] === 0) ? (
-                    <AnimatedPressable
-                      style={{ flex: 1, backgroundColor: BRAND[800], paddingVertical: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8, ...SHADOWS.glowGreen }}
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      style={{ flex: 1, backgroundColor: BRAND[800], paddingVertical: 16, paddingHorizontal: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8, ...SHADOWS.glowGreen }}
                       onPress={() => { addToCart(selectedProduct.id); }}
                     >
                       <Ionicons name="cart-outline" size={18} color="#fff" />
                       <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 }}>Add to cart</Text>
-                    </AnimatedPressable>
+                    </TouchableOpacity>
                   ) : (
                     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: BRAND[50], paddingHorizontal: 12, paddingVertical: 10, borderRadius: 16, borderWidth: 1.5, borderColor: BRAND[500] }}>
                       <Text style={{ fontSize: 13, fontWeight: '800', color: BRAND[800] }}>In cart</Text>
@@ -2411,9 +2437,14 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
       </Modal>
 
       {/* Flipkart-style Filter Panel */}
-      <Modal visible={showFilterPanel} transparent animationType="slide">
+      <Modal visible={showFilterPanel} transparent animationType="slide" onRequestClose={() => setShowFilterPanel(false)}>
         <View style={styles.modalOverlayBottom}>
-          <View style={[styles.bottomSheet, { maxHeight: '88%' }]}>
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{ flex: 1 }}
+            onPress={() => setShowFilterPanel(false)}
+          />
+          <View style={[styles.bottomSheet, { maxHeight: '88%' }]} {...filterSheetPan.panHandlers}>
             <View style={styles.dragHandle} />
             <View style={styles.filterPanelHeader}>
               <Text style={styles.modalTitle}>Filters</Text>
@@ -2539,20 +2570,24 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
               })()}
               <View style={{ height: 24 }} />
             </ScrollView>
-            {/* Footer: Reset + Apply */}
+            {/* Footer: Reset + Apply — equal-width, with horizontal padding so
+                the label doesn't hug the borders. Filter application is live
+                (each chip tap already re-runs the query), so Apply just closes
+                the sheet — swipe down does the same. */}
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-              <TouchableOpacity 
-                style={{ flex: 1, paddingVertical: 18, borderRadius: 16, alignItems: 'center', borderWidth: 1.5, borderColor: '#e2e8f0' }} 
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 16, paddingHorizontal: 16, borderRadius: 16, alignItems: 'center', borderWidth: 1.5, borderColor: '#e2e8f0' }}
                 onPress={() => { clearAllFilters(); setShowFilterPanel(false); }}
               >
-                <Text style={{ fontWeight: '700', fontSize: 15, color: '#475569' }}>Reset</Text>
+                <Text style={{ fontWeight: '800', fontSize: 15, color: '#475569' }}>Reset</Text>
               </TouchableOpacity>
-              <AnimatedPressable 
-                style={{ flex: 1, paddingVertical: 18, borderRadius: 16, alignItems: 'center', backgroundColor: BRAND[800] }} 
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={{ flex: 1, paddingVertical: 16, paddingHorizontal: 16, borderRadius: 16, alignItems: 'center', backgroundColor: BRAND[800] }}
                 onPress={() => setShowFilterPanel(false)}
               >
                 <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>Apply filters</Text>
-              </AnimatedPressable>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -6570,7 +6605,11 @@ export default function App() {
 
   useEffect(() => {
     fetchAPI();
-    const interval = setInterval(fetchAPI, 5000); // Poll every 5s
+    // 3s poll keeps the customer & admin surfaces feeling live without holding
+    // a persistent WebSocket connection (Supabase realtime IS enabled on
+    // orders/invoices/notifications/credit_requests — could be swapped in
+    // later if 3s ever feels sluggish for a specific flow).
+    const interval = setInterval(fetchAPI, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -6815,10 +6854,10 @@ const styles = StyleSheet.create({
   categoryText: { color: '#64748b', fontWeight: '700', fontSize: 14 },
   categoryTextActive: { color: '#ffffff' },
 
-  systemPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: '#f1f5f9', marginRight: 8 },
-  systemPillActive: { backgroundColor: BRAND[100] },
+  systemPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: '#f1f5f9', marginRight: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+  systemPillActive: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: BRAND[100], marginRight: 8, borderWidth: 1, borderColor: BRAND[300] },
   systemText: { color: '#64748b', fontWeight: '600', fontSize: 13 },
-  systemTextActive: { color: BRAND[800], fontWeight: '700' },
+  systemTextActive: { color: BRAND[800], fontWeight: '800', fontSize: 13 },
   
   // Products
   productCard: { backgroundColor: '#ffffff', padding: 20, borderRadius: 24, marginBottom: 16, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm },
