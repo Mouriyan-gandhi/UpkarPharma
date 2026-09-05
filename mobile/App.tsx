@@ -1287,12 +1287,13 @@ function LoginScreen({ setCurrentScreen }) {
     setIsLoading(false);
   };
 
+  // Renamed intent — MSG91 SMS OTP isn't wired yet, so the only valid path
+  // is phone+password. Button label reflects that. Kept the function name
+  // in case any wiring below references it.
   const requestOtp = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    if (phone.length < 10) return Alert.alert('Invalid', 'Enter a valid 10-digit phone number');
-    if (!password || password.length === 0) {
-      return Alert.alert('Password required', 'Enter the password shared by your distributor. SMS-based OTP login isn\'t enabled yet — coming with the MSG91 rollout.');
-    }
+    if (phone.length < 10) return Alert.alert('Invalid phone', 'Enter a valid 10-digit phone number');
+    if (!password || password.length === 0) return Alert.alert('Password required', 'Enter your password to sign in.');
     return devLogin();
   };
 
@@ -1393,9 +1394,7 @@ function LoginScreen({ setCurrentScreen }) {
               <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
                 <AnimatedPressable style={styles.buttonPrimary} onPress={requestOtp} disabled={isLoading}>
                   <Text style={styles.buttonPrimaryText}>
-                    {isLoading
-                      ? (password ? 'Signing in...' : 'Sending...')
-                      : (password ? 'Sign in  →' : 'Send OTP  →')}
+                    {isLoading ? 'Signing in…' : 'Sign in  →'}
                   </Text>
                 </AnimatedPressable>
               </Animated.View>
@@ -2455,15 +2454,46 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
                     ) : null}
                   </View>
 
+                  {/* Composition — monospace so batch/strength numbers line up */}
                   <View style={styles.detailInfoBox}>
-                    <Text style={styles.detailInfoLabel}>Composition</Text>
-                    <Text style={styles.detailInfoValue}>{selectedProduct.composition || 'Standard Formulation'}</Text>
-                  </View>
-                  <View style={styles.detailInfoBox}>
-                    <Text style={styles.detailInfoLabel}>Description & Usage</Text>
-                    <Text style={[styles.detailInfoValue, { color: '#475569', lineHeight: 22 }]}>
-                      {selectedProduct.description || 'No description available for this SKU.'}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <Ionicons name="flask-outline" size={13} color="#64748b" />
+                      <Text style={styles.detailInfoLabel}>Composition</Text>
+                    </View>
+                    <Text style={[styles.detailInfoValue, { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 13, lineHeight: 20, color: '#0f172a' }]}>
+                      {selectedProduct.composition || 'Standard Formulation'}
                     </Text>
+                  </View>
+
+                  {/* Description — split into paragraphs on newlines so the
+                      brochure copy renders with breathing room instead of one
+                      wall of grey. Auto-detects "Indications:" / "Directions:"
+                      style prefixes and bolds them. */}
+                  <View style={styles.detailInfoBox}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <Ionicons name="reader-outline" size={13} color="#64748b" />
+                      <Text style={styles.detailInfoLabel}>About this product</Text>
+                    </View>
+                    {(() => {
+                      const raw = (selectedProduct.description || '').trim();
+                      if (!raw) return <Text style={[styles.detailInfoValue, { color: '#94a3b8', fontStyle: 'italic' }]}>No description available for this SKU.</Text>;
+                      const paragraphs = raw.split(/\n{1,}|(?<=[.!?])\s{2,}/).map(s => s.trim()).filter(Boolean);
+                      return paragraphs.map((p, i) => {
+                        // Match a leading "LABEL:" prefix and render it bold.
+                        const m = p.match(/^([A-Z][A-Za-z /&]{2,25}):\s*(.*)$/);
+                        if (m) {
+                          return (
+                            <View key={i} style={{ marginBottom: 8 }}>
+                              <Text style={{ fontSize: 12, fontWeight: '900', color: BRAND[800], textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>{m[1]}</Text>
+                              <Text style={{ fontSize: 14, color: '#334155', fontWeight: '500', lineHeight: 22 }}>{m[2]}</Text>
+                            </View>
+                          );
+                        }
+                        return (
+                          <Text key={i} style={{ fontSize: 14, color: '#334155', fontWeight: '500', lineHeight: 22, marginBottom: i < paragraphs.length - 1 ? 8 : 0 }}>{p}</Text>
+                        );
+                      });
+                    })()}
                   </View>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 8, backgroundColor: '#f8fafc', padding: 16, borderRadius: 16 }}>
                     <View>

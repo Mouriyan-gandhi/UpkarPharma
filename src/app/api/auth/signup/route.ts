@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { pushToAdmins } from '@/lib/push';
 import crypto from 'node:crypto';
 
 function toE164(phone: string): string {
@@ -125,6 +126,15 @@ export async function POST(request: Request) {
       await sb.auth.admin.deleteUser(created.user.id).catch(() => {});
       return NextResponse.json({ error: upErr.message }, { status: 500 });
     }
+
+    // Fire admin push + bell entry. Without this, admins had no idea a new
+    // partner had signed up until they happened to open the Approvals screen.
+    void pushToAdmins({
+      type: 'signup_pending',
+      title: 'New partner signup',
+      body: `${store_name} (+91 ${phoneDigits.slice(-10)}) is awaiting approval.`,
+      data: { user_id: created.user.id, phone: phoneDigits, store_name, user_type },
+    });
 
     return NextResponse.json({
       success: true,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAnyAdmin, getMobileUser, getWebUser } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { pushToAdmins } from '@/lib/push';
 
 // GET  /api/credit-requests
 //   - admin: returns all requests (newest first)
@@ -75,5 +76,16 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Real push to admins. Bell row is already inserted by the on_credit_request
+  // trigger in migration 0004; this fires the phone push so admin doesn't
+  // need the app open to hear about it.
+  void pushToAdmins({
+    type: 'credit_request_new',
+    title: 'New credit request',
+    body: `${customer.store_name || 'A partner'} requested ₹${amount.toLocaleString('en-IN')} additional credit.`,
+    data: { request_id: data?.id, user_id: customer.id, amount },
+  });
+
   return NextResponse.json({ request: data });
 }

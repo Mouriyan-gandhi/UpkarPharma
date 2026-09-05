@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getAdmin, getMobileUser, getWebUser } from '@/lib/auth';
+import { getAdmin, getMobileUser, getWebUser, getAnyAdmin } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createDraftInvoiceForOrder } from '@/lib/invoice';
+import { pushToAdmins } from '@/lib/push';
 
 const MIN_ORDER_VALUE = 2500;
 
@@ -329,13 +330,12 @@ export async function POST(request: Request) {
           .eq('code', schemeCode);
       }
 
-      // Notify admins in real-time
-      await sb.from('notifications').insert({
-        for_admin: true,
+      // Notify admins — real push AND in-app bell entry.
+      void pushToAdmins({
         type: 'order_placed',
         title: 'New order placed',
         body: `${mobileUser.store_name} placed order ${item.id} for ₹${total}`,
-        meta: { order_id: item.id, user_id: mobileUser.id, amount: total },
+        data: { order_id: item.id, user_id: mobileUser.id, amount: total },
       });
 
       return NextResponse.json({ success: true });
@@ -403,7 +403,23 @@ export async function POST(request: Request) {
     // ── raw_override — used by admin panel for approve toggle ───────────────
     if (action === 'raw_override' && admin && body.db?.users) {
       for (const u of body.db.users) {
+        // Look up prior state so we only notify on the actual is_approved
+        // false → true transition (idempotent — running the toggle twice
+        // won't spam a second welcome push).
+        const { data: prev } = await sb.from('users')
+          .select('id, is_approved, store_name')
+          .eq('phone', u.phone).maybeSingle();
         await sb.from('users').update({ is_approved: !!u.is_approved }).eq('phone', u.phone);
+        if (prev && !prev.is_approved && u.is_approved) {
+          // Import lazily so /api/data cold-start doesn't drag the push helper
+          const { pushToUser } = await import('@/lib/push');
+          void pushToUser(prev.id, {
+            type: 'signup_approved',
+            title: 'Welcome to UPKEM',
+            body: `Your account is approved. Log in to start ordering.`,
+            data: { user_id: prev.id },
+          });
+        }
       }
       return NextResponse.json({ success: true });
     }

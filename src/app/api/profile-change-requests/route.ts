@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAnyAdmin, getMobileUser } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { pushToAdmins, pushToUser } from '@/lib/push';
 
 // Fields customers may request to change (all others are self-editable via
 // /api/data update_address or profile screen directly).
@@ -70,6 +71,17 @@ export async function POST(request: Request) {
   }).select('*').single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Real push to admins. The DB trigger inserts the bell row already, so
+  // we only need to fire the push side here — pass a lightweight helper
+  // that skips the duplicate bell insert.
+  const fields = Object.keys(cleaned).join(', ');
+  void pushToAdmins({
+    type: 'profile_change_requested',
+    title: 'Profile change request',
+    body: `${mobile.store_name || 'A partner'} wants to update: ${fields}`,
+    data: { request_id: data?.id, user_id: mobile.id, changes: cleaned },
+  });
   return NextResponse.json({ success: true, request: data });
 }
 
