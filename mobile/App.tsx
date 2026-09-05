@@ -751,6 +751,33 @@ const useStore = create((set, get) => ({
     }
     return res;
   },
+  // Manual full refresh — pull-to-refresh handlers call this. Bypasses the
+  // 30s poll and forces a fresh /api/data pull. Returns true on success.
+  refreshAll: async (): Promise<boolean> => {
+    if (!get().sessionId) return false;
+    try {
+      const res = await get().authFetch(get().getApiUrl());
+      if (!res.ok) return false;
+      const db = await res.json();
+      get().setProducts(db.products || []);
+      get().setUsersList(db.users || []);
+      get().setSchemes(db.schemes || []);
+      const currUser = get().user;
+      if (currUser) {
+        const isAdmin = currUser.is_admin || currUser.role === 'admin';
+        const userOrders = isAdmin
+          ? (db.orders || [])
+          : (db.orders || []).filter((o: any) => o.phone === currUser.phone || o.store === currUser.store_name || o.user_phone === currUser.phone || o.store_name === currUser.store_name);
+        get().setOrders(userOrders);
+        const liveUser = (db.users || []).find((u: any) => u.phone === currUser.phone);
+        if (liveUser) {
+          get().setUser({ ...currUser, ...liveUser });
+          AsyncStorage.setItem('@upkem_user', JSON.stringify({ ...currUser, ...liveUser })).catch(() => {});
+        }
+      }
+      return true;
+    } catch { return false; }
+  },
   cart: {},
   products: [],
   setProducts: (products) => set({ products }),
@@ -1523,17 +1550,34 @@ function getMissingProfileFields(user: any): ProfileField[] {
 }
 
 // --- Home Screen ---
-const HOME_CATEGORIES = [
-  { name: 'Analgesics',       icon: 'medkit-outline',          bg: BRAND[100] },
-  { name: 'Antibiotics',      icon: 'medical-outline',         bg: BRAND[100] },
-  { name: 'Diabetic Care',    icon: 'fitness-outline',         bg: BRAND[100] },
-  { name: 'Allergy',          icon: 'leaf-outline',            bg: BRAND[100] },
-  { name: 'Gastrointestinal', icon: 'nutrition-outline',       bg: BRAND[100] },
-  { name: 'Vitamins',         icon: 'sunny-outline',           bg: BRAND[100] },
-  { name: 'Devices',          icon: 'hardware-chip-outline',   bg: BRAND[100] },
-  { name: 'Syrups',           icon: 'flask-outline',           bg: BRAND[100] },
-  { name: 'First Aid',        icon: 'bandage-outline',         bg: BRAND[100] },
-  { name: 'Ointments',        icon: 'color-fill-outline',      bg: BRAND[100] },
+// Home category tiles. In DERMA mode these are body_system sub-categories
+// (Sunscreen, Moisturizer, etc.) matching the Vakul brochure taxonomy — the
+// old medical categories (Analgesics, Antibiotics…) never had Derma stock
+// behind them, so tapping them produced empty screens.
+//   filterKey: 'body_system' | 'category' — which column to filter on
+//              when tapped. In Derma mode we always filter body_system.
+const HOME_CATEGORIES = DERMA_ONLY ? [
+  { name: 'Sunscreen',                filterKey: 'body_system', icon: 'sunny-outline',        bg: BRAND[100] },
+  { name: 'Moisturizer & Skin Care',  filterKey: 'body_system', icon: 'water-outline',        bg: BRAND[100] },
+  { name: 'Face Wash & Cleanser',     filterKey: 'body_system', icon: 'sparkles-outline',     bg: BRAND[100] },
+  { name: 'Acne',                     filterKey: 'body_system', icon: 'bandage-outline',      bg: BRAND[100] },
+  { name: 'Fairness & Depigmentation',filterKey: 'body_system', icon: 'color-palette-outline',bg: BRAND[100] },
+  { name: 'Hair Care',                filterKey: 'body_system', icon: 'cut-outline',          bg: BRAND[100] },
+  { name: 'Antifungal',               filterKey: 'body_system', icon: 'leaf-outline',         bg: BRAND[100] },
+  { name: 'Antibacterial',            filterKey: 'body_system', icon: 'shield-outline',       bg: BRAND[100] },
+  { name: 'Steroid',                  filterKey: 'body_system', icon: 'pulse-outline',        bg: BRAND[100] },
+  { name: 'Scabies & Lice',           filterKey: 'body_system', icon: 'bug-outline',          bg: BRAND[100] },
+] : [
+  { name: 'Analgesics',       filterKey: 'category', icon: 'medkit-outline',          bg: BRAND[100] },
+  { name: 'Antibiotics',      filterKey: 'category', icon: 'medical-outline',         bg: BRAND[100] },
+  { name: 'Diabetic Care',    filterKey: 'category', icon: 'fitness-outline',         bg: BRAND[100] },
+  { name: 'Allergy',          filterKey: 'category', icon: 'leaf-outline',            bg: BRAND[100] },
+  { name: 'Gastrointestinal', filterKey: 'category', icon: 'nutrition-outline',       bg: BRAND[100] },
+  { name: 'Vitamins',         filterKey: 'category', icon: 'sunny-outline',           bg: BRAND[100] },
+  { name: 'Devices',          filterKey: 'category', icon: 'hardware-chip-outline',   bg: BRAND[100] },
+  { name: 'Syrups',           filterKey: 'category', icon: 'flask-outline',           bg: BRAND[100] },
+  { name: 'First Aid',        filterKey: 'category', icon: 'bandage-outline',         bg: BRAND[100] },
+  { name: 'Ointments',        filterKey: 'category', icon: 'color-fill-outline',      bg: BRAND[100] },
 ];
 
 // Banner slots — admin-editable later. Keep 4 slots.
@@ -1852,7 +1896,14 @@ function HomeScreen({ setCurrentScreen, onCategorySelect, onRefresh }) {
             <TouchableOpacity
               key={cat.name}
               style={{ alignItems: 'center', width: 68 }}
-              onPress={() => { Haptics.selectionAsync(); onCategorySelect(cat.name); setCurrentScreen('Catalog'); }}
+              onPress={() => {
+                Haptics.selectionAsync();
+                // Encode body_system tiles with a "sys:" prefix so CatalogScreen
+                // seeds selectedSystems instead of selectedCategories. In Derma
+                // mode all category tiles are body_system tiles.
+                onCategorySelect(cat.filterKey === 'body_system' ? `sys:${cat.name}` : cat.name);
+                setCurrentScreen('Catalog');
+              }}
               activeOpacity={0.8}
             >
               <View style={[styles.homeCategoryCircle, { backgroundColor: BRAND[800], width: 56, height: 56, borderRadius: 20, marginBottom: 6 }]}>
@@ -2118,10 +2169,17 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Multi-select filters. `__short_expiry__` is a sentinel from the home banner.
+  // A "sys:X" prefix on initialCategory means the tile clicked was a body_system
+  // sub-category (Derma sub-cat), not a top-level category — seed the right list.
+  const _isSystem = typeof initialCategory === 'string' && initialCategory.startsWith('sys:');
+  const _initialSys = _isSystem ? initialCategory.slice(4) : '';
+  const _initialCat = _isSystem ? null : initialCategory;
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
-    initialCategory && initialCategory !== 'All' && initialCategory !== '__short_expiry__' ? [initialCategory] : []
+    _initialCat && _initialCat !== 'All' && _initialCat !== '__short_expiry__' ? [_initialCat] : []
   );
-  const [selectedSystems, setSelectedSystems] = useState<string[]>([]);
+  const [selectedSystems, setSelectedSystems] = useState<string[]>(
+    _initialSys ? [_initialSys] : []
+  );
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState('All');
   const [sortOption, setSortOption] = useState('name_asc');
@@ -3521,7 +3579,10 @@ function ProfileScreen({ setCurrentScreen }) {
   };
 
   // Identity/verification fields — cannot be edited directly, need admin approval
-  const LOCKED_FIELDS = new Set(['store_name', 'gst_number', 'drug_license', 'registration_number', 'user_type']);
+  // Locked = compliance/invoice-critical fields that need admin approval to change.
+  // user_type used to be locked but it's a self-classification (Retailer/Distributor/
+  // Chemist) — customers can pick their own without approval.
+  const LOCKED_FIELDS = new Set(['store_name', 'gst_number', 'drug_license', 'registration_number']);
 
   // Pending change requests (fetched from server) — used to badge locked fields
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
@@ -3532,6 +3593,76 @@ function ProfileScreen({ setCurrentScreen }) {
   const [creditReqAmount, setCreditReqAmount] = useState('');
   const [creditReqNote, setCreditReqNote] = useState('');
   const [submittingCreditReq, setSubmittingCreditReq] = useState(false);
+
+  // Single-form profile editor. One sheet with every field, so the customer
+  // doesn't have to open a modal per row. Free-edit fields go through
+  // update_own_profile; locked fields collect into one change request.
+  const [showEditAll, setShowEditAll] = useState(false);
+  const [savingEditAll, setSavingEditAll] = useState(false);
+  const emptyForm = () => ({
+    email: user.email || '',
+    address: user.address || '',
+    city: user.city || '',
+    zone: user.zone || '',
+    user_type: user.user_type || '',
+    google_maps_link: user.google_maps_link || '',
+    store_name: user.store_name || '',
+    gst_number: user.gst_number || '',
+    drug_license: user.drug_license || '',
+    registration_number: user.registration_number || '',
+  });
+  const [editAllForm, setEditAllForm] = useState<any>(emptyForm());
+  useEffect(() => { setEditAllForm(emptyForm()); }, [user.id]);
+
+  const saveEditAll = async () => {
+    setSavingEditAll(true);
+    try {
+      const freeKeys = ['email', 'address', 'city', 'zone', 'user_type', 'google_maps_link'];
+      const lockedKeys = ['store_name', 'gst_number', 'drug_license', 'registration_number'];
+      const freePatch: any = {};
+      const lockedPatch: any = {};
+      for (const k of freeKeys) {
+        if ((editAllForm[k] || '') !== (user[k] || '')) freePatch[k] = editAllForm[k] || null;
+      }
+      for (const k of lockedKeys) {
+        if ((editAllForm[k] || '') !== (user[k] || '')) lockedPatch[k] = editAllForm[k] || null;
+      }
+      // Free fields — one API call
+      if (Object.keys(freePatch).length > 0) {
+        const res = await useStore.getState().authFetch(useStore.getState().getApiUrl(), {
+          method: 'POST',
+          body: JSON.stringify({ action: 'update_own_profile', ...freePatch }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error || 'Update failed');
+        }
+        setUser({ ...user, ...freePatch });
+      }
+      // Locked fields — one batched change request
+      if (Object.keys(lockedPatch).length > 0) {
+        const res = await fetch(`${useStore.getState().getBaseUrl()}/api/profile-change-requests`, {
+          method: 'POST',
+          headers: useStore.getState().authHeaders(),
+          body: JSON.stringify({ changes: lockedPatch }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error || 'Change request failed');
+        }
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowEditAll(false);
+      loadPendingRequests();
+      const bits: string[] = [];
+      if (Object.keys(freePatch).length > 0) bits.push('profile updated');
+      if (Object.keys(lockedPatch).length > 0) bits.push('change request sent to admin');
+      if (bits.length > 0) showToast(bits.join(' · '), 'success');
+    } catch (e: any) {
+      Alert.alert('Could not save', e.message || 'Try again in a moment.');
+    }
+    setSavingEditAll(false);
+  };
 
   const loadPendingRequests = async () => {
     try {
@@ -3702,6 +3833,23 @@ function ProfileScreen({ setCurrentScreen }) {
             ) : null}
           </View>
         </View>
+
+        {/* Prominent single-form editor CTA. Solves the "too many taps to edit
+            profile" ux issue — one sheet, everything in one place. */}
+        <TouchableOpacity
+          onPress={() => { Haptics.selectionAsync(); setEditAllForm(emptyForm()); setShowEditAll(true); }}
+          activeOpacity={0.85}
+          style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center', ...SHADOWS.sm }}
+        >
+          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+            <Ionicons name="create-outline" size={20} color={BRAND[800]} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '900', color: '#0f172a' }}>Edit all profile details</Text>
+            <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600', marginTop: 2 }}>Update everything in one form · locked fields go to admin</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+        </TouchableOpacity>
 
         {/* Complete your profile — action list of missing fields */}
         {missingFields.length > 0 && (
@@ -4020,6 +4168,83 @@ function ProfileScreen({ setCurrentScreen }) {
                 <TouchableOpacity activeOpacity={0.85} style={styles.btnSave} onPress={saveEditField} disabled={savingField}>
                   <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
                     {savingField ? 'Saving…' : (editField && LOCKED_FIELDS.has(editField.key) ? 'Submit for approval' : 'Save')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Edit-all-details mega-form modal */}
+      <Modal visible={showEditAll} transparent animationType="slide" onRequestClose={() => setShowEditAll(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayBottom}>
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => setShowEditAll(false)} />
+          <View style={[styles.bottomSheet, { maxHeight: '92%' }]}>
+            <View style={styles.dragHandle} />
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+              <Text style={styles.modalTitle}>Edit profile</Text>
+              <Text style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>
+                Everything below saves in one go. Fields with a lock go to admin for approval.
+              </Text>
+
+              {/* Free-edit block */}
+              {[
+                { key: 'user_type', label: 'Business type', placeholder: 'Retailer / Distributor / Chemist' },
+                { key: 'email', label: 'Email', placeholder: 'you@firm.com', keyboardType: 'email-address' },
+                { key: 'address', label: 'Delivery address', placeholder: 'Building, street, area, PIN…', multiline: true },
+                { key: 'city', label: 'City', placeholder: 'e.g. Chennai' },
+                { key: 'zone', label: 'State / Zone', placeholder: 'e.g. Tamil Nadu' },
+                { key: 'google_maps_link', label: 'Google Maps link', placeholder: 'https://maps.app.goo.gl/…', keyboardType: 'url' },
+              ].map((f) => (
+                <View key={f.key} style={{ marginBottom: 12 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{f.label}</Text>
+                  <TextInput
+                    value={editAllForm[f.key]}
+                    onChangeText={(v) => setEditAllForm({ ...editAllForm, [f.key]: v })}
+                    placeholder={f.placeholder}
+                    placeholderTextColor="#94a3b8"
+                    multiline={f.multiline}
+                    keyboardType={f.keyboardType as any}
+                    autoCapitalize={f.key === 'email' || f.key === 'google_maps_link' ? 'none' : 'sentences'}
+                    style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', minHeight: f.multiline ? 64 : undefined, backgroundColor: '#fff' }}
+                  />
+                </View>
+              ))}
+
+              {/* Locked block — need admin approval */}
+              <View style={{ marginTop: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="lock-closed-outline" size={14} color="#B45309" />
+                <Text style={{ fontSize: 11, fontWeight: '900', color: '#B45309', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Compliance fields — admin approval required
+                </Text>
+              </View>
+              {[
+                { key: 'store_name', label: 'Store / firm name', placeholder: 'Registered pharmacy name' },
+                { key: 'gst_number', label: 'GST number', placeholder: '15-char GSTIN' },
+                { key: 'drug_license', label: 'Drug licence', placeholder: 'e.g. TN-02-20B-XXXXX' },
+                { key: 'registration_number', label: 'Registration number', placeholder: 'Council / firm registration' },
+              ].map((f) => (
+                <View key={f.key} style={{ marginBottom: 12 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{f.label}</Text>
+                  <TextInput
+                    value={editAllForm[f.key]}
+                    onChangeText={(v) => setEditAllForm({ ...editAllForm, [f.key]: v })}
+                    placeholder={f.placeholder}
+                    placeholderTextColor="#94a3b8"
+                    autoCapitalize="characters"
+                    style={{ borderWidth: 1, borderColor: '#FDE68A', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', backgroundColor: '#FEFCE8' }}
+                  />
+                </View>
+              ))}
+
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <TouchableOpacity style={styles.btnCancel} onPress={() => setShowEditAll(false)} disabled={savingEditAll}>
+                  <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.btnSave} onPress={saveEditAll} disabled={savingEditAll}>
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
+                    {savingEditAll ? 'Saving…' : 'Save all'}
                   </Text>
                 </TouchableOpacity>
               </View>

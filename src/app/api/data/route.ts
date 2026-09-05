@@ -450,7 +450,10 @@ export async function POST(request: Request) {
     // through /api/profile-change-requests for admin approval.
     if (action === 'update_own_profile' && mobileUser) {
       const patch: any = {};
-      for (const k of ['email', 'address', 'city', 'zone', 'google_maps_link']) {
+      // user_type is a self-classification (Retailer/Distributor/Chemist),
+      // not a compliance field — customer can pick their own without going
+      // through admin approval.
+      for (const k of ['email', 'address', 'city', 'zone', 'google_maps_link', 'user_type']) {
         if (body[k] !== undefined) patch[k] = body[k] || null;
       }
       if (Object.keys(patch).length === 0) {
