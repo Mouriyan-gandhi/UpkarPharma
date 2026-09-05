@@ -6,7 +6,7 @@ import {
   StyleSheet, Text, View, TextInput, TouchableOpacity, Alert,
   FlatList, Image, Modal, KeyboardAvoidingView, Platform, ScrollView,
   LayoutAnimation, UIManager, Animated, Easing, Keyboard, StatusBar,
-  Dimensions, RefreshControl, ActivityIndicator, PanResponder, AppState
+  Dimensions, RefreshControl, ActivityIndicator, PanResponder, AppState, Linking
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { create } from 'zustand';
@@ -19,6 +19,8 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import * as WebBrowser from 'expo-web-browser';
+import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 
@@ -858,6 +860,18 @@ const useStore = create((set, get) => ({
   // Schemes / Coupons
   schemes: [],
   setSchemes: (schemes) => set({ schemes }),
+
+  // Brochures (product catalogs / marketing PDFs)
+  brochures: [],
+  setBrochures: (brochures) => set({ brochures }),
+  loadBrochures: async () => {
+    try {
+      const res = await get().authFetch(`${get().getBaseUrl()}/api/brochures`);
+      if (!res.ok) return;
+      const data = await res.json();
+      set({ brochures: data.brochures || [] });
+    } catch { /* offline — keep whatever we have */ }
+  },
   appliedCoupon: null,
   setAppliedCoupon: (coupon) => set({ appliedCoupon: coupon }),
   clearCoupon: () => set({ appliedCoupon: null }),
@@ -1878,6 +1892,24 @@ function HomeScreen({ setCurrentScreen, onCategorySelect, onRefresh }) {
 
         {/* 1. HERO BANNER CAROUSEL */}
         <HeroCarousel onAction={handleBanner} />
+
+        {/* Brochure entry — surfaces the Vakul catalog + any future
+            uploads. Placed under the hero so it's discoverable but doesn't
+            crowd Categories. */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => { Haptics.selectionAsync(); setCurrentScreen('Brochures'); }}
+          style={{ marginHorizontal: 16, marginBottom: 20, marginTop: 4, borderRadius: 16, padding: 14, backgroundColor: '#fff', borderWidth: 1, borderColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center', ...SHADOWS.sm }}
+        >
+          <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+            <Ionicons name="document-text" size={22} color={BRAND[800]} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '900', color: '#0f172a' }}>Product brochures</Text>
+            <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginTop: 2 }}>Vakul Derma catalog + more · view in-app</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
+        </TouchableOpacity>
 
         {/* 2. CATEGORIES */}
         <View style={styles.homeSectionRow}>
@@ -3526,6 +3558,169 @@ function OrderHistoryScreen({ setCurrentScreen, onSelectOrder }) {
 }
 
 // --- Profile Screen (Spec 18) ---
+// ─── Brochures — customer-facing list + inline PDF viewer ────────────────────
+// Brochures are marketing PDFs (Vakul catalog, etc.) admins upload. Customers
+// see them as a card grid; tapping opens the PDF in-app (Google Docs viewer
+// wrapped in a WebView so we don't need a native PDF binary). Fallback: opens
+// in the OS's default browser via expo-web-browser if the WebView fails.
+function BrochuresScreen({ setCurrentScreen, onOpenBrochure }: any) {
+  const brochures = useStore((s) => s.brochures) || [];
+  const loadBrochures = useStore((s) => s.loadBrochures);
+  const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => { loadBrochures(); }, []);
+  const onRefresh = async () => { setRefreshing(true); await loadBrochures(); setRefreshing(false); };
+
+  const filtered = brochures.filter((b: any) => {
+    if (!query.trim()) return true;
+    const s = query.toLowerCase();
+    return (b.title || '').toLowerCase().includes(s)
+        || (b.company || '').toLowerCase().includes(s)
+        || (b.category || '').toLowerCase().includes(s);
+  });
+
+  const fmtSize = (n?: number) => {
+    if (!n) return '';
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  };
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 }}>
+        <TouchableOpacity onPress={() => setCurrentScreen('Home')} style={{ marginRight: 12, padding: 4 }}>
+          <Ionicons name="chevron-back" size={24} color="#1A1A1A" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 22, fontWeight: '900', color: '#1A1A1A', letterSpacing: -0.5 }}>Brochures</Text>
+          <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginTop: 2 }}>Product catalogs from our brands</Text>
+        </View>
+      </View>
+
+      {brochures.length > 3 && (
+        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 44 }}>
+            <Ionicons name="search" size={16} color="#94a3b8" />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search brochures"
+              placeholderTextColor="#94a3b8"
+              style={{ flex: 1, marginLeft: 8, fontSize: 14, color: '#0f172a', fontWeight: '600' }}
+            />
+            {query ? <TouchableOpacity onPress={() => setQuery('')}><Ionicons name="close-circle" size={16} color="#94a3b8" /></TouchableOpacity> : null}
+          </View>
+        </View>
+      )}
+
+      <FlatList
+        contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+        data={filtered}
+        keyExtractor={(b: any) => String(b.id)}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND[800]} colors={[BRAND[800]]} />}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', marginTop: 80 }}>
+            <View style={{ width: 72, height: 72, borderRadius: 20, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+              <Ionicons name="document-text-outline" size={34} color={BRAND[700]} />
+            </View>
+            <Text style={{ fontSize: 15, fontWeight: '900', color: '#0f172a' }}>No brochures yet</Text>
+            <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '700', marginTop: 6, textAlign: 'center', paddingHorizontal: 40 }}>
+              Once admin uploads a catalog PDF, it'll show up here.
+            </Text>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => onOpenBrochure(item)}
+            style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9', flexDirection: 'row', ...SHADOWS.sm }}
+          >
+            <View style={{ width: 60, height: 76, borderRadius: 10, backgroundColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 14 }}>
+              <Ionicons name="document-text" size={26} color={BRAND[800]} />
+              <Text style={{ fontSize: 9, fontWeight: '900', color: BRAND[800], marginTop: 2, letterSpacing: 0.5 }}>PDF</Text>
+            </View>
+            <View style={{ flex: 1, justifyContent: 'center' }}>
+              <Text style={{ fontSize: 14, fontWeight: '900', color: '#0f172a', marginBottom: 3 }} numberOfLines={2}>{item.title}</Text>
+              {item.subtitle ? <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }} numberOfLines={1}>{item.subtitle}</Text> : null}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                {item.company ? (
+                  <View style={{ backgroundColor: BRAND[50], paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '900', color: BRAND[800] }}>{item.company}</Text>
+                  </View>
+                ) : null}
+                {item.category ? (
+                  <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700' }}>{item.category}</Text>
+                ) : null}
+                {item.file_size ? (
+                  <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700' }}>· {fmtSize(item.file_size)}</Text>
+                ) : null}
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#94a3b8" style={{ alignSelf: 'center' }} />
+          </TouchableOpacity>
+        )}
+      />
+    </View>
+  );
+}
+
+// Inline PDF viewer — wraps the PDF in Google Docs' viewer inside a WebView.
+// Handles the case where the raw PDF URL would trigger a download on Android
+// instead of rendering. "Open externally" falls back to expo-web-browser
+// which opens the OS's default PDF reader.
+function BrochureViewerScreen({ brochure, onBack }: any) {
+  const [loading, setLoading] = useState(true);
+  if (!brochure) return null;
+
+  const pdfUrl = brochure.file_url;
+  // Google Docs viewer renders any public PDF inline in a WebView.
+  const viewerUrl = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(pdfUrl)}`;
+
+  const openExternal = async () => {
+    try { await WebBrowser.openBrowserAsync(pdfUrl); } catch { Linking.openURL(pdfUrl).catch(() => {}); }
+  };
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#0f172a' }}>
+      <StatusBar barStyle="light-content" />
+      <View style={{ paddingTop: Constants.statusBarHeight || 40, paddingHorizontal: 12, paddingBottom: 10, backgroundColor: '#0f172a', flexDirection: 'row', alignItems: 'center' }}>
+        <TouchableOpacity onPress={onBack} style={{ padding: 6 }}>
+          <Ionicons name="chevron-back" size={26} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ flex: 1, marginLeft: 4 }}>
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }} numberOfLines={1}>{brochure.title}</Text>
+          {brochure.company ? <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600' }} numberOfLines={1}>{brochure.company}</Text> : null}
+        </View>
+        <TouchableOpacity onPress={openExternal} style={{ padding: 8, marginRight: 4 }}>
+          <Ionicons name="open-outline" size={22} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={async () => {
+          try { await Sharing.shareAsync(pdfUrl); } catch { /* share unavailable — ignore */ }
+        }} style={{ padding: 8 }}>
+          <Ionicons name="share-outline" size={22} color="#fff" />
+        </TouchableOpacity>
+      </View>
+      <View style={{ flex: 1, backgroundColor: '#fff' }}>
+        <WebView
+          source={{ uri: viewerUrl }}
+          startInLoadingState
+          onLoadEnd={() => setLoading(false)}
+          renderLoading={() => (
+            <View style={{ position: 'absolute', inset: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+              <UpkemLoader size={72} variant="dark" label="Loading brochure" />
+            </View>
+          )}
+          allowsFullscreenVideo
+          scalesPageToFit
+          setSupportMultipleWindows={false}
+        />
+      </View>
+    </View>
+  );
+}
+
 function ProfileScreen({ setCurrentScreen }) {
   const user = useStore((state) => state.user);
   const orders = useStore((state) => state.orders);
@@ -4377,7 +4572,7 @@ function ProfileScreen({ setCurrentScreen }) {
 // raw_override for approvals).
 // ═════════════════════════════════════════════════════════════════════════════
 
-function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onOpenAnalytics, onOpenNotifications, onOpenChangeRequests, onOpenCreditRequests, onExit }) {
+function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onOpenAnalytics, onOpenNotifications, onOpenChangeRequests, onOpenCreditRequests, onOpenBrochures, onExit }) {
   const usersList = useStore((s) => s.usersList) || [];
   const products = useStore((s) => s.products) || [];
   // NOTE: orders in the store are filtered to the current user by the polling
@@ -4486,6 +4681,13 @@ function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOp
             icon="wallet-outline"
             color="#10B981"
             onPress={onOpenCreditRequests}
+          />
+          <AdminTile
+            title="Brochures"
+            subtitle="Upload product catalogs (PDF)"
+            icon="document-text-outline"
+            color="#0EA5E9"
+            onPress={onOpenBrochures}
           />
           <AdminTile
             title="Pricing & Discounts"
@@ -5913,6 +6115,204 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
 }
 
 // --- Admin Credit Requests (approve/reject a partner's ask for more credit) ---
+// --- Admin: Brochures management (upload / toggle / delete PDFs) ---
+function AdminBrochuresScreen({ onBack }: any) {
+  const brochures = useStore((s) => s.brochures) || [];
+  const loadBrochures = useStore((s) => s.loadBrochures);
+  const [refreshing, setRefreshing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [pickedFile, setPickedFile] = useState<any>(null);
+  const [form, setForm] = useState({ title: '', subtitle: '', company: '', category: 'Derma' });
+
+  useEffect(() => { loadBrochures(); }, []);
+  const onRefresh = async () => { setRefreshing(true); await loadBrochures(); setRefreshing(false); };
+
+  const pickPdf = async () => {
+    const res = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
+    if (res.canceled || !res.assets?.[0]) return;
+    const f = res.assets[0];
+    setPickedFile(f);
+    // Auto-fill title from filename if empty
+    if (!form.title) {
+      const base = (f.name || '').replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ');
+      setForm({ ...form, title: base });
+    }
+    setShowForm(true);
+  };
+
+  const upload = async () => {
+    if (!pickedFile) return;
+    if (!form.title.trim()) return Alert.alert('Title required', 'Give the brochure a clear title.');
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', { uri: pickedFile.uri, name: pickedFile.name || 'brochure.pdf', type: 'application/pdf' } as any);
+      fd.append('title', form.title.trim());
+      if (form.subtitle.trim()) fd.append('subtitle', form.subtitle.trim());
+      if (form.company.trim()) fd.append('company', form.company.trim());
+      fd.append('category', form.category.trim() || 'Derma');
+      const url = `${useStore.getState().getBaseUrl()}/api/brochures`;
+      const headers: Record<string, string> = {};
+      const auth = useStore.getState().authHeaders();
+      for (const [k, v] of Object.entries(auth)) {
+        if (k.toLowerCase() !== 'content-type') headers[k] = v as string;
+      }
+      const res = await fetch(url, { method: 'POST', headers, body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Upload failed (${res.status})`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast('Brochure uploaded', 'success');
+      setShowForm(false);
+      setPickedFile(null);
+      setForm({ title: '', subtitle: '', company: '', category: 'Derma' });
+      loadBrochures();
+    } catch (e: any) {
+      Alert.alert('Upload failed', e.message || 'Try a smaller PDF (max 50 MB).');
+    }
+    setUploading(false);
+  };
+
+  const toggleActive = async (b: any) => {
+    try {
+      await useStore.getState().authFetch(`${useStore.getState().getBaseUrl()}/api/brochures`, {
+        method: 'PATCH',
+        body: JSON.stringify({ id: b.id, is_active: !b.is_active }),
+      });
+      loadBrochures();
+    } catch { Alert.alert('Error', 'Could not update'); }
+  };
+
+  const remove = (b: any) => {
+    Alert.alert('Delete brochure?', `"${b.title}" will be removed. This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await useStore.getState().authFetch(`${useStore.getState().getBaseUrl()}/api/brochures?id=${b.id}`, {
+            method: 'DELETE',
+          });
+          showToast('Deleted', 'info');
+          loadBrochures();
+        } catch { Alert.alert('Error', 'Delete failed'); }
+      }},
+    ]);
+  };
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader title="Brochures" subtitle={`${brochures.length} uploaded`} onBack={onBack} />
+      <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+        <TouchableOpacity
+          onPress={pickPdf}
+          activeOpacity={0.85}
+          style={{ backgroundColor: BRAND[800], borderRadius: 14, paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8, ...SHADOWS.glowGreen }}
+        >
+          <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900', letterSpacing: 0.3 }}>Upload new brochure</Text>
+        </TouchableOpacity>
+      </View>
+      <FlatList
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        data={brochures}
+        keyExtractor={(b: any) => String(b.id)}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', marginTop: 60 }}>
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: BRAND[50], justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+              <Ionicons name="document-text-outline" size={30} color={BRAND[700]} />
+            </View>
+            <Text style={{ color: '#0f172a', fontSize: 15, fontWeight: '900' }}>No brochures yet</Text>
+            <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '700', marginTop: 4 }}>Upload a PDF and it'll show up in the customer app.</Text>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm, opacity: item.is_active ? 1 : 0.55 }}>
+            <View style={{ flexDirection: 'row' }}>
+              <View style={{ width: 44, height: 56, borderRadius: 10, backgroundColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                <Ionicons name="document-text" size={22} color={BRAND[800]} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '900', color: '#0f172a' }} numberOfLines={2}>{item.title}</Text>
+                {item.subtitle ? <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginTop: 2 }} numberOfLines={1}>{item.subtitle}</Text> : null}
+                <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700', marginTop: 4 }}>
+                  {item.company ? `${item.company} · ` : ''}{item.category}
+                </Text>
+              </View>
+              {!item.is_active && (
+                <View style={{ backgroundColor: '#fee2e2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' }}>
+                  <Text style={{ fontSize: 10, fontWeight: '900', color: '#B91C1C' }}>HIDDEN</Text>
+                </View>
+              )}
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+              <TouchableOpacity
+                onPress={() => Linking.openURL(item.file_url).catch(() => {})}
+                style={{ flex: 1, borderWidth: 1.5, borderColor: BRAND[300], paddingVertical: 10, borderRadius: 10, alignItems: 'center' }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '900', color: BRAND[800] }}>Preview</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => toggleActive(item)}
+                style={{ flex: 1, borderWidth: 1.5, borderColor: '#e2e8f0', paddingVertical: 10, borderRadius: 10, alignItems: 'center' }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '900', color: '#475569' }}>{item.is_active ? 'Hide' : 'Show'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => remove(item)}
+                style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: '#FEE2E2' }}
+              >
+                <Ionicons name="trash-outline" size={16} color="#B91C1C" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      />
+
+      {/* Upload metadata form */}
+      <Modal visible={showForm} transparent animationType="slide" onRequestClose={() => setShowForm(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayBottom}>
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => !uploading && setShowForm(false)} />
+          <View style={[styles.bottomSheet, { maxHeight: '90%' }]}>
+            <View style={styles.dragHandle} />
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+              <Text style={styles.modalTitle}>Brochure details</Text>
+              <Text style={{ color: '#64748b', fontSize: 13, marginBottom: 12 }}>
+                {pickedFile?.name || 'Selected PDF'} · {pickedFile ? `${Math.round((pickedFile.size || 0) / 1024 / 1024)} MB` : ''}
+              </Text>
+              {[
+                { key: 'title', label: 'Title *', placeholder: 'Vakul Derma Catalog 2026' },
+                { key: 'subtitle', label: 'Subtitle', placeholder: 'Full range with pack + PTR' },
+                { key: 'company', label: 'Company / brand', placeholder: 'Vakul Lifescience' },
+                { key: 'category', label: 'Category', placeholder: 'Derma' },
+              ].map((f) => (
+                <View key={f.key} style={{ marginBottom: 12 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{f.label}</Text>
+                  <TextInput
+                    value={(form as any)[f.key]}
+                    onChangeText={(v) => setForm({ ...form, [f.key]: v })}
+                    placeholder={f.placeholder}
+                    placeholderTextColor="#94a3b8"
+                    style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', backgroundColor: '#fff' }}
+                  />
+                </View>
+              ))}
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
+                <TouchableOpacity style={styles.btnCancel} onPress={() => setShowForm(false)} disabled={uploading}>
+                  <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.btnSave} onPress={upload} disabled={uploading}>
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{uploading ? 'Uploading…' : 'Upload'}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
+  );
+}
+
 function AdminCreditRequestsScreen({ onBack }: any) {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -6835,6 +7235,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState('Loading');
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [catalogInitialCategory, setCatalogInitialCategory] = useState('All');
+  const [selectedBrochure, setSelectedBrochure] = useState<any>(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [adminEditingProduct, setAdminEditingProduct] = useState<any>(null);
 
@@ -6851,6 +7252,9 @@ export default function App() {
           const u = JSON.parse(userStr);
           useStore.getState().setUser(u);
           setCurrentScreen((u?.is_admin || u?.role === 'admin') ? 'AdminHome' : 'Home');
+          // Warm up the brochures cache in the background — first load is
+          // instant when the user opens the tile.
+          useStore.getState().loadBrochures();
         } else {
           setCurrentScreen('Login');
         }
@@ -7067,6 +7471,13 @@ export default function App() {
       }).subscribe()
     );
 
+    // — brochures: everyone sees new PDF uploads instantly
+    channels.push(
+      sb.channel('rt:brochures').on('postgres_changes', { event: '*', schema: 'public', table: 'brochures' }, () => {
+        useStore.getState().loadBrochures();
+      }).subscribe()
+    );
+
     // Resubscribe on foreground if socket has been idle a while.
     let lastBackgroundedAt = 0;
     const appStateSub = AppState.addEventListener('change', (next) => {
@@ -7125,6 +7536,7 @@ export default function App() {
           onOpenNotifications={() => setCurrentScreen('AdminNotifications')}
           onOpenChangeRequests={() => setCurrentScreen('AdminChangeRequests')}
           onOpenCreditRequests={() => setCurrentScreen('AdminCreditRequests')}
+          onOpenBrochures={() => setCurrentScreen('AdminBrochures')}
           onExit={adminSignOut}
         />
       </View>
@@ -7200,6 +7612,11 @@ export default function App() {
         <AdminCreditRequestsScreen onBack={() => setCurrentScreen('AdminHome')} />
       </View>
     );
+    if (currentScreen === 'AdminBrochures') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminBrochuresScreen onBack={() => setCurrentScreen('AdminHome')} />
+      </View>
+    );
     if (currentScreen === 'AdminPricing') return (
       <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
         <AdminPricingScreen onBack={() => setCurrentScreen('AdminHome')} />
@@ -7231,6 +7648,15 @@ export default function App() {
           {currentScreen === 'Orders' && <OrderHistoryScreen setCurrentScreen={setCurrentScreen} onSelectOrder={(order) => { setSelectedOrder(order); setCurrentScreen('Tracking'); }} />}
           {currentScreen === 'Tracking' && <OrderTrackingScreen setCurrentScreen={setCurrentScreen} order={selectedOrder} />}
           {currentScreen === 'Profile' && <ProfileScreen setCurrentScreen={setCurrentScreen} />}
+          {currentScreen === 'Brochures' && (
+            <BrochuresScreen
+              setCurrentScreen={setCurrentScreen}
+              onOpenBrochure={(b: any) => { setSelectedBrochure(b); setCurrentScreen('BrochureView'); }}
+            />
+          )}
+          {currentScreen === 'BrochureView' && (
+            <BrochureViewerScreen brochure={selectedBrochure} onBack={() => setCurrentScreen('Brochures')} />
+          )}
         </View>
         <View style={[styles.tabBar, SHADOWS.lg]}>
           <TouchableOpacity style={styles.tabItem} onPress={() => { Haptics.selectionAsync(); setCurrentScreen('Home'); }}>
