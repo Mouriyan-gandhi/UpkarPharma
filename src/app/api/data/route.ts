@@ -56,8 +56,11 @@ async function attachItemsToOrders(orders: any[]) {
 export async function GET(request: Request) {
   const sb = supabaseAdmin();
 
-  // Admin path (dashboard cookie)
-  const admin = await getAdmin();
+  // Admin path — accepts BOTH web cookie session AND mobile bearer token
+  // (getAnyAdmin covers both). Without this, the mobile admin app fell into
+  // the customer branch and only saw itself in the users list — meaning the
+  // Partners screen showed 0 customers.
+  const admin = await getAnyAdmin(request);
   if (admin) {
     // Products exceed the PostgREST 1000-row cap — page through in batches.
     async function fetchAllProducts() {

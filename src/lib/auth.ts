@@ -30,7 +30,7 @@ export async function getAdmin(): Promise<AdminUser | null> {
   const admin = supabaseAdmin();
   const { data: profile, error } = await admin
     .from('users')
-    .select('id, phone, store_name, role, is_approved, is_blocked')
+    .select('*')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -57,7 +57,7 @@ export async function getMobileUser(request: Request): Promise<AdminUser | null>
 
   const { data: profile, error } = await admin
     .from('users')
-    .select('id, phone, store_name, role, is_approved, is_blocked')
+    .select('*')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -79,7 +79,7 @@ export async function getWebUser(): Promise<AdminUser | null> {
   const admin = supabaseAdmin();
   const { data: profile, error } = await admin
     .from('users')
-    .select('id, phone, store_name, role, is_approved, is_blocked')
+    .select('*')
     .eq('id', user.id)
     .maybeSingle();
 
