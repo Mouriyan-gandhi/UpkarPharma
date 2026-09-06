@@ -47,6 +47,7 @@ export async function POST(request: Request) {
       email,
       zone,
       city,
+      years_in_business,
     } = data;
 
     if (!phone || !store_name || !user_type) {
@@ -55,21 +56,25 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    // If provided, must be strong enough. If omitted (mobile signup path
-    // before phone provider is enabled), we generate a random one server-side
-    // — the user will reset it via an authenticated password-change flow.
-    if (password !== undefined && password !== null && password !== '') {
-      if (typeof password !== 'string' || password.length < 6) {
-        return NextResponse.json(
-          { error: 'Password must be at least 6 characters' },
-          { status: 400 }
-        );
-      }
+    // Email is now mandatory (the customer will use it for verification,
+    // password resets, and future Google Sign-in linkage). Validate format
+    // server-side too — mobile can be tampered with.
+    const emailStr = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    if (!emailStr || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr)) {
+      return NextResponse.json(
+        { error: 'A valid email is required' },
+        { status: 400 }
+      );
     }
-    const finalPassword =
-      typeof password === 'string' && password.length >= 6
-        ? password
-        : crypto.randomBytes(18).toString('base64url');
+    // Password is REQUIRED now — mobile always sends one (confirm is enforced
+    // on the client). Without a password the customer can't sign in.
+    if (!password || typeof password !== 'string' || password.length < 8) {
+      return NextResponse.json(
+        { error: 'Password must be at least 8 characters' },
+        { status: 400 }
+      );
+    }
+    const finalPassword = password;
 
     const sb = supabaseAdmin();
     const phoneE164 = toE164(phone);
@@ -114,10 +119,12 @@ export async function POST(request: Request) {
       gst_number: gst_number || null,
       registration_number: registration_number || null,
       address: address || null,
-      email: email || null,
+      email: emailStr,
       zone: zone || null,
       city: city || null,
+      years_in_business: typeof years_in_business === 'string' ? years_in_business : null,
       is_approved: false,
+      is_rejected: false,
       role: 'client',
     }, { onConflict: 'id' });
 

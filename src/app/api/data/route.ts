@@ -175,7 +175,7 @@ export async function POST(request: Request) {
     const adminOnly = new Set([
       'update_status', 'raw_override', 'add_product', 'update_stock',
       'update_product', 'delete_product', 'update_credit',
-      'update_user_profile', 'block_user', 'unblock_user',
+      'update_user_profile', 'block_user', 'unblock_user', 'reject_user',
     ]);
     if (adminOnly.has(action) && !admin) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -369,8 +369,24 @@ export async function POST(request: Request) {
       }
 
       const patch: any = { status: item.status };
+      // Dispatch: capture the delivery person's name + phone so the
+      // customer has someone concrete to call. Legacy courier_name /
+      // tracking_id are still accepted for backwards compat but new UI
+      // sends delivery_person_name / delivery_person_phone.
+      if (item.delivery_person_name) patch.delivery_person_name = item.delivery_person_name;
+      if (item.delivery_person_phone) patch.delivery_person_phone = item.delivery_person_phone;
       if (item.courier_name) patch.courier_name = item.courier_name;
       if (item.tracking_id) patch.tracking_id = item.tracking_id;
+      // Rejection: admin explains why. Customer sees this on Tracking so
+      // "Rejected" is never a silent black-box status.
+      if (item.status === 'Rejected') {
+        if (!item.rejection_reason || typeof item.rejection_reason !== 'string' || !item.rejection_reason.trim()) {
+          return NextResponse.json({ error: 'A rejection reason is required.' }, { status: 400 });
+        }
+        patch.rejection_reason = item.rejection_reason.trim();
+        patch.rejected_at = new Date().toISOString();
+        patch.rejected_by = admin.id;
+      }
 
       const { error } = await sb.from('orders').update(patch).eq('id', item.id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -381,7 +397,11 @@ export async function POST(request: Request) {
         : item.status === 'Packaging' ? 'Order being packed'
         : item.status === 'Rejected' ? 'Order rejected'
         : 'Order update';
-      const bodyMsg = `Your order ${item.id} is now ${item.status}`;
+      const bodyMsg = item.status === 'Rejected'
+        ? `Order ${item.id} was rejected: ${patch.rejection_reason}`
+        : item.status === 'Dispatch' && item.delivery_person_name
+          ? `Order ${item.id} out for delivery — ${item.delivery_person_name}${item.delivery_person_phone ? ` (${item.delivery_person_phone})` : ''}`
+          : `Your order ${item.id} is now ${item.status}`;
       await sendPushNotification(ownerRow?.expo_push_token, title, bodyMsg);
 
       // In-app notification
@@ -394,7 +414,11 @@ export async function POST(request: Request) {
           : 'order_updated',
         title,
         body: bodyMsg,
-        meta: { order_id: item.id, ...(item.courier_name ? { courier: item.courier_name, tracking: item.tracking_id } : {}) },
+        meta: {
+          order_id: item.id,
+          ...(patch.delivery_person_name ? { delivery_person_name: patch.delivery_person_name, delivery_person_phone: patch.delivery_person_phone } : {}),
+          ...(patch.rejection_reason ? { rejection_reason: patch.rejection_reason } : {}),
+        },
       });
 
       return NextResponse.json({ success: true });
@@ -409,7 +433,10 @@ export async function POST(request: Request) {
         const { data: prev } = await sb.from('users')
           .select('id, is_approved, store_name')
           .eq('phone', u.phone).maybeSingle();
-        await sb.from('users').update({ is_approved: !!u.is_approved }).eq('phone', u.phone);
+        // If admin toggles approve on, also clear any prior rejection state.
+        const patch: any = { is_approved: !!u.is_approved };
+        if (u.is_approved) { patch.is_rejected = false; patch.rejected_reason = null; }
+        await sb.from('users').update(patch).eq('phone', u.phone);
         if (prev && !prev.is_approved && u.is_approved) {
           // Import lazily so /api/data cold-start doesn't drag the push helper
           const { pushToUser } = await import('@/lib/push');
@@ -421,6 +448,32 @@ export async function POST(request: Request) {
           });
         }
       }
+      return NextResponse.json({ success: true });
+    }
+
+    // ── reject_user — admin denies a pending signup with a reason ────────
+    if (action === 'reject_user' && admin) {
+      const targetPhone = String(body.phone || '').replace(/\D/g, '');
+      const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+      if (!targetPhone) return NextResponse.json({ error: 'phone required' }, { status: 400 });
+      if (!reason) return NextResponse.json({ error: 'reason required' }, { status: 400 });
+      const { data: target } = await sb.from('users').select('id, store_name').eq('phone', targetPhone).maybeSingle();
+      if (!target) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      const { error } = await sb.from('users').update({
+        is_approved: false,
+        is_rejected: true,
+        rejected_reason: reason,
+        rejected_at: new Date().toISOString(),
+        rejected_by: admin.id,
+      }).eq('id', target.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      const { pushToUser } = await import('@/lib/push');
+      void pushToUser(target.id, {
+        type: 'signup_rejected',
+        title: 'Signup could not be approved',
+        body: reason,
+        data: { user_id: target.id, reason },
+      });
       return NextResponse.json({ success: true });
     }
 
@@ -466,10 +519,11 @@ export async function POST(request: Request) {
     // through /api/profile-change-requests for admin approval.
     if (action === 'update_own_profile' && mobileUser) {
       const patch: any = {};
-      // user_type is a self-classification (Retailer/Distributor/Chemist),
-      // not a compliance field — customer can pick their own without going
-      // through admin approval.
-      for (const k of ['email', 'address', 'city', 'zone', 'google_maps_link', 'user_type']) {
+      // user_type + years_in_business are self-classification (not compliance
+      // fields), and email/google_maps_link are low-stakes contact info.
+      // address moved to the change-request flow (delivery destination is
+      // invoice-critical) — customer edits go via /api/profile-change-requests.
+      for (const k of ['email', 'city', 'zone', 'google_maps_link', 'user_type', 'years_in_business']) {
         if (body[k] !== undefined) patch[k] = body[k] || null;
       }
       if (Object.keys(patch).length === 0) {
@@ -522,7 +576,7 @@ export async function POST(request: Request) {
       const { phone } = body;
       if (!phone) return NextResponse.json({ error: 'Phone required' }, { status: 400 });
       const patch: any = {};
-      for (const k of ['store_name','drug_license','gst_number','registration_number','address','email','user_type','zone','city','google_maps_link']) {
+      for (const k of ['store_name','drug_license','gst_number','registration_number','address','email','user_type','zone','city','google_maps_link','years_in_business']) {
         if (body[k] !== undefined) patch[k] = body[k];
       }
       const { error } = await sb.from('users').update(patch).eq('phone', phone);

@@ -5,8 +5,12 @@ import { pushToAdmins, pushToUser } from '@/lib/push';
 
 // Fields customers may request to change (all others are self-editable via
 // /api/data update_address or profile screen directly).
+// Fields customers may request to change. store_name / GSTIN / drug licence /
+// registration are compliance-critical; address is invoice-critical (delivery
+// destination changes the tax address); user_type is *not* here since it's
+// self-classification and self-editable via update_own_profile.
 const ALLOWED_KEYS = new Set([
-  'store_name', 'gst_number', 'drug_license', 'registration_number', 'user_type',
+  'store_name', 'gst_number', 'drug_license', 'registration_number', 'address',
 ]);
 
 // GET — list requests
@@ -85,19 +89,59 @@ export async function POST(request: Request) {
   return NextResponse.json({ success: true, request: data });
 }
 
-// POST admin approval/rejection is exposed via RPCs approve_profile_change /
-// reject_profile_change — those are called from the admin panel directly.
-// We could wrap them here for consistency:
 // PATCH /api/profile-change-requests  { id, action: 'approve'|'reject', note? }
+// Bypasses the original approve_profile_change SQL RPC because that RPC has a
+// hardcoded 5-field allowlist and doesn't know about address. Doing the merge
+// in JS lets us stay aligned with ALLOWED_KEYS above without a new migration
+// every time we add a whitelisted field.
 export async function PATCH(request: Request) {
   const admin = await getAnyAdmin(request);
   if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const { id, action, note } = await request.json().catch(() => ({}));
   if (!id || !action) return NextResponse.json({ error: 'id + action required' }, { status: 400 });
+  if (action !== 'approve' && action !== 'reject') {
+    return NextResponse.json({ error: 'action must be approve|reject' }, { status: 400 });
+  }
 
   const sb = supabaseAdmin();
-  const rpc = action === 'approve' ? 'approve_profile_change' : 'reject_profile_change';
-  const { error } = await sb.rpc(rpc, { request_id: id, admin_note_text: note || null });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const { data: req, error: rErr } = await sb.from('profile_change_requests')
+    .select('*').eq('id', id).maybeSingle();
+  if (rErr || !req) return NextResponse.json({ error: 'Request not found' }, { status: 404 });
+  if (req.status !== 'Pending') {
+    return NextResponse.json({ error: `Request already ${req.status.toLowerCase()}` }, { status: 409 });
+  }
+
+  const nowIso = new Date().toISOString();
+  if (action === 'approve') {
+    // Apply only whitelisted keys, keeping existing values otherwise.
+    const patch: any = {};
+    for (const [k, v] of Object.entries(req.changes || {})) {
+      if (ALLOWED_KEYS.has(k) && typeof v === 'string') patch[k] = v;
+    }
+    if (Object.keys(patch).length > 0) {
+      const { error: uErr } = await sb.from('users').update(patch).eq('id', req.user_id);
+      if (uErr) return NextResponse.json({ error: uErr.message }, { status: 500 });
+    }
+  }
+
+  const { error: pErr } = await sb.from('profile_change_requests').update({
+    status: action === 'approve' ? 'Approved' : 'Rejected',
+    admin_note: note || null,
+    reviewed_at: nowIso,
+    reviewed_by: admin.id,
+  }).eq('id', id);
+  if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
+
+  // Notify the customer
+  const { pushToUser } = await import('@/lib/push');
+  void pushToUser(req.user_id, {
+    type: action === 'approve' ? 'profile_change_approved' : 'profile_change_rejected',
+    title: action === 'approve' ? 'Profile update approved' : 'Profile update declined',
+    body: action === 'approve'
+      ? `Your requested profile updates are live.`
+      : (note || 'Your profile change was not approved. Contact support for details.'),
+    data: { request_id: id, changes: req.changes },
+  });
+
   return NextResponse.json({ success: true });
 }
