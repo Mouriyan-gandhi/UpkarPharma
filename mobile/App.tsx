@@ -4287,7 +4287,18 @@ function ProfileScreen({ setCurrentScreen }) {
             <View style={{ flex: 1 }}>
               <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900', letterSpacing: -0.3 }}>{user.store_name}</Text>
               <Text style={{ color: BRAND[100], fontSize: 13, fontWeight: '500', marginTop: 2 }}>+91 {user.phone}</Text>
-              {user.email ? <Text style={{ color: BRAND[100], fontSize: 12, fontWeight: '500', marginTop: 1 }}>{user.email}</Text> : null}
+              {user.email ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                  <Text style={{ color: BRAND[100], fontSize: 12, fontWeight: '500' }} numberOfLines={1}>{user.email}</Text>
+                  {user.email_verified ? (
+                    <Ionicons name="checkmark-circle" size={12} color={BRAND[300]} />
+                  ) : (
+                    <View style={{ backgroundColor: 'rgba(251,191,36,0.25)', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                      <Text style={{ color: '#FDE68A', fontSize: 9, fontWeight: '900', letterSpacing: 0.5 }}>UNVERIFIED</Text>
+                    </View>
+                  )}
+                </View>
+              ) : null}
             </View>
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
