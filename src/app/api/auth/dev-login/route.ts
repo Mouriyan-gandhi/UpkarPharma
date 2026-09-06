@@ -84,22 +84,18 @@ export async function POST(request: Request) {
         error: 'This account has been blocked. Contact UPKEM support.',
       }, { status: 403 });
     }
-    if (!profile.is_approved) {
-      return NextResponse.json({
-        error: 'Account pending admin approval.',
-        pending: true,
-        user: profile,
-      }, { status: 403 });
-    }
-
+    // Both pending (never approved) AND rejected (approved-denied) customers
+    // are allowed to sign in — they can browse the catalog + complete their
+    // profile — but ordering is disabled in the client. The mobile app
+    // renders a persistent banner explaining status.
     return NextResponse.json({
       success: true,
       user: profile,
       access_token: session.access_token,
       refresh_token: session.refresh_token,
-      // Legacy alias — the mobile client stores this as `sessionId` and
-      // uses it verbatim as the Authorization bearer header.
       session_id: session.access_token,
+      pending: !profile.is_approved && !profile.is_rejected,
+      rejected: !!profile.is_rejected,
       message: 'Login successful',
     });
   } catch (err) {

@@ -385,7 +385,9 @@ export async function POST(request: Request) {
         }
         patch.rejection_reason = item.rejection_reason.trim();
         patch.rejected_at = new Date().toISOString();
-        patch.rejected_by = admin.id;
+        // adminOnly gate above guarantees admin is set; TS just can't narrow
+        // through the Set membership check.
+        patch.rejected_by = admin!.id;
       }
 
       const { error } = await sb.from('orders').update(patch).eq('id', item.id);

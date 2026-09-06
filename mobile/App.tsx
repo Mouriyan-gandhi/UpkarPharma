@@ -785,7 +785,25 @@ const useStore = create((set, get) => ({
   setProducts: (products) => set({ products }),
   usersList: [],
   setUsersList: (usersList) => set({ usersList }),
+  // Derived: customer must be approved (not merely signed up) AND not rejected
+  // AND not blocked before they can add anything to cart. Pending users can
+  // still browse — this gate only affects mutations. Admins bypass (they
+  // wouldn't be ordering anyway, but keeps the check honest).
+  canOrder: () => {
+    const u = get().user;
+    if (!u) return false;
+    if (u.is_admin || u.role === 'admin') return true;
+    return !!u.is_approved && !u.is_rejected && !u.is_blocked;
+  },
   addToCart: (productId) => {
+    if (!get().canOrder()) {
+      const u = get().user;
+      showToast(
+        u?.is_rejected ? 'Ordering blocked — see profile for details' : 'Ordering unlocks once admin approves your account',
+        'info',
+      );
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     set((state) => {
       const prev = state.cart[productId] || 0;
@@ -989,44 +1007,80 @@ const PremiumTextInput = ({ label, value, onChangeText, keyboardType = 'default'
   );
 };
 
-// --- Signup Screen (Simplified — 3 fields: firm, phone, business type) ---
+// --- Signup Screen ---
+// Fields:
+//   1. Firm name + phone (identity)
+//   2. Email (mandatory — used for verification + future OAuth linkage)
+//   3. Password + confirm (customer signs in themselves; no more admin-shared password)
+//   4. Business type + years in business (self-classification)
+// Everything else (GST, drug licence, address, city, zone) is filled AFTER
+// signin via the Profile → Edit-all flow. Address changes route through
+// admin approval; the compliance fields go through the change-request queue.
 function SignupScreen({ setCurrentScreen }) {
-  const [form, setForm] = useState({ phone: '', store_name: '', user_type: 'Retailer' });
+  const [form, setForm] = useState({
+    phone: '',
+    store_name: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    user_type: 'Retailer',
+    years_in_business: '1-3',
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [tempIp, setTempIp] = useState('');
+  const [showPw, setShowPw] = useState(false);
 
   const serverIp = useStore((state) => state.serverIp);
   const setServerIp = useStore((state) => state.setServerIp);
   const getSignupUrl = useStore((state) => state.getSignupUrl);
 
-  const boxAnims = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
+  const boxAnims = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
 
   useEffect(() => {
     setTempIp(serverIp);
-    Animated.stagger(150, boxAnims.map(anim => Animated.spring(anim, { toValue: 1, useNativeDriver: true, tension: 50, friction: 8 }))).start();
+    Animated.stagger(120, boxAnims.map(anim => Animated.spring(anim, { toValue: 1, useNativeDriver: true, tension: 50, friction: 8 }))).start();
   }, [serverIp]);
 
-  const canSubmit = form.phone.trim().length >= 10 && form.store_name.trim().length > 0 && form.user_type;
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  const pwOk = form.password.length >= 8;
+  const pwMatch = form.password.length > 0 && form.password === form.confirmPassword;
+  const canSubmit =
+    form.phone.trim().length === 10 &&
+    form.store_name.trim().length > 0 &&
+    emailOk && pwOk && pwMatch &&
+    form.user_type && form.years_in_business;
 
   const handleSignup = async () => {
-    if (!canSubmit) return Alert.alert('Missing info', 'Please enter your firm name, phone (10 digits), and select a business type.');
+    if (!canSubmit) {
+      const problems: string[] = [];
+      if (form.phone.trim().length !== 10) problems.push('10-digit phone');
+      if (!form.store_name.trim()) problems.push('firm name');
+      if (!emailOk) problems.push('valid email');
+      if (!pwOk) problems.push('password (8+ chars)');
+      if (form.password && !pwMatch) problems.push('matching confirm password');
+      return Alert.alert('Almost there', `Please fix: ${problems.join(', ')}.`);
+    }
     setIsLoading(true);
     try {
+      const { confirmPassword, ...payload } = form;
       const res = await fetch(getSignupUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success) {
-        Alert.alert('Request sent', 'Registration submitted. Please log in once approved — you can complete your profile after signing in.');
-        setCurrentScreen('Login');
+        Alert.alert(
+          'Account created',
+          `You can sign in now. Ordering unlocks once admin approves your account — you can browse the catalog and complete your profile in the meantime.`,
+          [{ text: 'Sign in', onPress: () => setCurrentScreen('Login') }],
+        );
       } else {
-        Alert.alert('Error', data.error || 'Signup failed');
+        Alert.alert('Signup failed', data.error || 'Please try again.');
       }
     } catch (e) {
-      Alert.alert('Error', 'Network error. Please try again.');
+      Alert.alert('Network error', 'Could not reach the server. Try again in a moment.');
     }
     setIsLoading(false);
   };
@@ -1047,13 +1101,13 @@ function SignupScreen({ setCurrentScreen }) {
           <View style={{ width: 68, height: 68, borderRadius: 22, backgroundColor: BRAND[50], borderWidth: 1.5, borderColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginBottom: 18 }}>
             <Ionicons name="shield-checkmark" size={32} color={BRAND[800]} />
           </View>
-          <Text style={{ fontSize: 30, fontWeight: '900', color: '#1A1A1A', letterSpacing: -1 }}>Get started</Text>
-          <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '600', marginTop: 8, textAlign: 'center', maxWidth: 300, lineHeight: 20 }}>
-            Just 3 details to submit for approval.{'\n'}You can complete your profile after signing in.
+          <Text style={{ fontSize: 30, fontWeight: '900', color: '#1A1A1A', letterSpacing: -1 }}>Create your account</Text>
+          <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '600', marginTop: 8, textAlign: 'center', maxWidth: 320, lineHeight: 20 }}>
+            Sign in right after. Browse the catalog while admin verifies your business — ordering unlocks on approval.
           </Text>
         </View>
 
-        {/* Box 1: Identity — just firm + phone */}
+        {/* Box 1: Identity — firm + phone */}
         <Animated.View
           style={{
             opacity: boxAnims[0],
@@ -1078,14 +1132,67 @@ function SignupScreen({ setCurrentScreen }) {
             value={form.phone}
             onChangeText={(t) => setForm({ ...form, phone: t.replace(/[^0-9]/g, '').slice(0, 10) })}
           />
+          <PremiumTextInput
+            label="Email"
+            icon="mail"
+            keyboardType="email-address"
+            value={form.email}
+            onChangeText={(t) => setForm({ ...form, email: t.replace(/\s/g, '').toLowerCase() })}
+          />
         </Animated.View>
 
-        {/* Box 2: Business type */}
+        {/* Box 2: Password + confirm */}
         <Animated.View
           style={{
             opacity: boxAnims[1],
             transform: [{ translateY: boxAnims[1].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
-            backgroundColor: '#fff', borderRadius: 20, padding: 18, marginBottom: 24,
+            backgroundColor: '#fff', borderRadius: 20, padding: 18, marginBottom: 14,
+            borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <Text style={{ color: BRAND[800], fontSize: 11, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase' }}>
+              Set a password
+            </Text>
+            <TouchableOpacity onPress={() => setShowPw((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={{ color: BRAND[700], fontSize: 12, fontWeight: '800' }}>{showPw ? 'Hide' : 'Show'}</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ borderWidth: 1.5, borderColor: pwOk ? BRAND[200] : '#e2e8f0', borderRadius: 14, marginBottom: 10, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F7FAF8' }}>
+            <Ionicons name="lock-closed" size={16} color={pwOk ? BRAND[700] : '#94a3b8'} style={{ marginRight: 10 }} />
+            <TextInput
+              value={form.password}
+              onChangeText={(t) => setForm({ ...form, password: t })}
+              placeholder="At least 8 characters"
+              placeholderTextColor="#94a3b8"
+              secureTextEntry={!showPw}
+              autoCapitalize="none"
+              style={{ flex: 1, height: 52, fontSize: 15, fontWeight: '700', color: '#1A1A1A' }}
+            />
+          </View>
+          <View style={{ borderWidth: 1.5, borderColor: pwMatch ? BRAND[200] : '#e2e8f0', borderRadius: 14, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F7FAF8' }}>
+            <Ionicons name={pwMatch ? 'checkmark-circle' : 'lock-closed-outline'} size={16} color={pwMatch ? BRAND[700] : '#94a3b8'} style={{ marginRight: 10 }} />
+            <TextInput
+              value={form.confirmPassword}
+              onChangeText={(t) => setForm({ ...form, confirmPassword: t })}
+              placeholder="Confirm password"
+              placeholderTextColor="#94a3b8"
+              secureTextEntry={!showPw}
+              autoCapitalize="none"
+              style={{ flex: 1, height: 52, fontSize: 15, fontWeight: '700', color: '#1A1A1A' }}
+            />
+          </View>
+          {form.confirmPassword.length > 0 && !pwMatch && (
+            <Text style={{ color: '#dc2626', fontSize: 11, fontWeight: '700', marginTop: 8 }}>Passwords don't match yet</Text>
+          )}
+        </Animated.View>
+
+        {/* Box 3: Business type */}
+        <Animated.View
+          style={{
+            opacity: boxAnims[2],
+            transform: [{ translateY: boxAnims[2].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
+            backgroundColor: '#fff', borderRadius: 20, padding: 18, marginBottom: 14,
             borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm,
           }}
         >
@@ -1127,6 +1234,38 @@ function SignupScreen({ setCurrentScreen }) {
           </View>
         </Animated.View>
 
+        {/* Box 4: Years in business (self-classification, editable in profile later) */}
+        <Animated.View
+          style={{
+            opacity: boxAnims[3],
+            transform: [{ translateY: boxAnims[3].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
+            backgroundColor: '#fff', borderRadius: 20, padding: 18, marginBottom: 24,
+            borderWidth: 1, borderColor: '#f1f5f9', ...SHADOWS.sm,
+          }}
+        >
+          <Text style={{ color: BRAND[800], fontSize: 11, fontWeight: '800', marginBottom: 14, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+            Years in business
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {(['0-1', '1-3', '3-5', '5-10', '10+'] as const).map((y) => {
+              const active = form.years_in_business === y;
+              return (
+                <TouchableOpacity
+                  key={y}
+                  onPress={() => { Haptics.selectionAsync(); setForm({ ...form, years_in_business: y }); }}
+                  style={{
+                    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12,
+                    backgroundColor: active ? BRAND[800] : '#F7FAF8',
+                    borderWidth: 1.5, borderColor: active ? BRAND[800] : '#e2e8f0',
+                  }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: active ? '#fff' : '#475569' }}>{y} years</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </Animated.View>
+
         {/* Submit */}
         <AnimatedPressable
           style={[
@@ -1138,7 +1277,7 @@ function SignupScreen({ setCurrentScreen }) {
           disabled={isLoading || !canSubmit}
         >
           <Text style={[styles.buttonPrimaryText, { fontSize: 17, color: '#fff' }]}>
-            {isLoading ? 'Submitting…' : 'Submit for approval'}
+            {isLoading ? 'Creating account…' : 'Create account'}
           </Text>
         </AnimatedPressable>
 
@@ -1284,12 +1423,10 @@ function LoginScreen({ setCurrentScreen }) {
         // Route straight to the correct home based on role. Previously we
         // hardcoded 'Home' (the customer landing) and let a subscription
         // effect flip to 'AdminHome' one tick later, which caused admins
-        // to see a flash of the customer UI on login.
+        // to see a flash of the customer UI on login. Pending/rejected
+        // customers land on Home (browsing enabled; ordering gated later).
         const isAdmin = data.user?.is_admin || data.user?.role === 'admin';
         setCurrentScreen(isAdmin ? 'AdminHome' : 'Home');
-      } else if (data.pending) {
-        setUser(data.user);
-        setCurrentScreen('PendingApproval');
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert('Login failed', data.error || 'Check phone and password.');
@@ -1346,9 +1483,6 @@ function LoginScreen({ setCurrentScreen }) {
             body: JSON.stringify({ token: pushToken }),
           }).catch(() => {});
         });
-      } else if (data.pending) {
-        setUser(data.user);
-        setCurrentScreen('PendingApproval');
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert('Access Denied', data.error || 'Verification failed');
@@ -2962,9 +3096,20 @@ function ReviewConfirmScreen({ setCurrentScreen }) {
   const totalValue = Math.round((discountedSubtotal + gst) * 100) / 100;
   const creditAvailable = (user.credit_limit || 0) - (user.credit_balance || 0);
   const hasEnoughCredit = creditAvailable >= totalValue;
+  const canOrder = useStore.getState().canOrder();
 
   const handlePlaceOrder = async () => {
     Haptics.selectionAsync();
+    if (!canOrder) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        user?.is_rejected ? 'Account rejected' : 'Awaiting approval',
+        user?.is_rejected
+          ? `Reason: ${user.rejected_reason || 'Contact support.'}`
+          : 'You can browse the catalog while admin verifies your business. Ordering unlocks once approved.',
+      );
+      return;
+    }
     if (!hasEnoughCredit) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert("Credit Limit Exceeded", `You need ₹${totalValue.toLocaleString('en-IN')} but only have ₹${creditAvailable.toLocaleString('en-IN')} available. Please settle previous invoices.`);
@@ -3249,13 +3394,16 @@ function ReviewConfirmScreen({ setCurrentScreen }) {
         <AnimatedPressable
           style={[
             { paddingVertical: 18, borderRadius: 16, alignItems: 'center' },
-            hasEnoughCredit ? { backgroundColor: BRAND[800], ...SHADOWS.glowGreen } : { backgroundColor: '#E5E7EB' }
+            (canOrder && hasEnoughCredit) ? { backgroundColor: BRAND[800], ...SHADOWS.glowGreen } : { backgroundColor: '#E5E7EB' }
           ]}
-          disabled={!hasEnoughCredit || isPlacing}
+          disabled={!canOrder || !hasEnoughCredit || isPlacing}
           onPress={handlePlaceOrder}
         >
-          <Text style={{ color: hasEnoughCredit ? '#fff' : '#9CA3AF', fontSize: 16, fontWeight: '800' }}>
-            {isPlacing ? 'Placing order...' : hasEnoughCredit ? `Place order · ₹${totalValue.toLocaleString('en-IN')}` : 'Insufficient credit'}
+          <Text style={{ color: (canOrder && hasEnoughCredit) ? '#fff' : '#9CA3AF', fontSize: 16, fontWeight: '800' }}>
+            {isPlacing ? 'Placing order...'
+              : !canOrder ? (user?.is_rejected ? 'Account rejected' : 'Awaiting admin approval')
+              : hasEnoughCredit ? `Place order · ₹${totalValue.toLocaleString('en-IN')}`
+              : 'Insufficient credit'}
           </Text>
         </AnimatedPressable>
       </View>
@@ -3430,11 +3578,42 @@ function OrderTrackingScreen({ setCurrentScreen, order }) {
           </View>
         )}
 
-        {/* Delivery — appointed staff for this order */}
-        {currentIdx === 2 && order.courier_name && (
+        {/* Rejection reason — always visible on rejected orders */}
+        {order.status === 'Rejected' && order.rejection_reason && (
+          <View style={{ backgroundColor: '#FEE2E2', borderRadius: 16, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: '#FCA5A5' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <Ionicons name="alert-circle" size={16} color="#B91C1C" />
+              <Text style={{ fontSize: 11, fontWeight: '900', color: '#7F1D1D', textTransform: 'uppercase', letterSpacing: 1 }}>Reason for rejection</Text>
+            </View>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#7F1D1D', lineHeight: 20 }}>{order.rejection_reason}</Text>
+          </View>
+        )}
+
+        {/* Delivery person — shown once dispatched. Tap phone to call. */}
+        {currentIdx === 2 && (order.delivery_person_name || order.courier_name) && (
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#f1f5f9' }}>
-            <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Delivery Assigned To</Text>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A1A' }}>{order.courier_name}</Text>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Out for delivery</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: BRAND[100], justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                <Ionicons name="person" size={20} color={BRAND[800]} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '900', color: '#1A1A1A' }}>
+                  {order.delivery_person_name || order.courier_name}
+                </Text>
+                {order.delivery_person_phone ? (
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#64748b', marginTop: 2 }}>+91 {order.delivery_person_phone}</Text>
+                ) : null}
+              </View>
+              {order.delivery_person_phone && (
+                <TouchableOpacity
+                  onPress={() => Linking.openURL(`tel:${order.delivery_person_phone}`)}
+                  style={{ backgroundColor: BRAND[800], borderRadius: 999, width: 44, height: 44, justifyContent: 'center', alignItems: 'center' }}
+                >
+                  <Ionicons name="call" size={20} color="#fff" />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
 
@@ -3524,23 +3703,34 @@ function OrderHistoryScreen({ setCurrentScreen, onSelectOrder }) {
         keyExtractor={item => item.id.toString()}
         renderItem={({ item }) => {
           const sc = getStatusColor(item.status);
+          // Top-right total layout (matches Amazon / Blinkit / Zomato pattern
+          // — status pill on top-right, total on top-right corner of the
+          // header row, item line + track CTA at the bottom).
           return (
-            <TouchableOpacity onPress={() => { Haptics.selectionAsync(); onSelectOrder && onSelectOrder(item); }} style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9' }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <Text style={{ fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>{item.id}</Text>
-                <View style={{ backgroundColor: sc.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '800', color: sc.text, textTransform: 'uppercase' }}>{displayStatus(item.status)}</Text>
+            <TouchableOpacity
+              onPress={() => { Haptics.selectionAsync(); onSelectOrder && onSelectOrder(item); }}
+              activeOpacity={0.85}
+              style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9' }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '900', color: '#1A1A1A' }}>{item.id}</Text>
+                  <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '600', marginTop: 2 }}>
+                    {item.date} · {item.items?.length || 0} {item.items?.length === 1 ? 'item' : 'items'}
+                  </Text>
+                  <View style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: sc.bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '900', color: sc.text, textTransform: 'uppercase', letterSpacing: 0.5 }}>{displayStatus(item.status)}</Text>
+                  </View>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ fontSize: 10, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Total</Text>
+                  <Text style={{ fontSize: 20, fontWeight: '900', color: '#1A1A1A', marginTop: 2, letterSpacing: -0.5 }}>
+                    ₹{item.total?.toLocaleString('en-IN')}
+                  </Text>
                 </View>
               </View>
-              <Text style={{ fontSize: 13, color: '#94a3b8', fontWeight: '500', marginBottom: 12 }}>
-                {item.date} · {item.items?.length || 0} items
-              </Text>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '600' }}>Total</Text>
-                <Text style={{ fontSize: 18, fontWeight: '900', color: '#1A1A1A' }}>₹{item.total?.toLocaleString('en-IN')}</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 8 }}>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: BRAND[700], marginRight: 4 }}>Track order</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: BRAND[700], marginRight: 4 }}>Track order</Text>
                 <Ionicons name="chevron-forward" size={14} color={BRAND[700]} />
               </View>
             </TouchableOpacity>
@@ -3666,26 +3856,67 @@ function BrochuresScreen({ setCurrentScreen, onOpenBrochure }: any) {
   );
 }
 
-// Inline PDF viewer — wraps the PDF in Google Docs' viewer inside a WebView.
-// Handles the case where the raw PDF URL would trigger a download on Android
-// instead of rendering. "Open externally" falls back to expo-web-browser
-// which opens the OS's default PDF reader.
+// Brochure viewer — download-then-open flow. The Google Docs webview approach
+// was flaky on 30 MB+ PDFs and didn't render on some Android WebViews at all.
+// Now we stream the file to the app's document dir, cache by storage_key +
+// size, then open with Sharing (which hands off to the OS's native PDF
+// reader — instant scrolling, real search, native zoom).
+//
+// First-time download shows progress; subsequent opens are instant from cache.
 function BrochureViewerScreen({ brochure, onBack }: any) {
-  const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState<'downloading' | 'opening' | 'error'>('downloading');
+  const [errorMsg, setErrorMsg] = useState('');
+
   if (!brochure) return null;
-
   const pdfUrl = brochure.file_url;
-  // Google Docs viewer renders any public PDF inline in a WebView.
-  const viewerUrl = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(pdfUrl)}`;
 
-  const openExternal = async () => {
-    try { await WebBrowser.openBrowserAsync(pdfUrl); } catch { Linking.openURL(pdfUrl).catch(() => {}); }
+  const downloadAndOpen = async () => {
+    setStatus('downloading');
+    setProgress(0);
+    setErrorMsg('');
+    try {
+      const FileSystem = await import('expo-file-system');
+      // Cache path — key by storage_key so different brochures don't collide
+      // and re-uploads (same key) reuse.
+      const filename = (brochure.storage_key || `brochure-${brochure.id}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const dest = `${FileSystem.documentDirectory || FileSystem.cacheDirectory}${filename}`;
+      const info = await FileSystem.getInfoAsync(dest).catch(() => ({ exists: false }));
+      // Cache-hit if size matches — otherwise redownload.
+      if (info.exists && brochure.file_size && (info as any).size === brochure.file_size) {
+        setStatus('opening');
+        await Sharing.shareAsync(dest, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: brochure.title });
+        onBack();
+        return;
+      }
+      // Download with progress
+      const dl = FileSystem.createDownloadResumable(pdfUrl, dest, {}, (p: any) => {
+        if (p.totalBytesExpectedToWrite > 0) {
+          setProgress(p.totalBytesWritten / p.totalBytesExpectedToWrite);
+        }
+      });
+      const result = await dl.downloadAsync();
+      if (!result?.uri) throw new Error('Download failed');
+      setStatus('opening');
+      await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: brochure.title });
+      onBack();
+    } catch (e: any) {
+      setStatus('error');
+      setErrorMsg(e?.message || 'Could not open the brochure');
+    }
+  };
+
+  useEffect(() => { downloadAndOpen(); }, []);
+
+  const openInBrowser = async () => {
+    try { await WebBrowser.openBrowserAsync(pdfUrl); }
+    catch { Linking.openURL(pdfUrl).catch(() => {}); }
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#0f172a' }}>
+    <View style={{ flex: 1, backgroundColor: '#0B2618' }}>
       <StatusBar barStyle="light-content" />
-      <View style={{ paddingTop: Constants.statusBarHeight || 40, paddingHorizontal: 12, paddingBottom: 10, backgroundColor: '#0f172a', flexDirection: 'row', alignItems: 'center' }}>
+      <View style={{ paddingTop: Constants.statusBarHeight || 40, paddingHorizontal: 12, paddingBottom: 10, flexDirection: 'row', alignItems: 'center' }}>
         <TouchableOpacity onPress={onBack} style={{ padding: 6 }}>
           <Ionicons name="chevron-back" size={26} color="#fff" />
         </TouchableOpacity>
@@ -3693,29 +3924,43 @@ function BrochureViewerScreen({ brochure, onBack }: any) {
           <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }} numberOfLines={1}>{brochure.title}</Text>
           {brochure.company ? <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600' }} numberOfLines={1}>{brochure.company}</Text> : null}
         </View>
-        <TouchableOpacity onPress={openExternal} style={{ padding: 8, marginRight: 4 }}>
-          <Ionicons name="open-outline" size={22} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={async () => {
-          try { await Sharing.shareAsync(pdfUrl); } catch { /* share unavailable — ignore */ }
-        }} style={{ padding: 8 }}>
-          <Ionicons name="share-outline" size={22} color="#fff" />
-        </TouchableOpacity>
       </View>
-      <View style={{ flex: 1, backgroundColor: '#fff' }}>
-        <WebView
-          source={{ uri: viewerUrl }}
-          startInLoadingState
-          onLoadEnd={() => setLoading(false)}
-          renderLoading={() => (
-            <View style={{ position: 'absolute', inset: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-              <UpkemLoader size={72} variant="dark" label="Loading brochure" />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
+        {status !== 'error' ? (
+          <>
+            <UpkemLoader size={80} variant="light" />
+            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: '900', marginTop: 20 }}>
+              {status === 'downloading' ? 'Downloading brochure…' : 'Opening…'}
+            </Text>
+            {status === 'downloading' && (
+              <View style={{ width: '100%', maxWidth: 260, marginTop: 16 }}>
+                <View style={{ height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.15)', overflow: 'hidden' }}>
+                  <View style={{ height: 6, width: `${Math.round(progress * 100)}%`, backgroundColor: '#52B788', borderRadius: 3 }} />
+                </View>
+                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '700', marginTop: 8, textAlign: 'center' }}>
+                  {Math.round(progress * 100)}%
+                </Text>
+              </View>
+            )}
+            <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '600', marginTop: 24, textAlign: 'center', lineHeight: 16 }}>
+              Opens in your device's PDF reader.{'\n'}Cached — next time it's instant.
+            </Text>
+          </>
+        ) : (
+          <>
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(220,38,38,0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+              <Ionicons name="alert-circle" size={32} color="#fca5a5" />
             </View>
-          )}
-          allowsFullscreenVideo
-          scalesPageToFit
-          setSupportMultipleWindows={false}
-        />
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>Couldn't open brochure</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', marginTop: 6, textAlign: 'center' }}>{errorMsg}</Text>
+            <TouchableOpacity onPress={downloadAndOpen} style={{ marginTop: 20, backgroundColor: BRAND[700], paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 }}>
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '900' }}>Retry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={openInBrowser} style={{ marginTop: 10 }}>
+              <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' }}>Open in browser instead</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
@@ -3807,7 +4052,10 @@ function ProfileScreen({ setCurrentScreen }) {
   // Locked = compliance/invoice-critical fields that need admin approval to change.
   // user_type used to be locked but it's a self-classification (Retailer/Distributor/
   // Chemist) — customers can pick their own without approval.
-  const LOCKED_FIELDS = new Set(['store_name', 'gst_number', 'drug_license', 'registration_number']);
+  // Locked = compliance/invoice-critical fields that need admin approval.
+  // Address moved here because delivery destination changes the tax address
+  // on the invoice. Everything else stays self-editable.
+  const LOCKED_FIELDS = new Set(['store_name', 'gst_number', 'drug_license', 'registration_number', 'address']);
 
   // Pending change requests (fetched from server) — used to badge locked fields
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
@@ -3830,6 +4078,7 @@ function ProfileScreen({ setCurrentScreen }) {
     city: user.city || '',
     zone: user.zone || '',
     user_type: user.user_type || '',
+    years_in_business: user.years_in_business || '',
     google_maps_link: user.google_maps_link || '',
     store_name: user.store_name || '',
     gst_number: user.gst_number || '',
@@ -3842,8 +4091,10 @@ function ProfileScreen({ setCurrentScreen }) {
   const saveEditAll = async () => {
     setSavingEditAll(true);
     try {
-      const freeKeys = ['email', 'address', 'city', 'zone', 'user_type', 'google_maps_link'];
-      const lockedKeys = ['store_name', 'gst_number', 'drug_license', 'registration_number'];
+      // Address moved to lockedKeys (delivery destination is invoice-critical).
+      // years_in_business is free-edit (self-classification).
+      const freeKeys = ['email', 'city', 'zone', 'user_type', 'google_maps_link', 'years_in_business'];
+      const lockedKeys = ['store_name', 'gst_number', 'drug_license', 'registration_number', 'address'];
       const freePatch: any = {};
       const lockedPatch: any = {};
       for (const k of freeKeys) {
@@ -4413,11 +4664,11 @@ function ProfileScreen({ setCurrentScreen }) {
                 Everything below saves in one go. Fields with a lock go to admin for approval.
               </Text>
 
-              {/* Free-edit block */}
+              {/* Free-edit block — everything here saves immediately without
+                  admin approval. */}
               {[
                 { key: 'user_type', label: 'Business type', placeholder: 'Retailer / Distributor / Chemist' },
                 { key: 'email', label: 'Email', placeholder: 'you@firm.com', keyboardType: 'email-address' },
-                { key: 'address', label: 'Delivery address', placeholder: 'Building, street, area, PIN…', multiline: true },
                 { key: 'city', label: 'City', placeholder: 'e.g. Chennai' },
                 { key: 'zone', label: 'State / Zone', placeholder: 'e.g. Tamil Nadu' },
                 { key: 'google_maps_link', label: 'Google Maps link', placeholder: 'https://maps.app.goo.gl/…', keyboardType: 'url' },
@@ -4437,6 +4688,29 @@ function ProfileScreen({ setCurrentScreen }) {
                 </View>
               ))}
 
+              {/* Years in business — pill picker (self-classification) */}
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Years in business</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {(['0-1', '1-3', '3-5', '5-10', '10+'] as const).map((y) => {
+                    const active = editAllForm.years_in_business === y;
+                    return (
+                      <TouchableOpacity
+                        key={y}
+                        onPress={() => { Haptics.selectionAsync(); setEditAllForm({ ...editAllForm, years_in_business: y }); }}
+                        style={{
+                          paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
+                          backgroundColor: active ? BRAND[800] : '#fff',
+                          borderWidth: 1.5, borderColor: active ? BRAND[800] : '#e2e8f0',
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: active ? '#fff' : '#475569' }}>{y} yrs</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
               {/* Locked block — need admin approval */}
               <View style={{ marginTop: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Ionicons name="lock-closed-outline" size={14} color="#B45309" />
@@ -4445,6 +4719,7 @@ function ProfileScreen({ setCurrentScreen }) {
                 </Text>
               </View>
               {[
+                { key: 'address', label: 'Delivery address', placeholder: 'Building, street, area, PIN…', multiline: true },
                 { key: 'store_name', label: 'Store / firm name', placeholder: 'Registered pharmacy name' },
                 { key: 'gst_number', label: 'GST number', placeholder: '15-char GSTIN' },
                 { key: 'drug_license', label: 'Drug licence', placeholder: 'e.g. TN-02-20B-XXXXX' },
@@ -4457,8 +4732,9 @@ function ProfileScreen({ setCurrentScreen }) {
                     onChangeText={(v) => setEditAllForm({ ...editAllForm, [f.key]: v })}
                     placeholder={f.placeholder}
                     placeholderTextColor="#94a3b8"
-                    autoCapitalize="characters"
-                    style={{ borderWidth: 1, borderColor: '#FDE68A', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', backgroundColor: '#FEFCE8' }}
+                    multiline={f.multiline}
+                    autoCapitalize={f.multiline ? 'sentences' : 'characters'}
+                    style={{ borderWidth: 1, borderColor: '#FDE68A', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', backgroundColor: '#FEFCE8', minHeight: f.multiline ? 64 : undefined }}
                   />
                 </View>
               ))}
@@ -4744,30 +5020,71 @@ function AdminBackHeader({ title, subtitle, onBack, right }: any) {
 }
 
 // --- Admin Approvals ---
+// Curated rejection reasons for admin. Free-text stays optional for edge cases.
+const SIGNUP_REJECT_REASONS = [
+  'Invalid GST / drug licence',
+  'Business type / location outside service area',
+  'Documents unclear — please resubmit',
+  'Duplicate account for the same firm',
+  'Rx-restricted category — clinic not registered',
+  'Other',
+];
+
 function AdminApprovalsScreen({ onBack, onRefresh }) {
   const usersList = useStore((s) => s.usersList) || [];
-  const pending = usersList.filter((u: any) => !u.is_approved);
+  const pending = usersList.filter((u: any) => !u.is_approved && !u.is_rejected);
   const [busyId, setBusyId] = useState<any>(null);
+  const [rejectingUser, setRejectingUser] = useState<any>(null);
+  const [rejectPreset, setRejectPreset] = useState<string | null>(null);
+  const [rejectNote, setRejectNote] = useState('');
 
-  const setApproval = async (u: any, approve: boolean) => {
+  const approveUser = async (u: any) => {
     setBusyId(u.id || u.phone);
     Haptics.selectionAsync();
     try {
       const url = useStore.getState().getApiUrl();
-      // Use raw_override to flip is_approved. Backend accepts a db.users bulk.
       const nextUsers = usersList.map((row: any) =>
-        (row.id === u.id || row.phone === u.phone) ? { ...row, is_approved: approve } : row
+        (row.id === u.id || row.phone === u.phone) ? { ...row, is_approved: true, is_rejected: false, rejected_reason: null } : row
       );
-      await fetch(url, {
+      const res = await useStore.getState().authFetch(url, {
         method: 'POST',
-        headers: useStore.getState().authHeaders(),
         body: JSON.stringify({ action: 'raw_override', db: { users: nextUsers } }),
       });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed');
       useStore.getState().setUsersList(nextUsers);
-      showToast(approve ? 'User approved' : 'User rejected', approve ? 'success' : 'info');
+      showToast('Partner approved', 'success');
       if (onRefresh) onRefresh();
-    } catch {
-      Alert.alert('Error', 'Could not update approval. Try again.');
+    } catch (e: any) {
+      Alert.alert('Approve failed', e.message);
+    }
+    setBusyId(null);
+  };
+
+  const openReject = (u: any) => {
+    setRejectingUser(u);
+    setRejectPreset(null);
+    setRejectNote('');
+  };
+
+  const confirmReject = async () => {
+    if (!rejectingUser) return;
+    const reason = (rejectPreset === 'Other' || !rejectPreset)
+      ? rejectNote.trim()
+      : rejectPreset;
+    if (!reason) return Alert.alert('Reason required', 'Pick a reason or type one.');
+    setBusyId(rejectingUser.id || rejectingUser.phone);
+    try {
+      const res = await useStore.getState().authFetch(useStore.getState().getApiUrl(), {
+        method: 'POST',
+        body: JSON.stringify({ action: 'reject_user', phone: rejectingUser.phone, reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Reject failed');
+      showToast('Partner rejected', 'info');
+      setRejectingUser(null);
+      if (onRefresh) onRefresh();
+    } catch (e: any) {
+      Alert.alert('Reject failed', e.message);
     }
     setBusyId(null);
   };
@@ -4824,14 +5141,14 @@ function AdminApprovalsScreen({ onBack, onRefresh }) {
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <TouchableOpacity
                   disabled={busy}
-                  onPress={() => setApproval(item, false)}
+                  onPress={() => openReject(item)}
                   style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', alignItems: 'center' }}
                 >
                   <Text style={{ color: '#B91C1C', fontWeight: '900', fontSize: 13 }}>Reject</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   disabled={busy}
-                  onPress={() => setApproval(item, true)}
+                  onPress={() => approveUser(item)}
                   style={{ flex: 2, paddingVertical: 12, borderRadius: 12, backgroundColor: BRAND[800], alignItems: 'center', ...SHADOWS.glowGreen }}
                 >
                   <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13 }}>{busy ? 'Saving…' : 'Approve'}</Text>
@@ -4841,6 +5158,76 @@ function AdminApprovalsScreen({ onBack, onRefresh }) {
           );
         }}
       />
+
+      {/* Reject-with-reason modal */}
+      <Modal visible={!!rejectingUser} transparent animationType="slide" onRequestClose={() => setRejectingUser(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayBottom}>
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => setRejectingUser(null)} />
+          <View style={[styles.bottomSheet, { maxHeight: '90%' }]}>
+            <View style={styles.dragHandle} />
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+              <Text style={styles.modalTitle}>Reject signup</Text>
+              <Text style={{ color: '#64748b', fontSize: 13, marginBottom: 4 }}>
+                {rejectingUser?.store_name} · +91 {rejectingUser?.phone}
+              </Text>
+              <Text style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>
+                Pick a reason. The customer will see this on their app so they know what to fix.
+              </Text>
+              <View style={{ gap: 8, marginBottom: 12 }}>
+                {SIGNUP_REJECT_REASONS.map((r) => {
+                  const active = rejectPreset === r;
+                  return (
+                    <TouchableOpacity
+                      key={r}
+                      onPress={() => { Haptics.selectionAsync(); setRejectPreset(r); }}
+                      style={{
+                        paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
+                        borderWidth: 1.5, borderColor: active ? BRAND[800] : '#e2e8f0',
+                        backgroundColor: active ? BRAND[50] : '#fff',
+                        flexDirection: 'row', alignItems: 'center', gap: 8,
+                      }}
+                    >
+                      <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: active ? BRAND[800] : '#cbd5e1', alignItems: 'center', justifyContent: 'center' }}>
+                        {active && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: BRAND[800] }} />}
+                      </View>
+                      <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: active ? BRAND[800] : '#334155' }}>{r}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {(rejectPreset === 'Other' || rejectPreset === null) && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                    {rejectPreset === 'Other' ? 'Specify reason' : 'Or type a custom reason'}
+                  </Text>
+                  <TextInput
+                    value={rejectNote}
+                    onChangeText={setRejectNote}
+                    placeholder="Free-text explanation"
+                    placeholderTextColor="#94a3b8"
+                    multiline
+                    style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', minHeight: 64, backgroundColor: '#fff' }}
+                  />
+                </View>
+              )}
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity style={styles.btnCancel} onPress={() => setRejectingUser(null)}>
+                  <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btnSave, { backgroundColor: '#B91C1C' }]}
+                  onPress={confirmReject}
+                  disabled={busyId === (rejectingUser?.id || rejectingUser?.phone)}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
+                    {busyId === (rejectingUser?.id || rejectingUser?.phone) ? 'Rejecting…' : 'Reject signup'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -5320,6 +5707,18 @@ function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
   const [invLoading, setInvLoading] = useState(false);
   const [showLines, setShowLines] = useState(false);
   const [showDispatch, setShowDispatch] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectPreset, setRejectPreset] = useState<string | null>(null);
+  const [rejectNote, setRejectNote] = useState('');
+  const ORDER_REJECT_REASONS = [
+    'Out of stock',
+    'Short expiry — customer refused',
+    'No delivery partner available for the area',
+    'Payment terms mismatch',
+    'Prescription required — not received',
+    'Duplicate order',
+    'Other',
+  ];
   const currentIdx = mapStatusToStageIdx(order.status);
   const rejected = isTerminalRejected(order.status);
 
@@ -5368,10 +5767,9 @@ function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
   };
 
   const rejectOrder = () => {
-    Alert.alert('Reject order', 'This will mark the order as rejected. Continue?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Reject', style: 'destructive', onPress: () => setStage('Rejected') },
-    ]);
+    // Now uses the reason-picker modal instead of a bare confirm — server
+    // requires a rejection_reason string, and the customer needs context.
+    setShowRejectModal(true);
   };
 
   const approveInvoice = async () => {
@@ -5521,10 +5919,14 @@ function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
         />
       )}
 
-      {/* Dispatch modal — capture courier + tracking id before advancing */}
+      {/* Dispatch modal — captures the delivery person's name + phone. Customer
+          sees these on Tracking so they can call directly. */}
       {showDispatch && (
         <AdminDispatchModal
-          existing={{ courier_name: order.courier_name || '', tracking_id: order.tracking_id || '' }}
+          existing={{
+            delivery_person_name: order.delivery_person_name || order.courier_name || '',
+            delivery_person_phone: order.delivery_person_phone || '',
+          }}
           onClose={() => setShowDispatch(false)}
           onConfirm={async (payload) => {
             setShowDispatch(false);
@@ -5532,6 +5934,80 @@ function AdminOrderDetailScreen({ order, onBack, onOrderUpdated }) {
           }}
         />
       )}
+
+      {/* Order-reject modal — preset dropdown + free-text. Server requires a
+          reason string; customer sees it on Tracking so "rejected" is never
+          silent. */}
+      <Modal visible={showRejectModal} transparent animationType="slide" onRequestClose={() => setShowRejectModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayBottom}>
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => setShowRejectModal(false)} />
+          <View style={[styles.bottomSheet, { maxHeight: '90%' }]}>
+            <View style={styles.dragHandle} />
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+              <Text style={styles.modalTitle}>Reject order</Text>
+              <Text style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>
+                Pick a reason. Customer sees this on their order tracking so they know what happened.
+              </Text>
+              <View style={{ gap: 8, marginBottom: 12 }}>
+                {ORDER_REJECT_REASONS.map((r) => {
+                  const active = rejectPreset === r;
+                  return (
+                    <TouchableOpacity
+                      key={r}
+                      onPress={() => { Haptics.selectionAsync(); setRejectPreset(r); }}
+                      style={{
+                        paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
+                        borderWidth: 1.5, borderColor: active ? BRAND[800] : '#e2e8f0',
+                        backgroundColor: active ? BRAND[50] : '#fff',
+                        flexDirection: 'row', alignItems: 'center', gap: 8,
+                      }}
+                    >
+                      <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: active ? BRAND[800] : '#cbd5e1', alignItems: 'center', justifyContent: 'center' }}>
+                        {active && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: BRAND[800] }} />}
+                      </View>
+                      <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: active ? BRAND[800] : '#334155' }}>{r}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {(rejectPreset === 'Other' || rejectPreset === null) && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                    {rejectPreset === 'Other' ? 'Specify reason' : 'Or type a custom reason'}
+                  </Text>
+                  <TextInput
+                    value={rejectNote}
+                    onChangeText={setRejectNote}
+                    placeholder="What should the customer know?"
+                    placeholderTextColor="#94a3b8"
+                    multiline
+                    style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', minHeight: 64, backgroundColor: '#fff' }}
+                  />
+                </View>
+              )}
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity style={styles.btnCancel} onPress={() => setShowRejectModal(false)}>
+                  <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btnSave, { backgroundColor: '#B91C1C' }]}
+                  onPress={async () => {
+                    const reason = (rejectPreset === 'Other' || !rejectPreset)
+                      ? rejectNote.trim()
+                      : rejectPreset;
+                    if (!reason) return Alert.alert('Reason required', 'Pick a reason or type one.');
+                    setShowRejectModal(false);
+                    await setStage('Rejected', { rejection_reason: reason });
+                  }}
+                  disabled={busy}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{busy ? 'Rejecting…' : 'Reject order'}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -5618,37 +6094,46 @@ function AdminInvoiceLinesModal({ orderId, items, onClose, onSaved }: any) {
 }
 
 function AdminDispatchModal({ existing, onClose, onConfirm }: any) {
-  const [courier, setCourier] = useState(existing.courier_name || '');
-  const [tracking, setTracking] = useState(existing.tracking_id || '');
+  const [person, setPerson] = useState(existing.delivery_person_name || existing.courier_name || '');
+  const [phone, setPhone] = useState(existing.delivery_person_phone || '');
   const [busy, setBusy] = useState(false);
 
   const confirm = async () => {
-    if (!courier.trim() || !tracking.trim()) {
-      Alert.alert('Missing info', 'Courier name and tracking ID are both required.');
+    if (!person.trim() || !phone.trim()) {
+      Alert.alert('Missing info', 'Both delivery person name and phone are required.');
+      return;
+    }
+    if (phone.replace(/\D/g, '').length < 10) {
+      Alert.alert('Invalid phone', 'Enter a 10-digit phone number.');
       return;
     }
     setBusy(true);
-    await onConfirm({ courier_name: courier.trim(), tracking_id: tracking.trim() });
+    await onConfirm({
+      delivery_person_name: person.trim(),
+      delivery_person_phone: phone.replace(/\D/g, '').slice(-10),
+    });
     setBusy(false);
   };
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', justifyContent: 'flex-end' }}>
+        <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => !busy && onClose()} />
         <View style={{ backgroundColor: '#F7FAF8', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+          <View style={styles.dragHandle} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
             <Text style={{ flex: 1, fontSize: 16, fontWeight: '900', color: '#1A1A1A' }}>Dispatch order</Text>
             <TouchableOpacity onPress={onClose} style={{ padding: 6 }}>
               <Ionicons name="close" size={22} color="#475569" />
             </TouchableOpacity>
           </View>
           <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600', marginBottom: 16 }}>
-            Enter courier + tracking so the customer gets a proper push notification.
+            Delivery person's name + phone. The customer will see this in their order so they can call directly.
           </Text>
-          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Courier</Text>
-          <TextInput value={courier} onChangeText={setCourier} placeholder="Bluedart / DTDC / Delhivery…" placeholderTextColor="#94a3b8" style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', marginBottom: 12 }} />
-          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Tracking ID</Text>
-          <TextInput value={tracking} onChangeText={setTracking} placeholder="AWB / Docket #" placeholderTextColor="#94a3b8" autoCapitalize="characters" style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', marginBottom: 20 }} />
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Delivery person</Text>
+          <TextInput value={person} onChangeText={setPerson} placeholder="Ramesh Kumar" placeholderTextColor="#94a3b8" style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', marginBottom: 12 }} />
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Phone number</Text>
+          <TextInput value={phone} onChangeText={(t) => setPhone(t.replace(/[^0-9]/g, '').slice(0, 10))} placeholder="9876543210" placeholderTextColor="#94a3b8" keyboardType="phone-pad" style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontWeight: '600', color: '#0f172a', marginBottom: 20 }} />
           <TouchableOpacity disabled={busy} onPress={confirm} style={{ backgroundColor: BRAND[800], paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
             <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>{busy ? 'Dispatching…' : 'Confirm dispatch'}</Text>
           </TouchableOpacity>
@@ -7622,6 +8107,12 @@ export default function App() {
         <AdminPricingScreen onBack={() => setCurrentScreen('AdminHome')} />
       </View>
     );
+    // Non-approved customer sees a persistent banner explaining state and
+    // — if rejected — the admin's stated reason so they know what to fix.
+    // Admins never see this since canOrder short-circuits true for them.
+    const _me = useStore.getState().user;
+    const _pending = _me && !_me.is_admin && _me.role !== 'admin' && !_me.is_approved && !_me.is_rejected;
+    const _rejected = _me && _me.is_rejected;
     return (
       <View style={{ flex: 1, backgroundColor: '#F7FAF8' }}>
         <View style={{ flex: 1, paddingTop: Constants.statusBarHeight || 48 }}>
@@ -7629,6 +8120,36 @@ export default function App() {
             <View style={{ backgroundColor: '#fef3c7', padding: 8, alignItems: 'center' }}>
               <Text style={{ color: '#d97706', fontSize: 12, fontWeight: '800' }}><Ionicons name="cloud-offline-outline" size={12} color="#d97706" /> OFFLINE MODE - Showing Cached Catalog</Text>
             </View>
+          )}
+          {_pending && (
+            <TouchableOpacity
+              onPress={() => setCurrentScreen('Profile')}
+              activeOpacity={0.85}
+              style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#FDE68A' }}
+            >
+              <Ionicons name="time-outline" size={18} color="#B45309" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#78350F', fontSize: 12, fontWeight: '900' }}>Awaiting admin approval</Text>
+                <Text style={{ color: '#92400E', fontSize: 11, fontWeight: '700', marginTop: 1 }}>Browsing enabled · complete profile to speed things up</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color="#92400E" />
+            </TouchableOpacity>
+          )}
+          {_rejected && (
+            <TouchableOpacity
+              onPress={() => setCurrentScreen('Profile')}
+              activeOpacity={0.85}
+              style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: '#FCA5A5' }}
+            >
+              <Ionicons name="alert-circle" size={18} color="#B91C1C" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#7F1D1D', fontSize: 12, fontWeight: '900' }}>Account rejected</Text>
+                <Text style={{ color: '#991B1B', fontSize: 11, fontWeight: '700', marginTop: 1 }} numberOfLines={2}>
+                  {_me?.rejected_reason || 'Contact UPKEM support to resolve.'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color="#991B1B" />
+            </TouchableOpacity>
           )}
           {currentScreen === 'Home' && (
             <HomeScreen
