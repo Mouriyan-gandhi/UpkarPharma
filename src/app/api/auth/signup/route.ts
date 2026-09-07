@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { createClient } from '@supabase/supabase-js';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { pushToAdmins } from '@/lib/push';
-import crypto from 'node:crypto';
 
 function toE164(phone: string): string {
   const d = String(phone).replace(/\D/g, '');
@@ -98,41 +96,32 @@ export async function POST(request: Request) {
       );
     }
 
-    // Use the anon client's public signUp() — this is what actually TRIGGERS
-    // Supabase's built-in confirmation email. The admin.createUser() call
-    // (previously used) creates the auth user but never sends the email even
-    // with email_confirm:false.
+    // admin.createUser with email_confirm:true creates the auth row + marks the
+    // email as confirmed at the SUPABASE level so signInWithPassword works
+    // immediately after signup. Previously we used publicClient.signUp() which
+    // sends the confirmation email but leaves auth.email_confirmed_at NULL —
+    // when "Confirm email" is toggled on in the Dashboard, signInWithPassword
+    // then refuses to authenticate → customer signs up successfully, tries to
+    // sign in with their password, gets "invalid credentials". Broken flow.
     //
-    // emailRedirectTo drives the "click the link → land here" destination.
-    // We include upkemlabs://verified so on mobile the OS opens the APK
-    // directly; the web page at /auth/verified is the browser fallback.
-    // Supabase picks whichever the calling client passes; we hand off the
-    // deep link since the customer signed up on mobile.
-    const publicClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { auth: { persistSession: false } },
-    );
-    const { data: signup, error: createErr } = await publicClient.auth.signUp({
+    // We keep public.users.email_verified as OUR trust signal (customer clicked
+    // a verify link WE sent them) — separate from Supabase's auth-level flag.
+    // The nudge on Profile fires the manual /api/verify/resend flow, which
+    // sends a magic link via Supabase's built-in mailer.
+    const { data: created, error: createErr } = await sb.auth.admin.createUser({
+      phone: phoneE164,
       email: emailStr,
       password: finalPassword,
-      options: {
-        emailRedirectTo: 'upkemlabs://verified',
-        data: { store_name, phone: phoneDigits },
-      },
+      phone_confirm: true,
+      email_confirm: true,
+      user_metadata: { store_name, phone: phoneDigits },
     });
-    if (createErr || !signup.user) {
+    if (createErr || !created.user) {
       return NextResponse.json(
         { error: createErr?.message || 'Failed to create user' },
         { status: 500 }
       );
     }
-    // Attach the phone via service-role since signUp doesn't accept it.
-    await sb.auth.admin.updateUserById(signup.user.id, {
-      phone: phoneE164,
-      phone_confirm: true,
-    }).catch(() => { /* non-blocking — phone will be persisted on next login */ });
-    const created = { user: signup.user };
 
     // Insert profile — the DB trigger created a partial row on auth insert,
     // so upsert covers both trigger-present and trigger-absent cases.

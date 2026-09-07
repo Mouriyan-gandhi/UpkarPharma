@@ -1319,6 +1319,7 @@ function SignupScreen({ setCurrentScreen }) {
 function LoginScreen({ setCurrentScreen }) {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [otpSent, setOtpSent] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
@@ -1526,17 +1527,24 @@ function LoginScreen({ setCurrentScreen }) {
                 <View style={styles.inputDivider} />
                 <TextInput style={styles.inputField} placeholder="00000 00000" placeholderTextColor="#94a3b8" keyboardType="phone-pad" value={phone} onChangeText={setPhone} maxLength={10} returnKeyType="done" />
               </View>
-              <View style={[styles.inputWrapper, { marginTop: 12 }]}>
+              <View style={[styles.inputWrapper, { marginTop: 12, flexDirection: 'row', alignItems: 'center' }]}>
                 <TextInput
-                  style={[styles.inputField, { paddingLeft: 16 }]}
+                  style={[styles.inputField, { paddingLeft: 16, flex: 1 }]}
                   placeholder="Password"
                   placeholderTextColor="#94a3b8"
-                  secureTextEntry
+                  secureTextEntry={!showPw}
                   autoCapitalize="none"
                   value={password}
                   onChangeText={setPassword}
                   returnKeyType="go"
                 />
+                <TouchableOpacity
+                  onPress={() => setShowPw((v) => !v)}
+                  hitSlop={{ top: 12, bottom: 12, left: 8, right: 12 }}
+                  style={{ paddingHorizontal: 16 }}
+                >
+                  <Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={20} color="#64748b" />
+                </TouchableOpacity>
               </View>
               <Text style={{color: '#6B7280', fontSize: 13, marginBottom: 24, marginTop: 12, lineHeight: 20}}>By continuing you agree to Upkem's <Text style={{textDecorationLine: 'underline', fontWeight: '700'}}>Terms</Text> & <Text style={{textDecorationLine: 'underline', fontWeight: '700'}}>Privacy Policy</Text></Text>
               <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
@@ -5185,12 +5193,15 @@ function AdminApprovalsScreen({ onBack, onRefresh }) {
               <View style={{ backgroundColor: '#f8fafc', borderRadius: 12, padding: 12, marginBottom: 12 }}>
                 {[
                   ['Type',           item.user_type],
+                  ['Experience',     item.years_in_business ? `${item.years_in_business} years` : null],
                   ['Drug licence',   item.drug_license],
                   ['GST',            item.gst_number],
                   ['Reg. number',    item.registration_number],
                   ['City',           item.city],
+                  ['State / Zone',   item.zone],
                   ['Address',        item.address],
-                  ['Email',          item.email],
+                  ['Email',          item.email ? `${item.email}${item.email_verified ? ' ✓' : ''}` : null],
+                  ['Maps link',      item.google_maps_link],
                 ].map(([label, value]) => (
                   <View key={label as string} style={{ flexDirection: 'row', marginBottom: 4 }}>
                     <Text style={{ width: 100, fontSize: 11, color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
@@ -5419,6 +5430,7 @@ function AdminUserDetailModal({ user, onClose, onSaved }: any) {
     address: user.address || '',
     email: user.email || '',
     user_type: user.user_type || 'Retailer',
+    years_in_business: user.years_in_business || '',
     zone: user.zone || '',
     city: user.city || '',
     google_maps_link: user.google_maps_link || '',
@@ -5559,16 +5571,20 @@ function AdminUserDetailModal({ user, onClose, onSaved }: any) {
                 )}
                 <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#f1f5f9' }}>
                   {[
+                    ['Phone', user.phone ? `+91 ${user.phone}` : null],
+                    ['Email', user.email ? `${user.email}${user.email_verified ? '  ✓' : '  (unverified)'}` : null],
                     ['Type', user.user_type],
+                    ['Experience', user.years_in_business ? `${user.years_in_business} years` : null],
                     ['Drug licence', user.drug_license],
                     ['GST', user.gst_number],
                     ['Reg. number', user.registration_number],
                     ['City', user.city],
-                    ['Zone', user.zone],
+                    ['State/Zone', user.zone],
                     ['Address', user.address],
-                    ['Email', user.email],
+                    ['Signed up', user.created_at ? new Date(user.created_at).toLocaleDateString('en-GB') : null],
                     ['Credit balance', `₹${Number(user.credit_balance || 0).toLocaleString('en-IN')}`],
                     ['Credit limit', `₹${Number(user.credit_limit || 0).toLocaleString('en-IN')}`],
+                    ...(user.is_rejected && user.rejected_reason ? [['Rejection', user.rejected_reason]] : []),
                   ].map(([k, v]) => (
                     <View key={k as string} style={{ flexDirection: 'row', paddingVertical: 6 }}>
                       <Text style={{ width: 110, fontSize: 11, color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>{k}</Text>
@@ -5606,6 +5622,7 @@ function AdminUserDetailModal({ user, onClose, onSaved }: any) {
                 {([
                   ['store_name', 'Store name'],
                   ['user_type', 'Business type'],
+                  ['years_in_business', 'Years in business'],
                   ['drug_license', 'Drug licence'],
                   ['gst_number', 'GST number'],
                   ['registration_number', 'Registration number'],
