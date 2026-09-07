@@ -106,6 +106,18 @@ export async function GET(request: Request) {
   const user = (await getMobileUser(request)) || (await getWebUser());
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // Mirror auth.users.email_confirmed_at → public.users.email_verified so the
+  // "UNVERIFIED" chip clears the moment the customer clicks the confirm link.
+  // Idempotent: only writes when the two disagree (avoids per-request churn).
+  try {
+    const { data: authUser } = await sb.auth.admin.getUserById(user.id);
+    const confirmedInAuth = !!authUser?.user?.email_confirmed_at;
+    if (confirmedInAuth && !(user as any).email_verified) {
+      await sb.from('users').update({ email_verified: true }).eq('id', user.id);
+      (user as any).email_verified = true;
+    }
+  } catch { /* non-blocking */ }
+
   const today = new Date().toISOString().split('T')[0];
   async function fetchAllProducts() {
     const all: any[] = [];

@@ -39,18 +39,24 @@ export async function POST(request: Request) {
     }
 
     const phoneDigits = toDigits(phone);
-    // Try client email first, then admin — matches the web /api/customer-auth
-    // ordering so a partner who's actually an admin can still sign in on mobile.
-    const emailsToTry = [
-      `client-${phoneDigits}@upkem.internal`,
-      `admin-${phoneDigits}@upkem.internal`,
-    ];
-
     const client = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { auth: { persistSession: false } },
     );
+
+    // Look up the auth user by phone to find their real email — new signups
+    // use real email as the auth identifier; legacy accounts (pre-email-verify)
+    // use the synthetic client-<phone>@upkem.internal address. Trying both
+    // covers both without another schema change.
+    const sbAdmin = supabaseAdmin();
+    const { data: usersList } = await sbAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const matched = usersList?.users.find((u) => u.phone === phoneDigits);
+    const emailsToTry = [
+      matched?.email,                                  // whatever's on the auth row (real for new signups)
+      `client-${phoneDigits}@upkem.internal`,          // legacy customer synthetic
+      `admin-${phoneDigits}@upkem.internal`,           // legacy admin synthetic
+    ].filter(Boolean) as string[];
 
     let session: { access_token: string; refresh_token: string; user_id: string } | null = null;
     for (const email of emailsToTry) {

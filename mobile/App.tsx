@@ -4066,6 +4066,29 @@ function ProfileScreen({ setCurrentScreen }) {
   const [creditReqAmount, setCreditReqAmount] = useState('');
   const [creditReqNote, setCreditReqNote] = useState('');
   const [submittingCreditReq, setSubmittingCreditReq] = useState(false);
+  const [resendingVerify, setResendingVerify] = useState(false);
+
+  const resendVerification = async () => {
+    setResendingVerify(true);
+    try {
+      const res = await useStore.getState().authFetch(
+        `${useStore.getState().getBaseUrl()}/api/verify/resend`,
+        { method: 'POST' },
+      );
+      const data = await res.json();
+      if (data?.alreadyVerified) {
+        showToast('Already verified — reopening the app should refresh', 'info');
+      } else if (res.ok && data?.sent) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        showToast(`Verification link sent to ${data.email}`, 'success');
+      } else {
+        Alert.alert('Couldn\'t send', data?.error || 'Try again in a minute.');
+      }
+    } catch {
+      Alert.alert('Network error', 'Check your connection and try again.');
+    }
+    setResendingVerify(false);
+  };
 
   // Single-form profile editor. One sheet with every field, so the customer
   // doesn't have to open a modal per row. Free-edit fields go through
@@ -4320,6 +4343,32 @@ function ProfileScreen({ setCurrentScreen }) {
             ) : null}
           </View>
         </View>
+
+        {/* Email verification nudge — only shown when the customer signed up
+            with a real email but hasn't clicked the verify link yet. Legacy
+            accounts with synthetic @upkem.internal emails skip this. */}
+        {user.email && !user.email_verified && !(user.email || '').endsWith('@upkem.internal') && (
+          <View style={{ backgroundColor: '#FFFBEB', borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#FDE68A', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' }}>
+              <Ionicons name="mail-unread-outline" size={20} color="#B45309" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '900', color: '#78350F' }}>Verify your email</Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400E', marginTop: 2 }} numberOfLines={2}>
+                Check {user.email} for a link · builds trust with admin
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={resendVerification}
+              disabled={resendingVerify}
+              style={{ backgroundColor: '#B45309', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}
+            >
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: '900' }}>
+                {resendingVerify ? 'Sending…' : 'Resend'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Prominent single-form editor CTA. Solves the "too many taps to edit
             profile" ux issue — one sheet, everything in one place. */}
@@ -7806,6 +7855,26 @@ export default function App() {
         }
       }
     });
+    return () => sub.remove();
+  }, []);
+
+  // URL-scheme deep link handler — customer taps upkemlabs://verified in their
+  // email → the OS opens the app with that URL. We flash a success toast and
+  // force a fresh /api/data fetch so the "UNVERIFIED" chip clears immediately
+  // (the sync in /api/data mirrors auth.users.email_confirmed_at → users.email_verified).
+  useEffect(() => {
+    const handle = (url: string | null) => {
+      if (!url) return;
+      if (url.startsWith('upkemlabs://verified')) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        showToast('Email verified — welcome!', 'success');
+        // Force a fresh fetch; the poll would eventually catch it but this
+        // makes the chip disappear the moment the user reopens the app.
+        useStore.getState().refreshAll?.();
+      }
+    };
+    Linking.getInitialURL().then(handle);
+    const sub = Linking.addEventListener('url', (ev) => handle(ev.url));
     return () => sub.remove();
   }, []);
 
