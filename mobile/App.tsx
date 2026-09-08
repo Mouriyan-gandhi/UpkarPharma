@@ -879,6 +879,14 @@ const useStore = create((set, get) => ({
   schemes: [],
   setSchemes: (schemes) => set({ schemes }),
 
+  // Google Sign-in staging: when a user hits "Sign in with Google" on Login
+  // but doesn't yet have a public.users profile, we redirect them to Signup
+  // and stash the OAuth session here so Signup can pre-fill email/name +
+  // POST the merged form to /complete-google-signup. Cleared on submit.
+  pendingGoogle: null as null | { access_token: string; refresh_token: string; email: string; name: string },
+  setPendingGoogle: (g: any) => set({ pendingGoogle: g }),
+  clearPendingGoogle: () => set({ pendingGoogle: null }),
+
   // Brochures (product catalogs / marketing PDFs)
   brochures: [],
   setBrochures: (brochures) => set({ brochures }),
@@ -919,6 +927,69 @@ const useStore = create((set, get) => ({
     return true;
   },
 }));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Google Sign-in helper — shared between Login (sign in) and Signup (sign up
+// with Google after filling the form).
+//
+// Flow:
+//   1. Ask Supabase for the Google OAuth URL. skipBrowserRedirect keeps
+//      Supabase from trying to bounce the browser itself (we want to control
+//      the WebBrowser session so we can capture the callback).
+//   2. openAuthSessionAsync opens an in-app Chrome Custom Tab (Android) or
+//      SFAuthenticationSession (iOS) — same browser Supabase uses, sessions
+//      shared, feels like Google.
+//   3. When Google redirects back to upkemlabs://oauth-callback with the
+//      access_token + refresh_token in the URL fragment, WebBrowser closes
+//      and hands us the callback URL.
+//   4. Parse the tokens out of the URL fragment (Supabase uses fragment,
+//      not query, to keep them out of server logs), setSession() into the
+//      supabase-js client, then return the fresh session to the caller.
+//
+// The caller then decides: sign in path (hit /complete-google-signup GET
+// to see if a profile exists → home if yes, else nudge to signup) or
+// signup path (POST /complete-google-signup with the form data + this
+// session's access_token to create the profile).
+// ═══════════════════════════════════════════════════════════════════════════
+const GOOGLE_REDIRECT = 'upkemlabs://oauth-callback';
+
+async function signInWithGoogle(): Promise<{ access_token: string; refresh_token: string; user: any } | null> {
+  if (!sb) { Alert.alert('Config error', 'Supabase client not initialised.'); return null; }
+  try {
+    const { data, error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: GOOGLE_REDIRECT,
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error || !data?.url) throw new Error(error?.message || 'Could not start Google Sign-in');
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, GOOGLE_REDIRECT);
+    if (result.type !== 'success' || !result.url) {
+      // User dismissed. Silent — no toast, cleaner UX than an error dialog.
+      return null;
+    }
+
+    // Supabase returns tokens in the URL fragment (…#access_token=…&refresh_token=…).
+    const fragment = result.url.split('#')[1] || result.url.split('?')[1] || '';
+    const params = new URLSearchParams(fragment);
+    const access_token = params.get('access_token') || '';
+    const refresh_token = params.get('refresh_token') || '';
+    if (!access_token) throw new Error('No access token in callback URL');
+
+    const { data: sess, error: sErr } = await sb.auth.setSession({ access_token, refresh_token });
+    if (sErr || !sess.session) throw new Error(sErr?.message || 'Session exchange failed');
+    return {
+      access_token: sess.session.access_token,
+      refresh_token: sess.session.refresh_token,
+      user: sess.user,
+    };
+  } catch (e: any) {
+    Alert.alert('Google Sign-in failed', e?.message || 'Try again in a moment.');
+    return null;
+  }
+}
 
 // Notifications helper
 async function registerForPushNotificationsAsync() {
@@ -1017,16 +1088,22 @@ const PremiumTextInput = ({ label, value, onChangeText, keyboardType = 'default'
 // signin via the Profile → Edit-all flow. Address changes route through
 // admin approval; the compliance fields go through the change-request queue.
 function SignupScreen({ setCurrentScreen }) {
+  const pendingGoogle = useStore((s) => s.pendingGoogle);
+  const clearPendingGoogle = useStore((s) => s.clearPendingGoogle);
+  const setUser = useStore((s) => s.setUser);
+  const setSessionId = useStore((s) => s.setSessionId);
+  const setRefreshToken = useStore((s) => s.setRefreshToken);
   const [form, setForm] = useState({
     phone: '',
-    store_name: '',
-    email: '',
+    store_name: pendingGoogle?.name || '',
+    email: pendingGoogle?.email || '',
     password: '',
     confirmPassword: '',
     user_type: 'Retailer',
     years_in_business: '1-3',
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [tempIp, setTempIp] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -1045,11 +1122,77 @@ function SignupScreen({ setCurrentScreen }) {
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
   const pwOk = form.password.length >= 8;
   const pwMatch = form.password.length > 0 && form.password === form.confirmPassword;
+  // Password checks are skipped when the customer is completing signup via
+  // Google (the OAuth session already authenticates them). They can still
+  // fill password if they want a phone-based fallback; if left blank, the
+  // Create-account button is the wrong button and gets hidden.
   const canSubmit =
     form.phone.trim().length === 10 &&
     form.store_name.trim().length > 0 &&
     emailOk && pwOk && pwMatch &&
     form.user_type && form.years_in_business;
+  // For the Google flow — password is optional. Still require the same
+  // profile fields so the account carries the same info.
+  const canSubmitGoogle =
+    form.phone.trim().length === 10 &&
+    form.store_name.trim().length > 0 &&
+    form.user_type && form.years_in_business;
+
+  // Google Sign-up handler. Two flows converge here:
+  //   A. Customer just tapped "Sign up with Google" for the first time —
+  //      run OAuth, get a session, submit form + tokens to complete.
+  //   B. Customer arrived from the Login screen with a pendingGoogle
+  //      session already staged (they signed in with Google but had no
+  //      profile) — skip OAuth, just submit the form + staged tokens.
+  const handleGoogleSignup = async () => {
+    // Phone + business type still required — Google doesn't give us those.
+    if (form.phone.trim().length !== 10 || !form.user_type || !form.years_in_business) {
+      return Alert.alert('Almost there', 'Please fill phone, business type, and years in business first.');
+    }
+    setGoogleLoading(true);
+    try {
+      let session: { access_token: string; refresh_token: string } | null = pendingGoogle
+        ? { access_token: pendingGoogle.access_token, refresh_token: pendingGoogle.refresh_token }
+        : null;
+
+      if (!session) {
+        const s = await signInWithGoogle();
+        if (!s) { setGoogleLoading(false); return; }
+        session = { access_token: s.access_token, refresh_token: s.refresh_token };
+      }
+
+      const res = await fetch(`${useStore.getState().getBaseUrl()}/api/auth/complete-google-signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          phone: form.phone,
+          store_name: form.store_name,
+          user_type: form.user_type,
+          years_in_business: form.years_in_business,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Signup failed');
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Persist session + user, drop straight into Home.
+      setSessionId(session.access_token);
+      setRefreshToken(session.refresh_token);
+      setUser(data.user);
+      await AsyncStorage.setItem('@upkem_session_id', session.access_token);
+      await AsyncStorage.setItem('@upkem_refresh_token', session.refresh_token);
+      await AsyncStorage.setItem('@upkem_user', JSON.stringify(data.user));
+      clearPendingGoogle();
+      Alert.alert(
+        'Account created',
+        'Signed in! Ordering unlocks once admin approves your account. In the meantime — browse and complete your profile.',
+        [{ text: 'Continue', onPress: () => setCurrentScreen('Home') }],
+      );
+    } catch (e: any) {
+      Alert.alert('Google signup failed', e?.message || 'Try again.');
+    }
+    setGoogleLoading(false);
+  };
 
   const handleSignup = async () => {
     if (!canSubmit) {
@@ -1266,11 +1409,24 @@ function SignupScreen({ setCurrentScreen }) {
           </View>
         </Animated.View>
 
+        {/* Google-pending banner: user tapped "Sign in with Google" on Login,
+            no profile existed, we bounced them here with email + name filled.
+            Explains why the password fields say "not required". */}
+        {pendingGoogle && (
+          <View style={{ backgroundColor: '#EFF6FF', borderRadius: 14, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#BFDBFE', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Ionicons name="logo-google" size={18} color="#2563EB" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#1E3A8A', fontSize: 12, fontWeight: '900' }}>Signed in with Google as {pendingGoogle.email}</Text>
+              <Text style={{ color: '#1D4ED8', fontSize: 11, fontWeight: '700', marginTop: 2 }}>Password not needed — just fill phone + business.</Text>
+            </View>
+          </View>
+        )}
+
         {/* Submit */}
         <AnimatedPressable
           style={[
             styles.buttonPrimary,
-            { marginBottom: 20, paddingVertical: 18, opacity: canSubmit ? 1 : 0.55, backgroundColor: BRAND[800] },
+            { marginBottom: 12, paddingVertical: 18, opacity: canSubmit ? 1 : 0.55, backgroundColor: BRAND[800] },
             canSubmit ? SHADOWS.glowGreen : {},
           ]}
           onPress={handleSignup}
@@ -1281,7 +1437,32 @@ function SignupScreen({ setCurrentScreen }) {
           </Text>
         </AnimatedPressable>
 
-        <TouchableOpacity style={{ alignItems: 'center', marginBottom: 12 }} onPress={() => setCurrentScreen('Login')}>
+        {/* Divider then Google button. Skip Google button when the user is
+            already mid-Google-flow (pendingGoogle) since the same button
+            has been converted to "Continue with Google" via handleGoogleSignup. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, marginBottom: 12 }}>
+          <View style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
+          <Text style={{ marginHorizontal: 12, color: '#94a3b8', fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>OR</Text>
+          <View style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
+        </View>
+        <TouchableOpacity
+          onPress={handleGoogleSignup}
+          disabled={googleLoading || isLoading || !canSubmitGoogle}
+          activeOpacity={0.85}
+          style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12,
+            backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0',
+            paddingVertical: 16, borderRadius: 16, marginBottom: 20,
+            opacity: canSubmitGoogle ? 1 : 0.55,
+          }}
+        >
+          <Image source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }} style={{ width: 20, height: 20 }} />
+          <Text style={{ color: '#1A1A1A', fontSize: 15, fontWeight: '800' }}>
+            {googleLoading ? 'Working…' : (pendingGoogle ? 'Continue with Google' : 'Sign up with Google')}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={{ alignItems: 'center', marginBottom: 12 }} onPress={() => { clearPendingGoogle(); setCurrentScreen('Login'); }}>
           <Text style={{ color: '#64748b', fontWeight: '700', fontSize: 14 }}>
             Already registered? <Text style={{ color: BRAND[700], fontWeight: '900' }}>Log in</Text>
           </Text>
@@ -1402,6 +1583,57 @@ function LoginScreen({ setCurrentScreen }) {
     if (e.nativeEvent.key === 'Backspace' && !otpDigits[index] && index > 0) {
       otpInputRefs.current[index - 1]?.focus();
     }
+  };
+
+  // Google Sign-in handler for the Login screen. Two branches after OAuth:
+  //   - Customer already has a public.users row → stash tokens, jump to Home
+  //   - Customer has never signed up → bounce to Signup with the Google email
+  //     + name pre-filled so they only need to enter phone + business type.
+  const googleSignIn = async () => {
+    setIsLoading(true);
+    try {
+      const s = await signInWithGoogle();
+      if (!s) { setIsLoading(false); return; }
+
+      // Ask the server if a profile exists for this auth user.
+      const profileCheck = await fetch(`${useStore.getState().getBaseUrl()}/api/auth/complete-google-signup`, {
+        headers: { Authorization: `Bearer ${s.access_token}` },
+      });
+      const profileData = await profileCheck.json();
+      if (profileCheck.ok && profileData.hasProfile) {
+        // Returning customer — sign them in.
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        useStore.getState().setSessionId(s.access_token);
+        useStore.getState().setRefreshToken(s.refresh_token);
+        setUser(profileData.profile);
+        await AsyncStorage.setItem('@upkem_session_id', s.access_token);
+        await AsyncStorage.setItem('@upkem_refresh_token', s.refresh_token);
+        await AsyncStorage.setItem('@upkem_user', JSON.stringify(profileData.profile));
+        const isAdmin = profileData.profile?.is_admin || profileData.profile?.role === 'admin';
+        setCurrentScreen(isAdmin ? 'AdminHome' : 'Home');
+        return;
+      }
+      // No profile yet — nudge to Signup with Google email + name pre-filled.
+      Alert.alert(
+        'One more step',
+        'Complete signup to finish creating your UPKEM account.',
+        [{
+          text: 'Continue',
+          onPress: () => {
+            useStore.getState().setPendingGoogle({
+              access_token: s.access_token,
+              refresh_token: s.refresh_token,
+              email: profileData.authEmail || '',
+              name: profileData.authName || '',
+            });
+            setCurrentScreen('Signup');
+          },
+        }],
+      );
+    } catch (e: any) {
+      Alert.alert('Google Sign-in failed', e?.message || 'Try again.');
+    }
+    setIsLoading(false);
   };
 
   const devLogin = async () => {
@@ -1554,6 +1786,27 @@ function LoginScreen({ setCurrentScreen }) {
                   </Text>
                 </AnimatedPressable>
               </Animated.View>
+
+              {/* Divider then Google button — matches the pattern every mobile
+                  app uses for "one primary sign-in + one social sign-in". */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 20, marginBottom: 14 }}>
+                <View style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
+                <Text style={{ marginHorizontal: 12, color: '#94a3b8', fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>OR</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
+              </View>
+              <TouchableOpacity
+                onPress={googleSignIn}
+                disabled={isLoading}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12,
+                  backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0',
+                  paddingVertical: 15, borderRadius: 16, marginBottom: 8,
+                }}
+              >
+                <Image source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }} style={{ width: 20, height: 20 }} />
+                <Text style={{ color: '#1A1A1A', fontSize: 15, fontWeight: '800' }}>Sign in with Google</Text>
+              </TouchableOpacity>
             </>
           ) : (
             <>
