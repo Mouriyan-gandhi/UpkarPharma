@@ -804,9 +804,21 @@ const useStore = create((set, get) => ({
       );
       return;
     }
+    // Cap qty at product stock so a customer never checks out with more
+    // than the warehouse holds. If they try, we clip + tell them the max.
+    const product = (get().products || []).find((p: any) => p.id === productId);
+    const stock = Number(product?.stock ?? Number.MAX_SAFE_INTEGER);
+    const prev = get().cart[productId] || 0;
+    if (stock <= 0) {
+      showToast('Out of stock', 'info');
+      return;
+    }
+    if (prev >= stock) {
+      showToast(`Only ${stock} available`, 'info');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     set((state) => {
-      const prev = state.cart[productId] || 0;
       if (prev === 0) showToast('Added to cart');
       return { cart: { ...state.cart, [productId]: prev + 1 } };
     });
@@ -2795,11 +2807,17 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
                       ₹{basePrice}
                     </Text>
                   )}
-                  <View style={[styles.stockBadge, item.stock < 10 ? { backgroundColor: '#fee2e2' } : {}]}>
-                    <Text style={[styles.stockText, item.stock < 10 ? { color: '#dc2626' } : {}]}>
-                      {item.stock > 0 ? `${item.stock} in stock` : 'Out of Stock'}
-                    </Text>
-                  </View>
+                  {(() => {
+                    const s = Number(item.stock ?? 0);
+                    const tone = s === 0 ? { bg: '#FEE2E2', color: '#B91C1C', label: 'Out of stock' }
+                                : s < 10 ? { bg: '#FEF3C7', color: '#B45309', label: `Only ${s} left` }
+                                : { bg: BRAND[50], color: BRAND[800], label: `${s} in stock` };
+                    return (
+                      <View style={[styles.stockBadge, { backgroundColor: tone.bg }]}>
+                        <Text style={[styles.stockText, { color: tone.color }]}>{tone.label}</Text>
+                      </View>
+                    );
+                  })()}
                 </View>
                 {isShort && item.expiry_date && (
                   <Text style={{ marginTop: 6, fontSize: 11, color: '#B45309', fontWeight: '700' }}>
@@ -2809,9 +2827,20 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
               </View>
               <View style={styles.cartAction}>
                 {(!cart[item.id] || cart[item.id] === 0) ? (
-                  <AnimatedPressable style={styles.addBtn} onPress={() => addToCart(item.id)}>
-                    <Text style={styles.addBtnText}>ADD</Text>
-                  </AnimatedPressable>
+                  (() => {
+                    const outOfStock = Number(item.stock ?? 0) === 0;
+                    return (
+                      <AnimatedPressable
+                        style={[styles.addBtn, outOfStock ? { backgroundColor: '#E5E7EB' } : {}]}
+                        onPress={() => !outOfStock && addToCart(item.id)}
+                        disabled={outOfStock}
+                      >
+                        <Text style={[styles.addBtnText, outOfStock ? { color: '#9CA3AF' } : {}]}>
+                          {outOfStock ? 'OUT' : 'ADD'}
+                        </Text>
+                      </AnimatedPressable>
+                    );
+                  })()
                 ) : (
                   <QtyControl
                     value={cart[item.id]}
@@ -2938,6 +2967,30 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
                       <Text style={{ fontSize: 16, fontWeight: '700', color: '#0f172a' }}>{selectedProduct.packing || '1×10'}</Text>
                     </View>
                   </View>
+
+                  {/* Stock indicator — customer's ability to add to cart. Three tiers:
+                       0        → OUT OF STOCK (red)  · Add to cart disabled
+                       1..9     → LOW STOCK (X left)  · orange · Add to cart enabled
+                       10+      → IN STOCK            · green  · Add to cart enabled
+                      Displayed here (below price) not as a floating badge on the
+                      image so customers see it right before the CTA. */}
+                  {(() => {
+                    const s = Number(selectedProduct.stock ?? 0);
+                    const tone = s === 0
+                      ? { bg: '#FEE2E2', border: '#FCA5A5', color: '#B91C1C', icon: 'close-circle', label: 'Out of stock', sub: 'Notify me if you\'d like an alert when back' }
+                      : s < 10
+                        ? { bg: '#FEF3C7', border: '#FDE68A', color: '#B45309', icon: 'flash-outline', label: `Only ${s} left in stock`, sub: 'Order soon before it runs out' }
+                        : { bg: BRAND[50], border: BRAND[200], color: BRAND[800], icon: 'checkmark-circle', label: 'In stock', sub: 'Ships from UPKEM warehouse' };
+                    return (
+                      <View style={{ marginTop: 12, backgroundColor: tone.bg, borderColor: tone.border, borderWidth: 1, borderRadius: 14, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Ionicons name={tone.icon as any} size={18} color={tone.color} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '900', color: tone.color }}>{tone.label}</Text>
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: tone.color, opacity: 0.75, marginTop: 2 }}>{tone.sub}</Text>
+                        </View>
+                      </View>
+                    );
+                  })()}
                 </ScrollView>
 
                 {/* Sticky footer: close / add-to-cart share the row equally, with
@@ -2950,14 +3003,27 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
                     <Text style={{ fontSize: 15, fontWeight: '800', color: '#475569' }}>Close</Text>
                   </TouchableOpacity>
                   {(!cart[selectedProduct.id] || cart[selectedProduct.id] === 0) ? (
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      style={{ flex: 1, backgroundColor: BRAND[800], height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, ...SHADOWS.glowGreen }}
-                      onPress={() => { addToCart(selectedProduct.id); }}
-                    >
-                      <Ionicons name="cart-outline" size={18} color="#fff" />
-                      <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 }}>Add to cart</Text>
-                    </TouchableOpacity>
+                    (() => {
+                      const outOfStock = Number(selectedProduct.stock ?? 0) === 0;
+                      return (
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          disabled={outOfStock}
+                          style={{
+                            flex: 1, height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+                            flexDirection: 'row', gap: 8,
+                            backgroundColor: outOfStock ? '#E5E7EB' : BRAND[800],
+                            ...(outOfStock ? {} : SHADOWS.glowGreen),
+                          }}
+                          onPress={() => { addToCart(selectedProduct.id); }}
+                        >
+                          <Ionicons name={outOfStock ? 'close-circle-outline' : 'cart-outline'} size={18} color={outOfStock ? '#9CA3AF' : '#fff'} />
+                          <Text style={{ color: outOfStock ? '#9CA3AF' : '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 }}>
+                            {outOfStock ? 'Out of stock' : 'Add to cart'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })()
                   ) : (
                     // Match the Add-to-cart button's height + solid brand color.
                     // Row layout: minus | quantity | plus, spread evenly so the
@@ -5169,7 +5235,7 @@ function ProfileScreen({ setCurrentScreen }) {
 // raw_override for approvals).
 // ═════════════════════════════════════════════════════════════════════════════
 
-function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenPricing, onOpenUsers, onOpenSchemes, onOpenAnalytics, onOpenNotifications, onOpenChangeRequests, onOpenCreditRequests, onOpenBrochures, onExit }) {
+function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOpenProducts, onOpenStock, onOpenPricing, onOpenUsers, onOpenSchemes, onOpenAnalytics, onOpenNotifications, onOpenChangeRequests, onOpenCreditRequests, onOpenBrochures, onExit }) {
   const usersList = useStore((s) => s.usersList) || [];
   const products = useStore((s) => s.products) || [];
   // NOTE: orders in the store are filtered to the current user by the polling
@@ -5236,6 +5302,13 @@ function AdminHomeScreen({ setCurrentScreen, onOpenApprovals, onOpenOrders, onOp
             icon="cube-outline"
             color={BRAND[700]}
             onPress={onOpenProducts}
+          />
+          <AdminTile
+            title="Stock"
+            subtitle="See levels · edit inline · Excel upload"
+            icon="server-outline"
+            color="#EF4444"
+            onPress={onOpenStock}
           />
           <AdminTile
             title="Partners"
@@ -6931,6 +7004,405 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
 
 // --- Admin Credit Requests (approve/reject a partner's ask for more credit) ---
 // --- Admin: Brochures management (upload / toggle / delete PDFs) ---
+// ─── Admin: Stock management ─────────────────────────────────────────────────
+// Dedicated screen for stock ops. Products list is sorted by lowest stock
+// first by default (surfaces the "about to run out" items). Filter chips
+// switch between All / Out (0) / Low (< 10) / In-stock. Tap any product
+// row to edit stock inline — commit or cancel. Uploading an Excel goes
+// through a preview modal so admin sees exactly what will change before
+// hitting Apply.
+//
+// Stock updates persist via the existing update_stock action so we don't
+// duplicate mutation logic; realtime broadcasts on products then push the
+// changes to every admin device instantly.
+function AdminStockScreen({ onBack }: any) {
+  const products = useStore((s) => s.products) || [];
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState<'all' | 'out' | 'low' | 'in'>('all');
+  const [sortBy, setSortBy] = useState<'stock_asc' | 'stock_desc' | 'name'>('stock_asc');
+  const [editing, setEditing] = useState<any>(null);
+  const [editValue, setEditValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState<any>(null);
+  const [uploading, setUploading] = useState(false);
+  const [committing, setCommitting] = useState(false);
+  const [pickedFile, setPickedFile] = useState<any>(null);
+
+  // In Derma-only mode we filter to the launch catalog. Legacy SQLite
+  // migration products would flood the screen otherwise.
+  const scope = products.filter((p: any) => DERMA_ONLY ? p.category === LOCKED_CATEGORY : true);
+
+  const filtered = scope
+    .filter((p: any) => {
+      const s = Number(p.stock ?? 0);
+      if (filter === 'out') return s === 0;
+      if (filter === 'low') return s > 0 && s < 10;
+      if (filter === 'in')  return s >= 10;
+      return true;
+    })
+    .filter((p: any) => {
+      if (!q.trim()) return true;
+      const s = q.toLowerCase();
+      return (p.name || '').toLowerCase().includes(s) || String(p.id).includes(s);
+    })
+    .sort((a: any, b: any) => {
+      if (sortBy === 'stock_asc')  return (a.stock ?? 0) - (b.stock ?? 0);
+      if (sortBy === 'stock_desc') return (b.stock ?? 0) - (a.stock ?? 0);
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
+  const counts = {
+    all:  scope.length,
+    out:  scope.filter((p: any) => (p.stock ?? 0) === 0).length,
+    low:  scope.filter((p: any) => (p.stock ?? 0) > 0 && (p.stock ?? 0) < 10).length,
+    in:   scope.filter((p: any) => (p.stock ?? 0) >= 10).length,
+  };
+
+  const openEditor = (p: any) => {
+    setEditing(p);
+    setEditValue(String(p.stock ?? 0));
+  };
+
+  const saveInline = async () => {
+    const next = parseInt(editValue.replace(/[^0-9]/g, ''), 10);
+    if (!Number.isFinite(next) || next < 0) return Alert.alert('Invalid', 'Stock must be a number ≥ 0.');
+    setSaving(true);
+    try {
+      const res = await useStore.getState().authFetch(useStore.getState().getApiUrl(), {
+        method: 'POST',
+        body: JSON.stringify({
+          collection: 'products',
+          action: 'update_product',
+          item: { id: editing.id, stock: next },
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `Save failed (${res.status})`);
+      }
+      // Local optimistic update — realtime rt:products will confirm.
+      const list = useStore.getState().products || [];
+      useStore.getState().setProducts(list.map((p: any) => p.id === editing.id ? { ...p, stock: next } : p));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(`${editing.name} · stock ${next}`, 'success');
+      setEditing(null);
+    } catch (e: any) {
+      Alert.alert('Save failed', e.message);
+    }
+    setSaving(false);
+  };
+
+  // Excel upload — 2-phase: pick + preview (commit=false), then confirm.
+  const pickAndPreview = async () => {
+    const res = await DocumentPicker.getDocumentAsync({
+      type: [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+        'text/csv',
+        '*/*',   // Android sometimes reports blank type for Excel — accept anything
+      ],
+      copyToCacheDirectory: true,
+    });
+    if (res.canceled || !res.assets?.[0]) return;
+    const f = res.assets[0];
+    setPickedFile(f);
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', { uri: f.uri, name: f.name || 'stock.xlsx', type: f.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } as any);
+      fd.append('commit', 'false');
+      const auth = useStore.getState().authHeaders();
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(auth)) {
+        if (k.toLowerCase() !== 'content-type') headers[k] = v as string;
+      }
+      const url = `${useStore.getState().getBaseUrl()}/api/admin/stock-bulk`;
+      const upRes = await fetch(url, { method: 'POST', headers, body: fd });
+      const data = await upRes.json();
+      if (!upRes.ok) throw new Error(data?.error || 'Upload failed');
+      setPreview(data);
+    } catch (e: any) {
+      Alert.alert('Upload failed', e.message || 'Try a different file.');
+      setPickedFile(null);
+    }
+    setUploading(false);
+  };
+
+  const commitUpload = async () => {
+    if (!pickedFile) return;
+    setCommitting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', { uri: pickedFile.uri, name: pickedFile.name || 'stock.xlsx', type: pickedFile.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } as any);
+      fd.append('commit', 'true');
+      const auth = useStore.getState().authHeaders();
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(auth)) {
+        if (k.toLowerCase() !== 'content-type') headers[k] = v as string;
+      }
+      const url = `${useStore.getState().getBaseUrl()}/api/admin/stock-bulk`;
+      const upRes = await fetch(url, { method: 'POST', headers, body: fd });
+      const data = await upRes.json();
+      if (!upRes.ok) throw new Error(data?.error || 'Apply failed');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(`Stock updated on ${data.summary?.updated ?? 0} products`, 'success');
+      setPreview(null);
+      setPickedFile(null);
+    } catch (e: any) {
+      Alert.alert('Apply failed', e.message);
+    }
+    setCommitting(false);
+  };
+
+  const downloadTemplate = async () => {
+    try {
+      const url = `${useStore.getState().getBaseUrl()}/api/admin/stock-bulk/template`;
+      const sid = useStore.getState().sessionId;
+      // Deep-link into the browser with the bearer as a query token — the
+      // simplest way to hand a binary download off to the OS. Backend accepts
+      // Authorization header; the browser cannot set it directly, so we open
+      // via WebBrowser which lets us pass a header via extraHeaders.
+      await WebBrowser.openBrowserAsync(url, {
+        // @ts-ignore — RN types don't expose extraHeaders, but Android does.
+        extraHeaders: sid ? { Authorization: `Bearer ${sid}` } : {},
+      });
+    } catch (e: any) {
+      Alert.alert('Download failed', e.message);
+    }
+  };
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" />
+      <AdminBackHeader
+        title="Stock"
+        subtitle={`${counts.out} out · ${counts.low} low · ${counts.in} in stock`}
+        onBack={onBack}
+      />
+
+      <View style={{ paddingHorizontal: 16, gap: 10, paddingBottom: 8 }}>
+        {/* Upload row */}
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity
+            onPress={pickAndPreview}
+            disabled={uploading}
+            activeOpacity={0.85}
+            style={{ flex: 2, backgroundColor: BRAND[800], borderRadius: 12, paddingVertical: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8, ...SHADOWS.glowGreen }}
+          >
+            <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '900' }}>{uploading ? 'Reading…' : 'Upload Excel'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={downloadTemplate}
+            activeOpacity={0.85}
+            style={{ flex: 1, borderRadius: 12, borderWidth: 1.5, borderColor: BRAND[300], paddingVertical: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+          >
+            <Ionicons name="download-outline" size={16} color={BRAND[800]} />
+            <Text style={{ color: BRAND[800], fontSize: 12, fontWeight: '900' }}>Template</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Search */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 42 }}>
+          <Ionicons name="search" size={16} color="#94a3b8" />
+          <TextInput
+            value={q}
+            onChangeText={setQ}
+            placeholder="Search by product name or id"
+            placeholderTextColor="#94a3b8"
+            style={{ flex: 1, marginLeft: 8, fontSize: 14, color: '#0f172a', fontWeight: '600' }}
+          />
+          {q ? <TouchableOpacity onPress={() => setQ('')}><Ionicons name="close-circle" size={16} color="#94a3b8" /></TouchableOpacity> : null}
+        </View>
+
+        {/* Filter chips */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, flexDirection: 'row', alignItems: 'center' }}>
+          {([
+            { key: 'all', label: `All (${counts.all})` },
+            { key: 'out', label: `Out (${counts.out})`, tone: '#dc2626' },
+            { key: 'low', label: `Low (${counts.low})`, tone: '#B45309' },
+            { key: 'in',  label: `In stock (${counts.in})`, tone: BRAND[700] },
+          ] as const).map((c) => {
+            const active = filter === c.key;
+            return (
+              <TouchableOpacity
+                key={c.key}
+                onPress={() => setFilter(c.key)}
+                style={{
+                  paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, alignSelf: 'flex-start',
+                  backgroundColor: active ? BRAND[800] : '#fff',
+                  borderWidth: 1, borderColor: active ? BRAND[800] : '#e2e8f0',
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '900', color: active ? '#fff' : (c.tone || '#475569') }}>{c.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+          <View style={{ width: 1, height: 20, backgroundColor: '#e2e8f0', marginHorizontal: 4 }} />
+          {([
+            { key: 'stock_asc', label: 'Low → High' },
+            { key: 'stock_desc', label: 'High → Low' },
+            { key: 'name', label: 'A → Z' },
+          ] as const).map((s) => {
+            const active = sortBy === s.key;
+            return (
+              <TouchableOpacity
+                key={s.key}
+                onPress={() => setSortBy(s.key)}
+                style={{
+                  paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, alignSelf: 'flex-start',
+                  backgroundColor: active ? BRAND[100] : 'transparent',
+                  borderWidth: 1, borderColor: active ? BRAND[300] : 'transparent',
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: '900', color: active ? BRAND[800] : '#94a3b8' }}>{s.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      <FlatList
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        data={filtered}
+        keyExtractor={(p: any) => String(p.id)}
+        ListEmptyComponent={
+          <View style={{ alignItems: 'center', marginTop: 60 }}>
+            <Ionicons name="cube-outline" size={40} color="#94a3b8" />
+            <Text style={{ color: '#64748b', fontSize: 14, fontWeight: '700', marginTop: 12 }}>No products match this filter</Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const s = Number(item.stock ?? 0);
+          const tone = s === 0 ? { bg: '#FEE2E2', color: '#B91C1C', label: 'OUT' }
+                      : s < 10 ? { bg: '#FEF3C7', color: '#B45309', label: 'LOW' }
+                      : { bg: BRAND[50], color: BRAND[800], label: 'OK' };
+          return (
+            <TouchableOpacity
+              onPress={() => openEditor(item)}
+              activeOpacity={0.85}
+              style={{ backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 12, ...SHADOWS.sm }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: '900', color: '#0f172a' }} numberOfLines={2}>{item.name}</Text>
+                <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '700', marginTop: 2 }}>#{item.id} · {item.body_system || item.category || 'General'}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <View style={{ backgroundColor: tone.bg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-end' }}>
+                  <Text style={{ fontSize: 9, fontWeight: '900', color: tone.color, letterSpacing: 0.5 }}>{tone.label}</Text>
+                </View>
+                <Text style={{ fontSize: 22, fontWeight: '900', color: '#0f172a', marginTop: 4 }}>{s}</Text>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#94a3b8' }}>units</Text>
+              </View>
+              <Ionicons name="create-outline" size={18} color="#94a3b8" />
+            </TouchableOpacity>
+          );
+        }}
+      />
+
+      {/* Inline editor */}
+      <Modal visible={!!editing} transparent animationType="slide" onRequestClose={() => setEditing(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlayBottom}>
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => setEditing(null)} />
+          <View style={styles.bottomSheet}>
+            <View style={styles.dragHandle} />
+            <Text style={styles.modalTitle} numberOfLines={2}>{editing?.name}</Text>
+            <Text style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>
+              #{editing?.id} · current stock {editing?.stock ?? 0}
+            </Text>
+            <TextInput
+              value={editValue}
+              onChangeText={(v) => setEditValue(v.replace(/[^0-9]/g, '').slice(0, 6))}
+              keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor="#94a3b8"
+              autoFocus
+              selectTextOnFocus
+              style={{
+                borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 16, padding: 20,
+                fontSize: 32, fontWeight: '900', color: '#0f172a', backgroundColor: '#f8fafc',
+                textAlign: 'center', marginBottom: 20,
+              }}
+            />
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity style={styles.btnCancel} onPress={() => setEditing(null)}>
+                <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnSave} onPress={saveInline} disabled={saving}>
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{saving ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Upload preview modal */}
+      <Modal visible={!!preview} transparent animationType="slide" onRequestClose={() => setPreview(null)}>
+        <View style={styles.modalOverlayBottom}>
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1 }} onPress={() => setPreview(null)} />
+          <View style={[styles.bottomSheet, { maxHeight: '90%' }]}>
+            <View style={styles.dragHandle} />
+            <Text style={styles.modalTitle}>Review changes</Text>
+            {preview && (
+              <>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                  {[
+                    { label: 'Will update', v: preview.summary?.will_update, tone: BRAND[800] },
+                    { label: 'Unchanged', v: preview.summary?.unchanged, tone: '#64748b' },
+                    { label: 'Unmatched', v: preview.summary?.unmatched, tone: '#B45309' },
+                    { label: 'Invalid',   v: preview.summary?.invalid,   tone: '#B91C1C' },
+                  ].map((s) => (
+                    <View key={s.label} style={{ backgroundColor: '#f8fafc', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</Text>
+                      <Text style={{ fontSize: 18, fontWeight: '900', color: s.tone, marginTop: 2 }}>{s.v ?? 0}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+                  {(preview.matched || []).slice(0, 40).map((m: any) => (
+                    <View key={m.rowIndex} style={{ backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#f1f5f9' }}>
+                      <Text style={{ fontSize: 12, fontWeight: '900', color: '#0f172a' }} numberOfLines={2}>{m.product_name}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#94a3b8' }}>#{m.product_id}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: '#dc2626' }}>{m.old_stock}</Text>
+                        <Ionicons name="arrow-forward" size={12} color="#94a3b8" />
+                        <Text style={{ fontSize: 12, fontWeight: '900', color: BRAND[800] }}>{m.new_stock}</Text>
+                      </View>
+                    </View>
+                  ))}
+                  {(preview.unmatched?.length || 0) > 0 && (
+                    <View style={{ backgroundColor: '#FFFBEB', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#FDE68A' }}>
+                      <Text style={{ fontSize: 11, fontWeight: '900', color: '#B45309' }}>
+                        {preview.unmatched.length} unmatched row(s) will be skipped.
+                      </Text>
+                    </View>
+                  )}
+                </ScrollView>
+
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                  <TouchableOpacity style={styles.btnCancel} onPress={() => { setPreview(null); setPickedFile(null); }} disabled={committing}>
+                    <Text style={{ fontWeight: '800', color: '#64748b', fontSize: 16 }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.btnSave, { opacity: (preview.summary?.will_update || 0) > 0 ? 1 : 0.55 }]}
+                    onPress={commitUpload}
+                    disabled={committing || (preview.summary?.will_update || 0) === 0}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
+                      {committing ? 'Applying…' : `Apply · ${preview.summary?.will_update || 0}`}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
 function AdminBrochuresScreen({ onBack }: any) {
   const brochures = useStore((s) => s.brochures) || [];
   const loadBrochures = useStore((s) => s.loadBrochures);
@@ -8372,6 +8844,7 @@ export default function App() {
           onOpenChangeRequests={() => setCurrentScreen('AdminChangeRequests')}
           onOpenCreditRequests={() => setCurrentScreen('AdminCreditRequests')}
           onOpenBrochures={() => setCurrentScreen('AdminBrochures')}
+          onOpenStock={() => setCurrentScreen('AdminStock')}
           onExit={adminSignOut}
         />
       </View>
@@ -8450,6 +8923,11 @@ export default function App() {
     if (currentScreen === 'AdminBrochures') return (
       <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
         <AdminBrochuresScreen onBack={() => setCurrentScreen('AdminHome')} />
+      </View>
+    );
+    if (currentScreen === 'AdminStock') return (
+      <View style={{ flex: 1, backgroundColor: '#F7FAF8', paddingTop: Constants.statusBarHeight || 48 }}>
+        <AdminStockScreen onBack={() => setCurrentScreen('AdminHome')} />
       </View>
     );
     if (currentScreen === 'AdminPricing') return (
