@@ -13,9 +13,17 @@ export async function GET(request: Request) {
   const sb = supabaseAdmin();
   const userId = admin?.id || mobile!.id;
 
+  // Customer branch: match user_id AND exclude any admin-broadcast rows as a
+  // defence-in-depth measure. In principle user_id + for_admin are mutually
+  // exclusive, but if a legacy row leaked with both set, this stops it
+  // reaching a customer. Also excludes rows explicitly missing user_id.
   const q = admin
     ? sb.from('notifications').select('*').or(`user_id.eq.${userId},for_admin.eq.true`).order('created_at', { ascending: false }).limit(100)
-    : sb.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(100);
+    : sb.from('notifications').select('*')
+        .eq('user_id', userId)
+        .eq('for_admin', false)
+        .order('created_at', { ascending: false })
+        .limit(100);
 
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

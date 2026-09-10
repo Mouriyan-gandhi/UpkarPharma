@@ -767,9 +767,13 @@ const useStore = create((set, get) => ({
       const currUser = get().user;
       if (currUser) {
         const isAdmin = currUser.is_admin || currUser.role === 'admin';
+        // Strictly match by user_id — never by store_name / phone. Two customers
+        // sharing a store name (or both missing phone) previously caused each
+        // to see the other's orders because `undefined === undefined` is true
+        // in JS. user_id is the auth UUID — guaranteed unique.
         const userOrders = isAdmin
           ? (db.orders || [])
-          : (db.orders || []).filter((o: any) => o.phone === currUser.phone || o.store === currUser.store_name || o.user_phone === currUser.phone || o.store_name === currUser.store_name);
+          : (db.orders || []).filter((o: any) => o.user_id === currUser.id);
         get().setOrders(userOrders);
         const liveUser = (db.users || []).find((u: any) => u.phone === currUser.phone);
         if (liveUser) {
@@ -8651,9 +8655,11 @@ export default function App() {
       
       const currUser = useStore.getState().user;
       if (currUser) {
+        // Strict user_id filter — never by name/phone. See rationale in the
+        // refreshAll action above.
         const userOrders = (currUser.is_admin || currUser.role === 'admin')
           ? (db.orders || [])
-          : (db.orders || []).filter(o => o.phone === currUser.phone || o.store === currUser.store_name || o.user_phone === currUser.phone || o.store_name === currUser.store_name);
+          : (db.orders || []).filter((o: any) => o.user_id === currUser.id);
         useStore.getState().setOrders(userOrders);
         const liveUser = db.users.find(u => u.phone === currUser.phone);
         if (liveUser && JSON.stringify(liveUser) !== JSON.stringify(currUser)) {
@@ -8751,9 +8757,17 @@ export default function App() {
     channels.push(
       sb.channel('rt:notifs').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
         const n = payload.new as any;
-        // Filter client-side (belt + braces on top of RLS)
-        if (!isAdmin && n.user_id !== user.id) return;
-        if (isAdmin && !n.for_admin) return;
+        // Strict filter — Supabase realtime broadcasts to all subscribers
+        // by default regardless of RLS. Customer only accepts rows owned
+        // by them AND explicitly NOT for_admin; admin only accepts rows
+        // that are for_admin. Anything else is dropped — never even lands
+        // in local state.
+        if (isAdmin) {
+          if (!n.for_admin) return;
+        } else {
+          if (n.user_id !== user.id) return;
+          if (n.for_admin === true) return;
+        }
         const current = useStore.getState().notifications || [];
         useStore.getState().setNotifications([n, ...current]);
       }).subscribe()
