@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAnyAdmin, getMobileUser, getWebUser } from '@/lib/auth';
+import { getAnyAdmin, getMobileUser, getWebUser, getApprovedMobileUser } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { pushToAdmins } from '@/lib/push';
 
@@ -43,10 +43,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const admin = await getAnyAdmin(request);
-  const bearerUser = admin ? null : await getMobileUser(request);
-  // Only regular customers can create — admins can raise their own limit directly.
-  const customer = admin ? null : bearerUser || (await getWebUser());
-  if (!customer) return NextResponse.json({ error: 'Only customers can request credit' }, { status: 403 });
+  // Credit requests require an APPROVED account — a pending customer asking
+  // for an initial credit limit makes no sense; admin should approve them
+  // first and set an initial limit. Rejected accounts also can't request.
+  const approvedCustomer = admin ? null : await getApprovedMobileUser(request);
+  const customer = admin ? null : approvedCustomer || (await getWebUser());
+  if (!customer) {
+    return NextResponse.json({
+      error: 'Credit requests are only available after your account is approved.',
+    }, { status: 403 });
+  }
 
   let body: any;
   try { body = await request.json(); } catch { return NextResponse.json({ error: 'Bad JSON' }, { status: 400 }); }
