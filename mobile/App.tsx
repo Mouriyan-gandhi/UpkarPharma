@@ -919,28 +919,29 @@ const useStore = create((set, get) => ({
   clearCoupon: () => set({ appliedCoupon: null }),
   placeOrder: async (order) => {
     try {
-      const res = await fetch(get().getApiUrl(), {
+      const res = await get().authFetch(get().getApiUrl(), {
         method: 'POST',
-        headers: get().authHeaders(),
-        body: JSON.stringify({ collection: 'orders', item: order, action: 'create' })
+        body: JSON.stringify({ collection: 'orders', item: order, action: 'create' }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        Alert.alert('Order Failed', err.error || 'Server error. Please try again.');
+        Alert.alert('Order Failed', data.error || 'Server error. Please try again.');
         return false;
       }
+      // Server assigns the canonical order id (client-supplied id is now
+      // ignored — used to collide by birthday paradox from a 9k-namespace).
+      const serverOrderId = data.order_id || order.id;
+      set((state) => ({
+        orders: [{ ...order, id: serverOrderId, user_id: state.user?.id }, ...state.orders],
+        cart: {},
+        appliedCoupon: null,
+        user: state.user ? { ...state.user, credit_balance: (state.user.credit_balance || 0) + order.total } : null,
+      }));
+      return { success: true, orderId: serverOrderId };
     } catch (e) {
       Alert.alert('Connection Error', 'Failed to reach the server. Please verify the IP address.');
       return false;
     }
-
-    set((state) => ({
-      orders: [order, ...state.orders],
-      cart: {},
-      appliedCoupon: null,
-      user: state.user ? { ...state.user, credit_balance: state.user.credit_balance + order.total } : null
-    }));
-    return true;
   },
 }));
 
@@ -3448,8 +3449,10 @@ function ReviewConfirmScreen({ setCurrentScreen }) {
     }
 
     setIsPlacing(true);
+    // Note: id is a placeholder; server assigns the canonical id and returns
+    // it in the response. Local state gets patched with the real id.
     const newOrder = {
-      id: 'UPK-' + Math.floor(1000 + Math.random() * 9000),
+      id: 'pending',
       date: new Date().toLocaleDateString('en-GB'),
       store: user.store_name,
       phone: user.phone,
@@ -3463,11 +3466,11 @@ function ReviewConfirmScreen({ setCurrentScreen }) {
       created_at: new Date().toISOString(),
     };
 
-    const success = await placeOrder(newOrder);
+    const result = await placeOrder(newOrder);
     setIsPlacing(false);
-    if (success) {
+    if (result && (result as any).success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setPlacedOrder(newOrder);
+      setPlacedOrder({ ...newOrder, id: (result as any).orderId });
     }
   };
 

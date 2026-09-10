@@ -11,6 +11,8 @@ export interface AdminUser {
   role: 'admin' | 'client';
   is_approved: boolean;
   is_blocked: boolean;
+  is_rejected?: boolean;
+  rejected_reason?: string | null;
   credit_balance?: number;
   credit_limit?: number;
 }
@@ -41,8 +43,12 @@ export async function getAdmin(): Promise<AdminUser | null> {
 
 /**
  * Returns the current mobile client user, if the caller has a valid Supabase
- * session AND the user is approved + not blocked. Used by /api/data endpoints
- * that mobile hits with the Supabase session token in the Authorization header.
+ * session AND the user isn't blocked. Pending + rejected users ARE returned
+ * (they can browse the catalog + complete their profile; mutations that
+ * require approval — orders.create, credit-requests — check is_approved
+ * separately downstream).
+ *
+ * Used by /api/data reads, /api/notifications, brochures, etc.
  */
 export async function getMobileUser(request: Request): Promise<AdminUser | null> {
   const authHeader = request.headers.get('authorization') || '';
@@ -62,8 +68,23 @@ export async function getMobileUser(request: Request): Promise<AdminUser | null>
     .maybeSingle();
 
   if (error || !profile) return null;
-  if (!profile.is_approved || profile.is_blocked) return null;
+  // Block only the hard-blocked users. Pending / rejected pass through so
+  // they can see the catalog + complete signup info. Mutations gate on
+  // is_approved separately.
+  if (profile.is_blocked) return null;
   return profile as AdminUser;
+}
+
+/**
+ * Returns the mobile user ONLY if they're fully approved and not rejected/blocked.
+ * Use for mutations that require an active account: order placement, credit
+ * requests, profile change requests. Reads should keep using getMobileUser.
+ */
+export async function getApprovedMobileUser(request: Request): Promise<AdminUser | null> {
+  const user = await getMobileUser(request);
+  if (!user) return null;
+  if (!user.is_approved || (user as any).is_rejected) return null;
+  return user;
 }
 
 /**

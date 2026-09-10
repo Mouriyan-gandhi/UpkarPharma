@@ -22,7 +22,16 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const url = new URL(request.url);
-  const q = url.searchParams.get('q')?.trim() || '';
+  // Sanitize free-text search — user input flows into a PostgREST .or()
+  // filter (`name.ilike.%X%,drug_name.ilike.%X%,...`). Commas break the
+  // filter chain and let the caller inject additional clauses; percent
+  // and backslash can trip pattern parsing. Strip them + length-cap.
+  const rawQ = url.searchParams.get('q') || '';
+  const q = rawQ
+    .replace(/[,%*\\()]/g, '')      // filter meta-chars
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
   const category = url.searchParams.get('category') || '';
   const subCategory = url.searchParams.get('sub_category') || '';
   const shortExpiry = url.searchParams.get('short_expiry') === '1';

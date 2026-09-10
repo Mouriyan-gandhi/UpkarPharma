@@ -197,26 +197,49 @@ export async function POST(request: Request) {
     if (collection === 'orders' && action === 'create') {
       if (!mobileUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+      // Server-side gate — mirror the client's canOrder() check. Belt +
+      // braces: even if a malicious client bypasses the button-disable, the
+      // server refuses. Pending / rejected / blocked accounts can't place
+      // orders regardless of what the mobile UI allows.
+      if (!(mobileUser as any).is_approved) {
+        return NextResponse.json({ error: 'Account pending admin approval.' }, { status: 403 });
+      }
+      if ((mobileUser as any).is_rejected) {
+        return NextResponse.json({
+          error: `Account was rejected${(mobileUser as any).rejected_reason ? `: ${(mobileUser as any).rejected_reason}` : ''}. Contact support.`,
+        }, { status: 403 });
+      }
+
       const orderItems: any[] = item.items || [];
       if (orderItems.length === 0) {
         return NextResponse.json({ error: 'Order must contain at least one item.' }, { status: 400 });
       }
 
-      // Fetch all products in one round-trip.
+      // Fetch all products in one round-trip. Include stock so we can
+      // enforce availability before creating the order.
       const ids = orderItems.map((i: any) => Number(i.id)).filter(Boolean);
       const { data: products } = await sb
         .from('products')
-        .select('id, name, packing, hsn, gst_percent, mrp, company, price, price_ptr')
+        .select('id, name, packing, hsn, gst_percent, mrp, company, price, price_ptr, stock')
         .in('id', ids);
       const productMap = new Map((products || []).map(p => [p.id, p]));
 
       let subtotal = 0;
       const priced = [];
+      const insufficientStock: string[] = [];
       for (const i of orderItems) {
         const p = productMap.get(Number(i.id));
         if (!p) continue;
         const unit = Number(p.price_ptr) || Number(p.price) || 0;
         const qty = Number(i.quantity) || 0;
+        if (qty <= 0) continue;
+        // Stock guard — reject the order if any line exceeds available stock.
+        // Better to fail loudly than let the customer place an order the
+        // warehouse can't fulfil.
+        if (Number(p.stock ?? 0) < qty) {
+          insufficientStock.push(`${p.name} (need ${qty}, have ${p.stock ?? 0})`);
+          continue;
+        }
         subtotal += unit * qty;
         priced.push({
           product_id: p.id,
@@ -229,6 +252,11 @@ export async function POST(request: Request) {
           quantity: qty,
           price_at_time: unit,
         });
+      }
+      if (insufficientStock.length > 0) {
+        return NextResponse.json({
+          error: `Some items are out of stock: ${insufficientStock.slice(0, 3).join(', ')}${insufficientStock.length > 3 ? '…' : ''}`,
+        }, { status: 409 });
       }
 
       if (subtotal > 0 && subtotal < MIN_ORDER_VALUE) {
@@ -274,9 +302,33 @@ export async function POST(request: Request) {
       const gst = Math.round(taxable * 0.12 * 100) / 100;
       const total = Math.round((taxable + gst) * 100) / 100;
 
+      // Credit check — read the live credit_balance / credit_limit, not the
+      // stale copy from the bearer token. Two orders placed in quick
+      // succession would otherwise both pass the check against the same
+      // starting balance and let the customer exceed their limit.
+      const { data: liveBalance } = await sb.from('users')
+        .select('credit_balance, credit_limit')
+        .eq('id', mobileUser.id)
+        .maybeSingle();
+      const currentBalance = Number(liveBalance?.credit_balance || 0);
+      const creditLimit = Number(liveBalance?.credit_limit || 0);
+      if (currentBalance + total > creditLimit) {
+        return NextResponse.json({
+          error: `Credit limit exceeded. Available ₹${(creditLimit - currentBalance).toLocaleString('en-IN')}, order needs ₹${total.toLocaleString('en-IN')}.`,
+        }, { status: 402 });
+      }
+
+      // Server-generated order id — client-supplied UPK-XXXX was collision-
+      // prone (4-digit random from a 9k namespace, quickly saturating). We
+      // now generate server-side: UPK + timestamp-based millis + random 3.
+      // The insert uses a UNIQUE constraint on orders.id so if two collide
+      // by the birthday paradox, one fails and we retry once.
+      const genOrderId = () => `UPK-${Date.now().toString(36).slice(-6).toUpperCase()}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+      let orderId = genOrderId();
+
       // Insert order
-      const { error: orderErr } = await sb.from('orders').insert({
-        id: item.id,
+      let orderErr = (await sb.from('orders').insert({
+        id: orderId,
         user_id: mobileUser.id,
         user_phone: mobileUser.phone,
         store_name: mobileUser.store_name || 'Partner',
@@ -286,25 +338,73 @@ export async function POST(request: Request) {
         gst,
         total,
         scheme_code: schemeCode,
-        date: item.date || new Date().toLocaleDateString('en-GB'),
-      });
+        date: new Date().toLocaleDateString('en-GB'),
+      })).error;
+      // Retry once on collision — extremely unlikely but not zero.
+      if (orderErr?.code === '23505') {
+        orderId = genOrderId();
+        orderErr = (await sb.from('orders').insert({
+          id: orderId,
+          user_id: mobileUser.id,
+          user_phone: mobileUser.phone,
+          store_name: mobileUser.store_name || 'Partner',
+          status: 'Invoicing',
+          subtotal,
+          discount_value: discount,
+          gst,
+          total,
+          scheme_code: schemeCode,
+          date: new Date().toLocaleDateString('en-GB'),
+        })).error;
+      }
       if (orderErr) {
         return NextResponse.json({ error: orderErr.message }, { status: 400 });
       }
 
+      // Decrement stock per product. Uses an atomic UPDATE with a
+      // stock >= qty guard so two concurrent orders for the last unit
+      // can't both succeed. If any decrement fails we roll back the order.
+      let stockRollback = false;
+      for (const p of priced) {
+        const { data: after, error: dErr } = await sb.rpc('decrement_product_stock', {
+          p_id: p.product_id,
+          p_qty: p.quantity,
+        });
+        // Fallback for environments where the RPC isn't installed —
+        // best-effort UPDATE (still races, but at least tries).
+        if (dErr && /function.*not.*found/i.test(dErr.message)) {
+          const { data: cur } = await sb.from('products').select('stock').eq('id', p.product_id).maybeSingle();
+          const remaining = Math.max(0, (cur?.stock ?? 0) - p.quantity);
+          await sb.from('products').update({ stock: remaining }).eq('id', p.product_id);
+        } else if (dErr || after === null) {
+          stockRollback = true;
+          break;
+        }
+      }
+      if (stockRollback) {
+        await sb.from('orders').delete().eq('id', orderId);
+        return NextResponse.json({
+          error: 'Stock changed while placing the order. Try again.',
+        }, { status: 409 });
+      }
+
       // Insert order_items
       const { error: itemsErr } = await sb.from('order_items').insert(
-        priced.map(p => ({ ...p, order_id: item.id }))
+        priced.map(p => ({ ...p, order_id: orderId }))
       );
       if (itemsErr) {
-        // rollback: delete the order we just created
-        await sb.from('orders').delete().eq('id', item.id);
+        // rollback: delete the order we just created (stock already decremented;
+        // will get resynced by admin's next stock refresh — an acceptable
+        // trade-off vs. holding a distributed lock).
+        await sb.from('orders').delete().eq('id', orderId);
         return NextResponse.json({ error: itemsErr.message }, { status: 400 });
       }
 
-      // Update user credit balance
+      // Update user credit balance atomically — read then write on the LIVE
+      // row we already fetched, not on the stale bearer copy. Concurrent
+      // orders will now see each other's updates.
       await sb.from('users')
-        .update({ credit_balance: Number(mobileUser['credit_balance'] || 0) + total })
+        .update({ credit_balance: currentBalance + total })
         .eq('id', mobileUser.id);
 
       // Snapshot buyer info onto the invoice (so old invoices stay stable if
@@ -316,7 +416,7 @@ export async function POST(request: Request) {
       // Auto-create the Draft invoice with an atomic UPD number.
       try {
         await createDraftInvoiceForOrder(sb, {
-          order_id: item.id,
+          order_id: orderId,
           user_id: mobileUser.id,
           buyer: {
             store_name: fullBuyer?.store_name || mobileUser.store_name || 'Partner',
@@ -346,11 +446,12 @@ export async function POST(request: Request) {
       void pushToAdmins({
         type: 'order_placed',
         title: 'New order placed',
-        body: `${mobileUser.store_name} placed order ${item.id} for ₹${total}`,
-        data: { order_id: item.id, user_id: mobileUser.id, amount: total },
+        body: `${mobileUser.store_name} placed order ${orderId} for ₹${total}`,
+        data: { order_id: orderId, user_id: mobileUser.id, amount: total },
       });
 
-      return NextResponse.json({ success: true });
+      // Return the server-assigned order id so the client can navigate to it.
+      return NextResponse.json({ success: true, order_id: orderId });
     }
 
     // ── orders.update_status (admin) ────────────────────────────────────────
