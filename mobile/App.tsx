@@ -988,19 +988,47 @@ async function signInWithGoogle(): Promise<{ access_token: string; refresh_token
       return null;
     }
 
-    // Supabase returns tokens in the URL fragment (…#access_token=…&refresh_token=…).
-    const fragment = result.url.split('#')[1] || result.url.split('?')[1] || '';
-    const params = new URLSearchParams(fragment);
-    const access_token = params.get('access_token') || '';
-    const refresh_token = params.get('refresh_token') || '';
-    if (!access_token) throw new Error('No access token in callback URL');
+    // Supabase can return the OAuth result in two different shapes depending on
+    // the client's `flowType`:
+    //   1. PKCE (default on supabase-js >= 2.4):
+    //        upkemlabs://oauth-callback?code=XYZ&state=...
+    //      → exchange `code` for a session via auth.exchangeCodeForSession()
+    //      (the PKCE verifier is cached in-memory on `sb` from signInWithOAuth)
+    //   2. Implicit (older default, or when flowType:'implicit' is set):
+    //        upkemlabs://oauth-callback#access_token=...&refresh_token=...
+    //      → feed the tokens straight into auth.setSession()
+    //
+    // Handle both. Earlier builds only handled the implicit shape, which is
+    // why "no access token in callback URL" surfaced — Supabase was returning
+    // ?code=... and the parser never looked at it.
+    const urlObj = new URL(result.url);
+    const queryCode = urlObj.searchParams.get('code');
+    const fragment = result.url.includes('#') ? result.url.split('#')[1] : '';
+    const fragParams = new URLSearchParams(fragment);
+    const fragAccess = fragParams.get('access_token');
+    const fragRefresh = fragParams.get('refresh_token');
 
-    const { data: sess, error: sErr } = await sb.auth.setSession({ access_token, refresh_token });
-    if (sErr || !sess.session) throw new Error(sErr?.message || 'Session exchange failed');
+    let session: any = null;
+    if (fragAccess) {
+      const { data: sess, error: sErr } = await sb.auth.setSession({
+        access_token: fragAccess,
+        refresh_token: fragRefresh || '',
+      });
+      if (sErr || !sess.session) throw new Error(sErr?.message || 'Session exchange failed');
+      session = sess.session;
+    } else if (queryCode) {
+      const { data: sess, error: sErr } = await sb.auth.exchangeCodeForSession(queryCode);
+      if (sErr || !sess.session) throw new Error(sErr?.message || 'Code exchange failed');
+      session = sess.session;
+    } else {
+      // Neither shape — surface a diagnostic so we can see what Supabase actually sent.
+      throw new Error(`Unexpected callback: ${result.url.slice(0, 160)}`);
+    }
+
     return {
-      access_token: sess.session.access_token,
-      refresh_token: sess.session.refresh_token,
-      user: sess.user,
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      user: session.user,
     };
   } catch (e: any) {
     Alert.alert('Google Sign-in failed', e?.message || 'Try again in a moment.');
