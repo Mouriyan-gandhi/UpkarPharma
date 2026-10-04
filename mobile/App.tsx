@@ -4210,7 +4210,11 @@ function BrochureViewerScreen({ brochure, onBack }: any) {
     setProgress(0);
     setErrorMsg('');
     try {
-      const FileSystem = await import('expo-file-system');
+      // Use the /legacy entry point — expo-file-system SDK 54 deprecated
+      // the resumable download API on the top-level module but kept it
+      // intact under /legacy. The migration path to the new File/Directory
+      // classes is bigger than this feature warrants right now.
+      const FileSystem = await import('expo-file-system/legacy');
       // Cache path — key by storage_key so different brochures don't collide
       // and re-uploads (same key) reuse.
       const filename = (brochure.storage_key || `brochure-${brochure.id}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '_');
