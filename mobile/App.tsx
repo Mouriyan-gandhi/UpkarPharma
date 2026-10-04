@@ -2035,6 +2035,21 @@ const HOME_CATEGORIES = DERMA_ONLY ? [
 
 // Banner slots — admin-editable later. Keep 4 slots.
 // action: 'catalog' | 'short-expiry' | 'orders' | 'profile'
+// Pharma manufacturers we distribute for. Rendered as a vertical auto-scroll
+// marquee on the customer Home — a trust signal + a passive way to surface
+// the breadth of inventory without taking up a whole screen.
+const BRAND_PARTNERS = [
+  'Vakul Lifesciences',
+  'Intas Pharmaceuticals Ltd',
+  'Life Infusion Pvt Ltd',
+  'Concept Biosciences',
+  'Recova Pharma LLP',
+  'Elder Laboratories Ltd',
+  'Nubeno Healthcare Pvt Ltd',
+  'Alkem Laboratories',
+  'Plethikind Ethica',
+];
+
 const HOME_BANNERS: any[] = [
   {
     id: 'b1',
@@ -2162,6 +2177,98 @@ function HeroCarousel({ onAction }) {
             }}
           />
         ))}
+      </View>
+    </View>
+  );
+}
+
+// ─── Brand partners marquee ──────────────────────────────────────────────────
+// Vertical infinite-scroll ticker of pharma manufacturers we distribute for.
+// Pattern: render the list twice back-to-back, animate translateY from 0 to
+// -singleListHeight linearly, then snap back to 0 and repeat. Because the
+// top of the second copy sits exactly where the top of the first copy was
+// at the start, the snap is invisible and the scroll feels continuous.
+const PARTNER_ROW_HEIGHT = 54;
+const PARTNER_VISIBLE_ROWS = 3;
+
+function BrandPartnersMarquee() {
+  const translateY = useRef(new Animated.Value(0)).current;
+  const singleListHeight = BRAND_PARTNERS.length * PARTNER_ROW_HEIGHT;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(translateY, {
+        toValue: -singleListHeight,
+        duration: BRAND_PARTNERS.length * 2200,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  // Duplicate so the first row of the second copy slides into view just as
+  // the first copy's last row leaves — seamless loop.
+  const doubled = [...BRAND_PARTNERS, ...BRAND_PARTNERS];
+
+  return (
+    <View style={{ marginHorizontal: 16, marginBottom: 20 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 6 }}>
+        <Ionicons name="ribbon-outline" size={14} color={BRAND[700]} />
+        <Text style={{ fontSize: 11, fontWeight: '900', color: BRAND[800], letterSpacing: 1.5, textTransform: 'uppercase' }}>
+          Our brand partners
+        </Text>
+        <View style={{ flex: 1, height: 1, backgroundColor: BRAND[100], marginLeft: 4 }} />
+      </View>
+      <View
+        style={{
+          height: PARTNER_ROW_HEIGHT * PARTNER_VISIBLE_ROWS,
+          backgroundColor: '#fff',
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: '#f1f5f9',
+          overflow: 'hidden',
+          ...SHADOWS.sm,
+        }}
+      >
+        <Animated.View style={{ transform: [{ translateY }] }}>
+          {doubled.map((company, idx) => (
+            <View
+              key={`${company}-${idx}`}
+              style={{
+                height: PARTNER_ROW_HEIGHT,
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: 16,
+                borderBottomWidth: 1,
+                borderBottomColor: '#f1f5f9',
+              }}
+            >
+              <View
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  backgroundColor: BRAND[50],
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginRight: 12,
+                  borderWidth: 1,
+                  borderColor: BRAND[100],
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '900', color: BRAND[800], letterSpacing: 0.5 }}>
+                  {company.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()}
+                </Text>
+              </View>
+              <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: '#0f172a' }} numberOfLines={1}>
+                {company}
+              </Text>
+              <Ionicons name="checkmark-circle" size={16} color={BRAND[500]} />
+            </View>
+          ))}
+        </Animated.View>
       </View>
     </View>
   );
@@ -2386,6 +2493,13 @@ function HomeScreen({ setCurrentScreen, onCategorySelect, onRefresh }) {
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        {/* Brand partners — vertical auto-scroll ticker. Visual breather
+            between the compact category rail and the dense product grid,
+            and a trust signal showing which manufacturers we stock. */}
+        <View style={{ marginTop: 20 }}>
+          <BrandPartnersMarquee />
+        </View>
 
         {/* 3. TOP PRODUCTS */}
         <View style={[styles.homeSectionRow, { marginTop: 20 }]}>
