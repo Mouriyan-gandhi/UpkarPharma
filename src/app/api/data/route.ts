@@ -602,6 +602,10 @@ export async function POST(request: Request) {
         price: item.price,
         stock: item.stock,
         image_url: item.image_url || null,
+        // Default FALSE — admin must explicitly opt-in to a photo per product
+        // once they've uploaded a real one. Avoids showing the stock
+        // placeholder on brand-new SKUs.
+        show_photo: !!item.show_photo,
       });
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ success: true });
@@ -665,7 +669,7 @@ export async function POST(request: Request) {
     if (action === 'update_product' && admin) {
       if (!item.id) return NextResponse.json({ error: 'Product ID required' }, { status: 400 });
       const patch: any = {};
-      for (const k of ['name','company','category','body_system','packing','price','price_ptr','mrp','stock','description','composition','images','short_expiry','discount_percent','expiry_date','hsn','gst_percent']) {
+      for (const k of ['name','company','category','body_system','packing','price','price_ptr','mrp','stock','description','composition','images','short_expiry','discount_percent','expiry_date','hsn','gst_percent','show_photo']) {
         if (item[k] !== undefined) patch[k] = item[k];
       }
       // Keep image_url in sync with images[0] — that's what customer catalog

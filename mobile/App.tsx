@@ -160,6 +160,57 @@ function getProductImages(product: any): string[] {
   return [CATEGORY_IMAGES[product?.category] || DEFAULT_PRODUCT_IMAGE];
 }
 
+// Whether to render a photo for this product on customer surfaces. Admins
+// opt-in per product via the show_photo toggle; default is FALSE because
+// most of the Derma catalog has no real photos yet (we were rendering
+// stock placeholders which looked worse than nothing).
+function productHasPhoto(product: any): boolean {
+  if (!product?.show_photo) return false;
+  const imgs = Array.isArray(product.images) ? product.images.filter((u: any) => typeof u === 'string' && u.length > 0) : [];
+  const single = typeof product.image === 'string' && product.image.length > 0 ? product.image : (typeof product.image_url === 'string' && product.image_url.length > 0 ? product.image_url : '');
+  return imgs.length > 0 || single.length > 0;
+}
+
+// Fallback tile for products without a photo. Typography-forward, uses the
+// product's category word and initial letters on a brand-tinted background —
+// feels intentional, not a broken placeholder. Shape/size matches the image
+// slot it replaces so the surrounding layout doesn't shift.
+function ProductMediaFallback({
+  product, height, width, cornerRadius = 16, style,
+}: { product: any; height?: number; width?: number | string; cornerRadius?: number; style?: any }) {
+  const initials = String(product?.name || '?')
+    .split(/\s+/).filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
+  const tag = product?.body_system || product?.category || 'Rx';
+  return (
+    <View style={[{
+      width: width ?? '100%',
+      height: height,
+      backgroundColor: BRAND[50],
+      borderRadius: cornerRadius,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: BRAND[100],
+      overflow: 'hidden',
+    }, style]}>
+      <Text style={{
+        fontSize: height && height < 100 ? 22 : 34,
+        fontWeight: '900',
+        color: BRAND[800],
+        letterSpacing: -1,
+      }}>{initials}</Text>
+      <Text style={{
+        marginTop: 4,
+        fontSize: 10,
+        fontWeight: '800',
+        color: BRAND[700],
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+      }} numberOfLines={1}>{tag}</Text>
+    </View>
+  );
+}
+
 function ProductImageCarousel({ product, height = 260, cornerRadius = 20 }: { product: any; height?: number; cornerRadius?: number; }) {
   const images = getProductImages(product);
   const scrollRef = useRef<any>(null);
@@ -2529,7 +2580,11 @@ function HomeScreen({ setCurrentScreen, onCategorySelect, onRefresh }) {
               activeOpacity={0.85}
             >
               <View>
-                <Image source={{ uri: getProductImage(p) }} style={styles.featuredCardImage} />
+                {productHasPhoto(p) ? (
+                  <Image source={{ uri: getProductImage(p) }} style={styles.featuredCardImage} />
+                ) : (
+                  <ProductMediaFallback product={p} style={styles.featuredCardImage} />
+                )}
                 {/* Top-seller badge */}
                 <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: BRAND[800], paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                   <Ionicons name="flame" size={10} color="#fff" />
@@ -2606,7 +2661,11 @@ function HomeScreen({ setCurrentScreen, onCategorySelect, onRefresh }) {
                         borderRadius: 12, borderWidth: 1, borderColor: BRAND[100],
                       }}
                     >
-                      <Image source={{ uri: getProductImage(it) }} style={{ width: 26, height: 26, borderRadius: 6, marginRight: 6, backgroundColor: '#f1f5f9' }} />
+                      {productHasPhoto(it) ? (
+                        <Image source={{ uri: getProductImage(it) }} style={{ width: 26, height: 26, borderRadius: 6, marginRight: 6, backgroundColor: '#f1f5f9' }} />
+                      ) : (
+                        <ProductMediaFallback product={it} height={26} width={26} cornerRadius={6} style={{ marginRight: 6 }} />
+                      )}
                       <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND[900], maxWidth: 130 }} numberOfLines={1}>
                         {it.name}
                       </Text>
@@ -2934,7 +2993,11 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
           return (
             <TouchableOpacity style={styles.productCard} onPress={() => setSelectedProduct(item)} activeOpacity={0.8}>
               <View style={{ position: 'relative' }}>
-                <Image source={{ uri: getProductImage(item) }} style={styles.productThumb} />
+                {productHasPhoto(item) ? (
+                  <Image source={{ uri: getProductImage(item) }} style={styles.productThumb} />
+                ) : (
+                  <ProductMediaFallback product={item} style={styles.productThumb} />
+                )}
                 {(isShort || disc > 0) && (
                   <View style={{ position: 'absolute', top: -6, left: -6, backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 3, ...SHADOWS.sm }}>
                     <Ionicons name="flame" size={10} color="#fff" />
@@ -3039,7 +3102,11 @@ function CatalogScreen({ setCurrentScreen, initialCategory }) {
             {selectedProduct && (
               <>
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
-                  <ProductImageCarousel product={selectedProduct} height={240} />
+                  {productHasPhoto(selectedProduct) ? (
+                    <ProductImageCarousel product={selectedProduct} height={240} />
+                  ) : (
+                    <ProductMediaFallback product={selectedProduct} height={240} cornerRadius={20} />
+                  )}
 
                   <Text style={styles.modalTitle}>{selectedProduct.name}</Text>
                   <Text style={{ color: '#64748b', fontSize: 15, marginTop: 2, marginBottom: 12, fontWeight: '600' }}>
@@ -6857,6 +6924,7 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
     discount_percent: String(product?.discount_percent ?? ''),
     expiry_date: product?.expiry_date || '',
     images: Array.isArray(product?.images) && product.images.length > 0 ? [...product.images] : (product?.image ? [product.image] : []),
+    show_photo: !!product?.show_photo,
   });
   const [busy, setBusy] = useState(false);
   const [urlInput, setUrlInput] = useState('');
@@ -7020,9 +7088,36 @@ function AdminProductEditScreen({ product, onBack, onSaved }) {
       <StatusBar barStyle="dark-content" />
       <AdminBackHeader title={editing ? 'Edit product' : 'Add product'} onBack={onBack} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+        {/* Show-photo toggle. Default OFF — admin flips ON only when they
+            have a real product photo. When OFF, the customer sees a
+            typography fallback card instead of a stock placeholder. */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: form.show_photo ? BRAND[300] : '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: form.show_photo ? BRAND[100] : '#f1f5f9', justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name={form.show_photo ? 'image' : 'image-outline'} size={18} color={form.show_photo ? BRAND[800] : '#94a3b8'} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, fontWeight: '900', color: '#0f172a' }}>Show photo to customers</Text>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b', marginTop: 2 }}>
+              {form.show_photo ? 'Photos below render in catalog + detail.' : 'Hidden — customer sees a text tile instead.'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => { Haptics.selectionAsync(); setForm({ ...form, show_photo: !form.show_photo }); }}
+            style={{
+              width: 46, height: 26, borderRadius: 13,
+              backgroundColor: form.show_photo ? BRAND[800] : '#e2e8f0',
+              padding: 3,
+              justifyContent: 'center',
+              alignItems: form.show_photo ? 'flex-end' : 'flex-start',
+            }}
+          >
+            <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff', ...SHADOWS.sm }} />
+          </TouchableOpacity>
+        </View>
+
         {/* Images section */}
-        <Text style={labelStyle}>Photos</Text>
-        <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9' }}>
+        <Text style={labelStyle}>Photos{form.show_photo ? '' : ' (hidden from customers)'}</Text>
+        <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#f1f5f9', opacity: form.show_photo ? 1 : 0.6 }}>
           {form.images.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 10 }}>
               {form.images.map((uri: string, i: number) => (
