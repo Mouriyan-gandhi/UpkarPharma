@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import { DM_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+// DM_Sans is a variable font — Next.js 16's Turbopack rejects an explicit
+// weight array ("next/font/google queries have exactly one entry"). Omitting
+// `weight` loads the variable font file; all 100-1000 weights remain usable
+// via `font-weight` on the consumer side.
 const dmSans = DM_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800", "900"],
 });
 
 const geistMono = Geist_Mono({
