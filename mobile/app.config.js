@@ -55,6 +55,10 @@ module.exports = () => {
           sounds: [],
         },
       ],
+      // react-native-blob-util needs its config plugin so Expo's prebuild
+      // picks up its Android gradle hooks. react-native-pdf pulls blob-util
+      // in as a peer; no separate plugin needed for pdf itself.
+      'react-native-blob-util',
     ],
   };
 };

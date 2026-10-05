@@ -21,6 +21,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as WebBrowser from 'expo-web-browser';
 import { WebView } from 'react-native-webview';
+import Pdf from 'react-native-pdf';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 
@@ -4399,44 +4400,38 @@ function BrochuresScreen({ setCurrentScreen, onOpenBrochure }: any) {
   );
 }
 
-// Brochure viewer — download-then-open flow. The Google Docs webview approach
-// was flaky on 30 MB+ PDFs and didn't render on some Android WebViews at all.
-// Now we stream the file to the app's document dir, cache by storage_key +
-// size, then open with Sharing (which hands off to the OS's native PDF
-// reader — instant scrolling, real search, native zoom).
+// Brochure viewer — downloads the PDF to the app's cache, then renders it
+// IN-APP via react-native-pdf (not the share sheet). PDF scrolls, pinch-
+// zooms, pagination indicator at the bottom. Share button in the header
+// still lets the customer send the file to WhatsApp etc. if they want.
 //
-// First-time download shows progress; subsequent opens are instant from cache.
+// Cache: keyed by storage_key + file_size, so re-uploads of the same key
+// invalidate automatically and second opens of the same file are instant.
 function BrochureViewerScreen({ brochure, onBack }: any) {
   const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState<'downloading' | 'opening' | 'error'>('downloading');
+  const [status, setStatus] = useState<'downloading' | 'ready' | 'error'>('downloading');
   const [errorMsg, setErrorMsg] = useState('');
+  const [localUri, setLocalUri] = useState<string>('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
 
   if (!brochure) return null;
   const pdfUrl = brochure.file_url;
 
-  const downloadAndOpen = async () => {
+  const downloadIfNeeded = async () => {
     setStatus('downloading');
     setProgress(0);
     setErrorMsg('');
     try {
-      // Use the /legacy entry point — expo-file-system SDK 54 deprecated
-      // the resumable download API on the top-level module but kept it
-      // intact under /legacy. The migration path to the new File/Directory
-      // classes is bigger than this feature warrants right now.
       const FileSystem = await import('expo-file-system/legacy');
-      // Cache path — key by storage_key so different brochures don't collide
-      // and re-uploads (same key) reuse.
       const filename = (brochure.storage_key || `brochure-${brochure.id}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '_');
       const dest = `${FileSystem.documentDirectory || FileSystem.cacheDirectory}${filename}`;
       const info = await FileSystem.getInfoAsync(dest).catch(() => ({ exists: false }));
-      // Cache-hit if size matches — otherwise redownload.
       if (info.exists && brochure.file_size && (info as any).size === brochure.file_size) {
-        setStatus('opening');
-        await Sharing.shareAsync(dest, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: brochure.title });
-        onBack();
+        setLocalUri(dest);
+        setStatus('ready');
         return;
       }
-      // Download with progress
       const dl = FileSystem.createDownloadResumable(pdfUrl, dest, {}, (p: any) => {
         if (p.totalBytesExpectedToWrite > 0) {
           setProgress(p.totalBytesWritten / p.totalBytesExpectedToWrite);
@@ -4444,20 +4439,30 @@ function BrochureViewerScreen({ brochure, onBack }: any) {
       });
       const result = await dl.downloadAsync();
       if (!result?.uri) throw new Error('Download failed');
-      setStatus('opening');
-      await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: brochure.title });
-      onBack();
+      setLocalUri(result.uri);
+      setStatus('ready');
     } catch (e: any) {
       setStatus('error');
-      setErrorMsg(e?.message || 'Could not open the brochure');
+      setErrorMsg(e?.message || 'Could not download the brochure');
     }
   };
 
-  useEffect(() => { downloadAndOpen(); }, []);
+  useEffect(() => { downloadIfNeeded(); }, []);
 
   const openInBrowser = async () => {
     try { await WebBrowser.openBrowserAsync(pdfUrl); }
     catch { Linking.openURL(pdfUrl).catch(() => {}); }
+  };
+
+  const shareFile = async () => {
+    if (!localUri) return;
+    try {
+      await Sharing.shareAsync(localUri, {
+        mimeType: 'application/pdf',
+        UTI: 'com.adobe.pdf',
+        dialogTitle: brochure.title,
+      });
+    } catch { /* share unavailable, no-op */ }
   };
 
   return (
@@ -4471,15 +4476,49 @@ function BrochureViewerScreen({ brochure, onBack }: any) {
           <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }} numberOfLines={1}>{brochure.title}</Text>
           {brochure.company ? <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600' }} numberOfLines={1}>{brochure.company}</Text> : null}
         </View>
+        {status === 'ready' && (
+          <TouchableOpacity onPress={shareFile} style={{ padding: 8 }}>
+            <Ionicons name="share-outline" size={22} color="#fff" />
+          </TouchableOpacity>
+        )}
       </View>
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
-        {status !== 'error' ? (
-          <>
-            <UpkemLoader size={80} variant="light" />
-            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: '900', marginTop: 20 }}>
-              {status === 'downloading' ? 'Downloading brochure…' : 'Opening…'}
-            </Text>
-            {status === 'downloading' && (
+
+      {status === 'ready' && localUri ? (
+        <View style={{ flex: 1, backgroundColor: '#1A1A1A' }}>
+          <Pdf
+            source={{ uri: localUri, cache: false }}
+            onLoadComplete={(numberOfPages) => setTotalPages(numberOfPages)}
+            onPageChanged={(p) => setPage(p)}
+            onError={(e: any) => {
+              setStatus('error');
+              setErrorMsg(e?.message || 'Could not render PDF');
+            }}
+            style={{ flex: 1, width: '100%', backgroundColor: '#1A1A1A' }}
+            enablePaging={false}
+            enableAnnotationRendering={true}
+            trustAllCerts={false}
+            spacing={8}
+          />
+          {totalPages > 0 && (
+            <View style={{
+              position: 'absolute', bottom: 20, alignSelf: 'center',
+              backgroundColor: 'rgba(11,38,24,0.9)',
+              paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999,
+            }}>
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>
+                {page} / {totalPages}
+              </Text>
+            </View>
+          )}
+        </View>
+      ) : (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
+          {status !== 'error' ? (
+            <>
+              <UpkemLoader size={80} variant="light" />
+              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: '900', marginTop: 20 }}>
+                Downloading brochure…
+              </Text>
               <View style={{ width: '100%', maxWidth: 260, marginTop: 16 }}>
                 <View style={{ height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.15)', overflow: 'hidden' }}>
                   <View style={{ height: 6, width: `${Math.round(progress * 100)}%`, backgroundColor: '#52B788', borderRadius: 3 }} />
@@ -4488,27 +4527,27 @@ function BrochureViewerScreen({ brochure, onBack }: any) {
                   {Math.round(progress * 100)}%
                 </Text>
               </View>
-            )}
-            <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '600', marginTop: 24, textAlign: 'center', lineHeight: 16 }}>
-              Opens in your device's PDF reader.{'\n'}Cached — next time it's instant.
-            </Text>
-          </>
-        ) : (
-          <>
-            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(220,38,38,0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-              <Ionicons name="alert-circle" size={32} color="#fca5a5" />
-            </View>
-            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>Couldn't open brochure</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', marginTop: 6, textAlign: 'center' }}>{errorMsg}</Text>
-            <TouchableOpacity onPress={downloadAndOpen} style={{ marginTop: 20, backgroundColor: BRAND[700], paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 }}>
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '900' }}>Retry</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={openInBrowser} style={{ marginTop: 10 }}>
-              <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' }}>Open in browser instead</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
+              <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '600', marginTop: 24, textAlign: 'center', lineHeight: 16 }}>
+                Cached locally — next time this is instant.
+              </Text>
+            </>
+          ) : (
+            <>
+              <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(220,38,38,0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+                <Ionicons name="alert-circle" size={32} color="#fca5a5" />
+              </View>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>Couldn't open brochure</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', marginTop: 6, textAlign: 'center' }}>{errorMsg}</Text>
+              <TouchableOpacity onPress={downloadIfNeeded} style={{ marginTop: 20, backgroundColor: BRAND[700], paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 }}>
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '900' }}>Retry</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={openInBrowser} style={{ marginTop: 10 }}>
+                <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' }}>Open in browser instead</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
     </View>
   );
 }
